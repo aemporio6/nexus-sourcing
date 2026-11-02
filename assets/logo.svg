@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MY TOOL">
+  <defs>
+    <linearGradient id="r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e5343c"/><stop offset="1" stop-color="#b3141c"/></linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="250" fill="#0d0d0f"/>
+  <circle cx="256" cy="256" r="232" fill="none" stroke="url(#r)" stroke-width="10"/>
+  <g stroke="#e5343c" stroke-width="10" stroke-linecap="round">
+    <!-- chip pins around -->
+    <g id="pins">
+      <line x1="196" y1="70" x2="196" y2="112"/><line x1="236" y1="62" x2="236" y2="112"/><line x1="276" y1="62" x2="276" y2="112"/><line x1="316" y1="70" x2="316" y2="112"/>
+    </g>
+    <use href="#pins" transform="rotate(90 256 256)"/>
+    <use href="#pins" transform="rotate(180 256 256)"/>
+    <use href="#pins" transform="rotate(270 256 256)"/>
+  </g>
+  <rect x="112" y="112" width="288" height="288" rx="40" fill="url(#r)"/>
+  <rect x="128" y="128" width="256" height="256" rx="30" fill="#0d0d0f"/>
+  <circle cx="152" cy="152" r="9" fill="#e5343c"/>
+  <text x="256" y="244" text-anchor="middle" font-family="Archivo Black, Arial Black, Impact, sans-serif" font-weight="900" font-size="92" fill="#ffffff" letter-spacing="2">MY</text>
+  <text x="256" y="338" text-anchor="middle" font-family="Archivo Black, Arial Black, Impact, sans-serif" font-weight="900" font-size="78" fill="#e5343c" letter-spacing="1">TOOL</text>
+</svg>
