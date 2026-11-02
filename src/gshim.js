@@ -225,6 +225,7 @@ async function poll(){
     const m = await metaVersion();
     if(String(m.version) !== String(remote.version)){
       const rj = await readRemote(); mergeRemote(rj); remote.version = m.version; await saveCache(); notifyAll();
+      if(!allowedUser()){ status("Your access was removed", "bad"); setTimeout(() => location.reload(), 1500); return; }
       const who = m.lastModifyingUser && (m.lastModifyingUser.displayName || m.lastModifyingUser.emailAddress);
       if(who && lc(m.lastModifyingUser.emailAddress) !== (me && me.email)) status("Updated by " + who, "ok");
     }
@@ -367,6 +368,31 @@ window.MYTOOL = {
   async reauth(){ await requestToken(""); await push(); }, demo: DEMO, signOut, cfg: CFG,
   async syncNow(){ await push(); await poll(); },
   pending(){ return Object.keys(dirty).length; },
+  /* Drive browsing for the importer: folders/files the signed-in person can see */
+  drive: {
+    async list(parentId, opts){
+      opts = opts || {};
+      if(DEMO) return (window.__DEMO_DRIVE && window.__DEMO_DRIVE.list(parentId, opts)) || [];
+      const q = [];
+      if(parentId === "shared") q.push("sharedWithMe=true"); else q.push("'" + (parentId || "root") + "' in parents");
+      q.push("trashed=false");
+      if(opts.foldersOnly) q.push("mimeType='application/vnd.google-apps.folder'");
+      if(opts.since) q.push("modifiedTime > '" + opts.since + "'");
+      let out = [], pt = "";
+      do{
+        const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent(q.join(" and ")) + "&fields=nextPageToken,files(id,name,mimeType,modifiedTime,size,parents)&pageSize=200&orderBy=folder,name" + (pt ? "&pageToken=" + pt : "") + "&supportsAllDrives=true&includeItemsFromAllDrives=true");
+        out = out.concat(j.files || []); pt = j.nextPageToken || "";
+      }while(pt && out.length < 2000);
+      return out;
+    },
+    async download(id, mime){
+      if(DEMO) return window.__DEMO_DRIVE ? window.__DEMO_DRIVE.download(id) : null;
+      const exp = { "application/vnd.google-apps.spreadsheet": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.google-apps.document": "text/plain" }[mime];
+      const r = await gfetch(API + "/drive/v3/files/" + id + (exp ? "/export?mimeType=" + encodeURIComponent(exp) : "?alt=media&supportsAllDrives=true"));
+      if(!r.ok) throw new Error("Could not download (" + r.status + ")");
+      return await r.blob();
+    }
+  },
   async shareWith(email, role){
     if(DEMO) throw new Error("demo mode");
     if(me.email !== CFG.dataOwner && !CFG.admins.includes(me.email)) throw new Error("only an admin can share");

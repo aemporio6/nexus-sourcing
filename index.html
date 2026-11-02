@@ -226,6 +226,7 @@ async function poll(){
     const m = await metaVersion();
     if(String(m.version) !== String(remote.version)){
       const rj = await readRemote(); mergeRemote(rj); remote.version = m.version; await saveCache(); notifyAll();
+      if(!allowedUser()){ status("Your access was removed", "bad"); setTimeout(() => location.reload(), 1500); return; }
       const who = m.lastModifyingUser && (m.lastModifyingUser.displayName || m.lastModifyingUser.emailAddress);
       if(who && lc(m.lastModifyingUser.emailAddress) !== (me && me.email)) status("Updated by " + who, "ok");
     }
@@ -368,6 +369,31 @@ window.MYTOOL = {
   async reauth(){ await requestToken(""); await push(); }, demo: DEMO, signOut, cfg: CFG,
   async syncNow(){ await push(); await poll(); },
   pending(){ return Object.keys(dirty).length; },
+  /* Drive browsing for the importer: folders/files the signed-in person can see */
+  drive: {
+    async list(parentId, opts){
+      opts = opts || {};
+      if(DEMO) return (window.__DEMO_DRIVE && window.__DEMO_DRIVE.list(parentId, opts)) || [];
+      const q = [];
+      if(parentId === "shared") q.push("sharedWithMe=true"); else q.push("'" + (parentId || "root") + "' in parents");
+      q.push("trashed=false");
+      if(opts.foldersOnly) q.push("mimeType='application/vnd.google-apps.folder'");
+      if(opts.since) q.push("modifiedTime > '" + opts.since + "'");
+      let out = [], pt = "";
+      do{
+        const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent(q.join(" and ")) + "&fields=nextPageToken,files(id,name,mimeType,modifiedTime,size,parents)&pageSize=200&orderBy=folder,name" + (pt ? "&pageToken=" + pt : "") + "&supportsAllDrives=true&includeItemsFromAllDrives=true");
+        out = out.concat(j.files || []); pt = j.nextPageToken || "";
+      }while(pt && out.length < 2000);
+      return out;
+    },
+    async download(id, mime){
+      if(DEMO) return window.__DEMO_DRIVE ? window.__DEMO_DRIVE.download(id) : null;
+      const exp = { "application/vnd.google-apps.spreadsheet": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.google-apps.document": "text/plain" }[mime];
+      const r = await gfetch(API + "/drive/v3/files/" + id + (exp ? "/export?mimeType=" + encodeURIComponent(exp) : "?alt=media&supportsAllDrives=true"));
+      if(!r.ok) throw new Error("Could not download (" + r.status + ")");
+      return await r.blob();
+    }
+  },
   async shareWith(email, role){
     if(DEMO) throw new Error("demo mode");
     if(me.email !== CFG.dataOwner && !CFG.admins.includes(me.email)) throw new Error("only an admin can share");
@@ -607,8 +633,8 @@ const ICON={home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 
 /* ===================== core v3: state, setup access, dates, money, numbering, business logic, writes/undo, nav, search ===================== */
 const MAIN=[["home","Home"],["purchases","Purchases"],["shipments","Shipments"],["payments","Payments"],["stock","Stock"]];
-const MORE=[["products","Products","products"],["parties","Parties","parties"],["calendar","Calendar","cal"],["tools","Tools","tools"],["refs","References","refs"],["reports","Reports","trend"],["import","Import","import"],["attention","All alerts","bell"],["log","Activity","log"],["trash","Trash","trash"],["setup","Setup","setup"]];
-const PAGES=["home","purchases","shipments","payments","stock","products","parties","calendar","tools","refs","reports","import","attention","log","trash","setup","more","doc"];
+const MORE=[["products","Products","products"],["parties","Parties","parties"],["calendar","Calendar","cal"],["planner","Planner (ICC)","trend"],["tools","Tools","tools"],["refs","References","refs"],["reports","Reports","trend"],["import","Import","import"],["attention","All alerts","bell"],["log","Activity","log"],["trash","Trash","trash"],["setup","Setup","setup"]];
+const PAGES=["planner","home","purchases","shipments","payments","stock","products","parties","calendar","tools","refs","reports","import","attention","log","trash","setup","more","doc"];
 const S={view:{k:"home",params:{}},hist:[],hi:-1,f:{},limit:{},drawer:null,ready:false,err:null,undo:[],redo:[],role:"owner",tools:{},holdRender:false,sel:{},batch:null,pendingOpen:null,cal:null,imp:null,setupTab:"companies",listKey:null,formKey:null};
 const D={setup:null,counters:null,parties:[],products:[],purchases:[],shipments:[],payments:[],inspections:[],receipts:[],moves:[],credits:[],imports:[],views:[],log:[],salesStats:[]};
 const COLS=["parties","products","purchases","shipments","payments","inspections","receipts","moves","credits","imports","views","log","salesStats"];
@@ -2107,7 +2133,7 @@ function ensureCss(){if($("#vcss"))return;const s=document.createElement("style"
 
 /* ---------- render ---------- */
 const vMissing=n=>v=>{v.innerHTML=`<div class="card empty">${esc(n)} is not available in this build.</div>`};
-const VIEWS=()=>({home:vHome,purchases:vPurchases,shipments:vShipments,payments:vPayments,stock:vStock,products:vProducts,parties:vParties,calendar:vCalendar,tools:vTools,refs:vRefs,reports:vReports,import:typeof vImport==="function"?vImport:vMissing("Import"),attention:vAttention,log:vLog,trash:vTrash,setup:typeof vSetup==="function"?vSetup:vMissing("Setup"),more:vMore,doc:vHome});
+const VIEWS=()=>({home:vHome,purchases:vPurchases,shipments:vShipments,payments:vPayments,stock:vStock,products:vProducts,parties:vParties,calendar:vCalendar,tools:vTools,refs:vRefs,reports:vReports,import:typeof vImport==="function"?vImport:vMissing("Import"),attention:vAttention,log:vLog,trash:vTrash,setup:typeof vSetup==="function"?vSetup:vMissing("Setup"),planner:typeof vPlanner==="function"?vPlanner:vMissing("Planner"),more:vMore,doc:vHome});
 function render(){ensureCss();S._att=null;const v=$("#view");if(!v)return;const ae=document.activeElement;const inside=s=>!!(ae&&ae.closest&&ae.closest(s));
  const hold=S.holdRender||inside("#setupbody")||inside("#view [data-tool]")||(inside(".drawer")&&!!S.drawer?.form);
  if(!hold){try{nav()}catch(e){console.error(e)}
@@ -3719,6 +3745,9 @@ function ixPerfBlock(sku){const st=live(D.salesStats||[]).filter(s=>s.sku===sku)
  const t2=fe.length?`<div class="tbl" style="margin-top:8px"><table><tr><th>Fees period</th><th class="n">Units</th><th class="n">Fees £ / unit</th><th class="n">Net £</th></tr>${fe.map(s=>{const f=(+s.sellingFees||0)+(+s.fbaFees||0)+(+s.otherFees||0);return`<tr><td>${esc(fmtD(s.from))}–${esc(fmtD(s.to))}</td><td class="n">${num(s.units)}</td><td class="n">${s.units?esc(fmt(Math.abs(f)/s.units,"GBP")):"—"}</td><td class="n">${esc(gbp(s.net))}</td></tr>`}).join("")}</table></div>`:"";
  return`<div class="sec"><h3>Amazon performance<span class="status">${v?`sales speed ${num(v,1)}/day from reports`:""}</span></h3>${t1}${t2}</div>`}
 
+
+
+
 /* ===================== events & boot v3 ===================== */
 const FORM_FOR_COL={purchases:"purchase",shipments:"shipment",payments:"payment",inspections:"inspection",receipts:"receive",moves:"move",credits:"credit",products:"product",parties:"party"};
 function createMenu(date){const items_=[["purchase","Purchase","China or UK · PI lines · schedule"],["shipment","Shipment","Forwarder · orders · cost · ETA"],["payment","Payment","Party → reference → amount → receipt"],["inspection","Inspection","Inspector · result · fee"],["receive","Receive stock","Shipment → count → batches"],["move","Stock move","Transfer · sale · return · adjust"],["count","Stock count","Counted vs system"],["credit","Credit note","Supplier credit / claim"],["product","Product","Brand · category · SKU auto"],["party","Party","Supplier · forwarder · inspector · courier"]];
@@ -3964,7 +3993,7 @@ async function boot(){try{
  S.undo=ls.get("undo",[]).filter(g=>g.entries);S.f=ls.get("filters",{})||{};
  await new Promise(res=>{db.collection("setup").doc("main").onSnapshot(s=>{D.setup=s.exists?s.data():null;if(D.setup&&!D.setup.lists)D.setup.lists={};resolveRole();if(!S._upg){S._upg=1;setTimeout(()=>upgradeSetup().catch(()=>{}),0)}render();res()})});
  db.collection("counters").doc("main").onSnapshot(s=>{D.counters=s.exists?s.data():null});
- let pending=COLS.length;COLS.forEach(col=>db.collection(col).onSnapshot(snap=>{D[col]=snap.docs.map(d=>({...d.data(),id:d.id}));_st.clear();if(pending>0){pending--;if(pending===0){S.ready=true;purgeTrash();ensureSetup();const h=location.hash;const m=h.match(/^#\/doc\/([a-z]+)\/(.+)$/);if(m)openDoc(m[1],decodeURIComponent(m[2]));else if(h.length>2&&PAGES.includes(h.slice(2)))go(h.slice(2),{},{force:true})}}render()}));
+ let pending=COLS.length;COLS.forEach(col=>db.collection(col).onSnapshot(snap=>{D[col]=snap.docs.map(d=>({...d.data(),id:d.id}));_st.clear();if(pending>0){pending--;if(pending===0){S.ready=true;if(S.hi<0){S.view=S.view||{k:"home",params:{}};pushHist()}purgeTrash();ensureSetup();const h=location.hash;const m=h.match(/^#\/doc\/([a-z]+)\/(.+)$/);if(m)openDoc(m[1],decodeURIComponent(m[2]));else if(h.length>2&&PAGES.includes(h.slice(2)))go(h.slice(2),{},{force:true})}}render()}));
  if(!navigator.onLine)$("#offline").hidden=false;
 }catch(e){console.error(e);S.err="Could not connect: "+(e.message||e);render()}}
 /* role: the user's row in Setup › Users; the artifact owner is Owner; anyone else signed in is a VA until listed.
@@ -3975,5 +4004,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='6a5e0d187c';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='5c52018a71';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
 </body></html>

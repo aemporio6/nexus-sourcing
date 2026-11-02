@@ -1,7 +1,7 @@
 /* ===================== core v3: state, setup access, dates, money, numbering, business logic, writes/undo, nav, search ===================== */
 const MAIN=[["home","Home"],["purchases","Purchases"],["shipments","Shipments"],["payments","Payments"],["stock","Stock"]];
-const MORE=[["products","Products","products"],["parties","Parties","parties"],["calendar","Calendar","cal"],["tools","Tools","tools"],["refs","References","refs"],["reports","Reports","trend"],["import","Import","import"],["attention","All alerts","bell"],["log","Activity","log"],["trash","Trash","trash"],["setup","Setup","setup"]];
-const PAGES=["home","purchases","shipments","payments","stock","products","parties","calendar","tools","refs","reports","import","attention","log","trash","setup","more","doc"];
+const MORE=[["products","Products","products"],["parties","Parties","parties"],["calendar","Calendar","cal"],["planner","Planner (ICC)","trend"],["tools","Tools","tools"],["refs","References","refs"],["reports","Reports","trend"],["import","Import","import"],["attention","All alerts","bell"],["log","Activity","log"],["trash","Trash","trash"],["setup","Setup","setup"]];
+const PAGES=["planner","home","purchases","shipments","payments","stock","products","parties","calendar","tools","refs","reports","import","attention","log","trash","setup","more","doc"];
 const S={view:{k:"home",params:{}},hist:[],hi:-1,f:{},limit:{},drawer:null,ready:false,err:null,undo:[],redo:[],role:"owner",tools:{},holdRender:false,sel:{},batch:null,pendingOpen:null,cal:null,imp:null,setupTab:"companies",listKey:null,formKey:null};
 const D={setup:null,counters:null,parties:[],products:[],purchases:[],shipments:[],payments:[],inspections:[],receipts:[],moves:[],credits:[],imports:[],views:[],log:[],salesStats:[]};
 const COLS=["parties","products","purchases","shipments","payments","inspections","receipts","moves","credits","imports","views","log","salesStats"];
