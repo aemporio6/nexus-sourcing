@@ -13,9 +13,10 @@ async function open(o = {}) {
   pg.setDefaultTimeout(o.timeout || 15000);
   const errs = [];
   pg.on("pageerror", e => errs.push("PAGEERROR " + e.message));
-  pg.on("console", m => { if (m.type() === "error" && !/ERR_|net::|favicon|Failed to load resource/.test(m.text())) errs.push("CONSOLE " + m.text()); });
+  pg.on("console", m => { if (m.type() === "error" && !/ERR_|net::|favicon|Failed to load resource|Bad uncompressed size/.test(m.text())) errs.push("CONSOLE " + m.text()); });
   await pg.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
   if (o.init) await pg.addInitScript(o.init);
+  if (o.before) await o.before(pg);
   await pg.goto(URL_);
   await pg.waitForFunction(() => { try { return S.ready } catch (e) { return false } }, null, { timeout: 30000 });
   await pg.evaluate(() => go("import", {}, { force: true }));

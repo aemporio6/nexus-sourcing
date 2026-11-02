@@ -1,0 +1,251 @@
+{
+ "eco": {
+  "10.xlsx": {
+   "sum": 727.0,
+   "total": 727.0,
+   "date": "2025-05-12",
+   "lines": 9
+  },
+  "13.xlsx": {
+   "sum": 626.0,
+   "total": 626.0,
+   "date": "2025-05-22",
+   "lines": 9
+  },
+  "14.xlsx": {
+   "sum": 539.0,
+   "total": 539.0,
+   "date": "2025-06-03",
+   "lines": 9
+  },
+  "15a.xlsx": {
+   "sum": 1201.0,
+   "total": 1201.0,
+   "date": "2025-06-17",
+   "lines": 7
+  },
+  "15b.xlsx": {
+   "sum": 169.0,
+   "total": 169.0,
+   "date": "2025-06-19",
+   "lines": 9
+  },
+  "16.xlsx": {
+   "sum": 1371.0,
+   "total": 1371.0,
+   "date": "2025-06-21",
+   "lines": 9
+  },
+  "17.xlsx": {
+   "sum": 590.0,
+   "total": 590.0,
+   "date": "2025-06-30",
+   "lines": 9
+  },
+  "18.xlsx": {
+   "sum": 265.0,
+   "total": 265.0,
+   "date": "2025-07-03",
+   "lines": 7
+  },
+  "19.xlsx": {
+   "sum": 758.0,
+   "total": 758.0,
+   "date": "2025-08-18",
+   "lines": 9
+  },
+  "2.xlsx": {
+   "sum": 1249.0,
+   "total": 1249.0,
+   "date": "2025-01-21",
+   "lines": 8
+  },
+  "20.xlsx": {
+   "sum": 696.98,
+   "total": null,
+   "date": "2025-09-22",
+   "lines": 10
+  },
+  "21.xlsx": {
+   "sum": 446.0,
+   "total": 446.0,
+   "date": "2025-10-20",
+   "lines": 8
+  },
+  "22.xlsx": {
+   "sum": 810.0,
+   "total": 810.0,
+   "date": "2026-06-16",
+   "lines": 8
+  },
+  "3.xlsx": {
+   "sum": 713.0,
+   "total": 713.0,
+   "date": "2025-02-28",
+   "lines": 8
+  },
+  "4.xlsx": {
+   "sum": 1805.0,
+   "total": 1805.0,
+   "date": "2025-04-07",
+   "lines": 8
+  },
+  "5.xlsx": {
+   "sum": 246.0,
+   "total": 246.0,
+   "date": "2025-04-08",
+   "lines": 7
+  },
+  "6.xlsx": {
+   "sum": 552.0,
+   "total": 552.0,
+   "date": "2025-04-15",
+   "lines": 7
+  },
+  "7.xlsx": {
+   "sum": 566.0,
+   "total": 566.0,
+   "date": "2025-04-07",
+   "lines": 8
+  },
+  "8.xlsx": {
+   "sum": 179.0,
+   "total": 179.0,
+   "date": "2025-04-21",
+   "lines": 7
+  },
+  "9.xlsx": {
+   "sum": 1356.0,
+   "total": 1356.0,
+   "date": "2025-04-29",
+   "lines": 7
+  }
+ },
+ "market": {
+  "ebay": {
+   "rows": 300,
+   "qty": 394.0,
+   "soldFor": 1902.78,
+   "total": 2337.84
+  },
+  "tax": {
+   "rows": 4789,
+   "qty": 5173.0,
+   "incl": 58074.38,
+   "vat": 8597.35,
+   "excl": 49477.03
+  },
+  "ctx": {
+   "rows": 4632,
+   "qty": 4805.0,
+   "sales": 43432.62,
+   "selling": -8558.27,
+   "fba": -16398.4,
+   "total": 1656.32
+  },
+  "temuTx": {
+   "rows": 657,
+   "qty": 253.0,
+   "fee": -42.74,
+   "total": -236.11
+  },
+  "temu": {
+   "rows": 994,
+   "longRows": 5,
+   "qty": 1189.0,
+   "price": 1845.68,
+   "total": 2289.91,
+   "cancelled": 31
+  },
+  "p2g": {
+   "rows": 411,
+   "value": 3205.34,
+   "weight": 150.19
+  },
+  "ads": {
+   "rows": 51,
+   "billedGbp": 17242.18,
+   "paidGbp": 19809.75,
+   "taxGbp": 2567.57
+  },
+  "br": {
+   "13f95492": {
+    "rows": 10,
+    "units": 2269.0,
+    "sales": 26136.28
+   },
+   "2fdd699b": {
+    "rows": 12,
+    "units": 6811.0,
+    "sales": 77070.61
+   },
+   "40c12639": {
+    "rows": 29,
+    "units": 8627.0,
+    "sales": 99067.29
+   },
+   "8a91ab9b": {
+    "rows": 10,
+    "units": 3966.0,
+    "sales": 44193.21
+   },
+   "af11d876": {
+    "rows": 9,
+    "units": 4958.0,
+    "sales": 57550.35
+   },
+   "d8631e9e": {
+    "rows": 9,
+    "units": 1274.0,
+    "sales": 14349.22
+   },
+   "d93ddfe5": {
+    "rows": 1,
+    "units": 5473.0,
+    "sales": 63993.07
+   }
+  },
+  "dash": {
+   "days": 93,
+   "units": 4508.0,
+   "sales": 53884.7
+  },
+  "listings": {
+   "rows": 39,
+   "asins": [
+    "B0C6QY4HGJ",
+    "B0CCPPFZCT",
+    "B0CDYH3KJ3",
+    "B0CH44JQYW",
+    "B0D33PPM3C",
+    "B0D33QY8GY",
+    "B0D33S5PQW",
+    "B0DT1P77DP",
+    "B0DT1YPSYN",
+    "B0DT257LR5",
+    "B0GHFYW2XW",
+    "B0GHGCKGX4",
+    "B0GHGMKXDQ",
+    "B0GSLT7BD9",
+    "B0HHXK32B7",
+    "B0HHXMPDHV",
+    "B0HHXNN1PM",
+    "B0HHXPPBYJ",
+    "B0HHXT7TK9",
+    "B0HHZ42VZ6",
+    "B0HLF3J5WX",
+    "B0HLF4SS4T",
+    "B0HLF59GCF",
+    "B0HLF7XL5Q",
+    "B0HLFCGNP8",
+    "B0HLFJH65P",
+    "B0HLFRHHWC",
+    "B0HLFW41QD",
+    "B0HLFY28QB",
+    "B0HND1N64V",
+    "B0HND76QYQ",
+    "B0HND8J67V"
+   ]
+  }
+ }
+}
