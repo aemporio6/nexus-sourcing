@@ -160,13 +160,13 @@ th{text-align:left;background:var(--soft);padding:7px 9px;font-weight:600;white-
 .recentp{position:absolute;right:0;top:42px;width:min(360px,92vw);background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.16);z-index:31;max-height:70vh;overflow:auto}
 .recentp h6{margin:0;padding:10px 12px 4px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.recentp button{display:flex;gap:10px;width:100%;border:0;background:transparent;text-align:left;padding:9px 12px;align-items:center}.recentp button:hover{background:var(--soft)}.recentp .ref{font:600 12px var(--f-data);min-width:96px}
 .who{display:flex;align-items:center;gap:8px;margin-top:6px}.who img{width:22px;height:22px;border-radius:50%}
-@media (max-width:860px){.brand img{width:32px;height:32px}}
+.mlogo{display:none;border-radius:50%;flex:none}@media (max-width:860px){.brand img{width:32px;height:32px}.mlogo{display:block}}
 </style>
 <div class="app">
   <aside class="rail" id="rail"></aside>
   <div class="main">
     <div class="top">
-      <button class="ib" data-act="home" aria-label="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11 12 4l9 7v9H5v-9"/></svg></button>
+      <img class="mlogo" src="assets/icon-192.png" alt="MY TOOL" width="34" height="34"><button class="ib" data-act="home" aria-label="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11 12 4l9 7v9H5v-9"/></svg></button>
       <button class="ib" id="backb" data-act="back" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5l-7 7 7 7"/></svg></button>
       <button class="ib" id="fwdb" data-act="fwd" aria-label="Forward"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg></button>
       <div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>

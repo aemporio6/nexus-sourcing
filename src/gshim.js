@@ -206,6 +206,7 @@ async function push(){
       const rj = await readRemote(); mergeRemote(rj); notifyAll();
     }
     await writeRemote();
+    dailyBackup().catch(() => {});
     for(const k of Object.keys(sending)) delete dirty[k];
     await saveCache();
     status("All saved · " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), "ok");
@@ -230,6 +231,19 @@ async function poll(){
       if(who && lc(m.lastModifyingUser.emailAddress) !== (me && me.email)) status("Updated by " + who, "ok");
     }
   }catch(e){ /* quiet; next poll */ }
+}
+
+/* daily safety copy of the data file (one per day, never deleted by the app) — admin only */
+async function dailyBackup(){
+  if(DEMO || !CFG.admins.includes(me.email) || !remote.fileId) return;
+  const day = new Date().toISOString().slice(0, 10);
+  if(localStorage.getItem("mt_bk") === day) return;
+  const folder = remote.folderId || null; if(!folder) return;
+  const bkName = "MYTOOL-DATA backup " + day + ".json";
+  const ex = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent("name contains 'MYTOOL-DATA backup' and trashed=false and '" + folder + "' in parents") + "&fields=files(id,name)&orderBy=name desc&pageSize=50");
+  const files = ex.files || [];
+  if(!files.some(f => f.name === bkName)) await gjson(API + "/drive/v3/files/" + remote.fileId + "/copy?fields=id", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: bkName, parents: [folder] }) });
+  localStorage.setItem("mt_bk", day);
 }
 
 /* ---------------- access check ---------------- */
