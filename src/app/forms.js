@@ -50,7 +50,7 @@ const FORM_DEFAULTS={
   {k:"sku",l:"SKU (auto from brand + category)",t:"text",req:1},{k:"name",l:"Name",t:"text",req:1},{k:"status",l:"Status",t:"list",list:"productStatus"},{k:"isNew",l:"New product (5% fee until first receipt)",t:"bool"},
   {k:"sellGbp",l:"Sell price £ inc VAT",t:"num"},{k:"ean",l:"Barcodes / EAN (comma separated)",t:"text"},{k:"fnsku",l:"FNSKU",t:"text"},{k:"asin",l:"ASIN",t:"text"},
   {k:"listings",l:"Listings",t:"rows",w:1,rows:"listings"},{k:"suppliers",l:"Suppliers & prices (latest first)",t:"rows",w:1,rows:"suppliers"},
-  {k:"pk",l:"Pack size L×W×H cm / kg",t:"dims"},{k:"ctn",l:"Carton size L×W×H cm / kg",t:"dims"},{k:"perCtn",l:"Packs per carton",t:"int"},
+  {k:"item",l:"Product itself L×W×H cm / kg",t:"dims"},{k:"pkType",l:"Packaging type",t:"list",list:"packType"},{k:"pk",l:"Pack / gift box size L×W×H cm / kg",t:"dims"},{k:"ctn",l:"Carton size L×W×H cm / gross kg",t:"dims"},{k:"perCtn",l:"Packs per carton",t:"int"},{k:"ctnPerPallet",l:"Cartons per pallet",t:"int"},
   {k:"hs",l:"HS code (auto from category)",t:"text"},{k:"dutyPct",l:"Duty % (auto)",t:"num"},{k:"goodsType",l:"Goods type (auto)",t:"list",list:"goodsType"},{k:"originCountry",l:"Country of origin",t:"list",list:"country"},
   {k:"cycleDays",l:"Stock cycle days",t:"int"},{k:"safetyDays",l:"Safety days",t:"int"},{k:"defaultMode",l:"Usual freight",t:"list",list:"mode"},{k:"velocityOverride",l:"Sales per day (override)",t:"num"},
   {k:"components",l:"Bundle components",t:"rows",w:1,rows:"components"},{k:"photo",l:"Photo link",t:"link"},{k:"tags",l:"Tags",t:"tags"},{k:"notes",l:"Notes",t:"textarea",w:1}],
