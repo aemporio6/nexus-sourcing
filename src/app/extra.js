@@ -39,3 +39,9 @@ async function ensureSetupV4(){try{if(!D.setup||!can("setup"))return;const L0=D.
  add("leadStage","Lead-time stages (days)","Planning",[["mould","Mould",30],["packaging","Packaging",10],["production","Production",25],["toForwarder","To forwarder",4],["sea","Sea",60],["air","Air",15],["road","Road (truck)",30],["agl","AGL",35],["fbaCheckin","FBA check-in",10],["safety","Safety stock",14]].map(([id,label,days])=>({id,label,days})),[["days","Days","num"]]);
  if(pairs.length){await setupPatchMany(pairs,null,{noUndo:true});logEv("setup","setup","main","Setup lists added for MY TOOL v4: "+pairs.map(p=>p[0][1]).join(", "))}}catch(e){console.warn(e)}}
 setTimeout(function tick(){try{if(S.ready){ensureSetupV4();return}}catch(_){}setTimeout(tick,800)},800);
+
+/* ---------- Data: download backup / load a data file (Owner) ---------- */
+document.addEventListener("click",e=>{const b=e.target.closest('[data-act="mtbackup"]');if(!b||!window.MYTOOL)return;e.stopPropagation();MYTOOL.backup()},true);
+document.addEventListener("change",async e=>{const inp=e.target.closest&&e.target.closest("input.mt_restore");if(!inp||!window.MYTOOL)return;const f=inp.files&&inp.files[0];inp.value="";if(!f)return;
+ if(!confirm("Replace ALL data in MY TOOL with \""+f.name+"\"?\n\nEveryone will see the new data. A backup of the current data is downloaded first."))return;
+ try{await MYTOOL.backup();toast("Loading "+f.name+"…");await MYTOOL.restore(f)}catch(err){alert("Could not load the file: "+(err.message||err))}},true);
