@@ -2,7 +2,7 @@
 """Build MY TOOL: index.html (app) + manifest + service worker. Run: python3 build.py [--demo-seed DIR --out FILE]"""
 import json, os, re, sys, glob, subprocess, hashlib
 R = os.path.dirname(os.path.abspath(__file__))
-MODS = ["icons", "core", "forms", "forms2", "views", "drawers", "setup", "importer", "readers", "icc", "extra", "export_ps", "help_view", "events"]
+MODS = ["icons", "core", "forms", "forms2", "views", "drawers", "setup", "importer", "readers", "icc", "extra", "export_ps", "help_view", "health", "rates_auto", "nav2", "events"]
 
 def read(p): return open(os.path.join(R, p), encoding="utf-8").read()
 
@@ -25,6 +25,11 @@ def build(seed_dir=None, out="index.html"):
     pre = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
            '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
            '<meta name="description" content="MY TOOL — sourcing, orders, payments, shipments and stock for Vartleaves">'
+           '<meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\' \'unsafe-inline\' https://accounts.google.com; '
+           'style-src \'self\' \'unsafe-inline\' https://fonts.googleapis.com https://accounts.google.com; font-src \'self\' data: https://fonts.gstatic.com; '
+           'img-src \'self\' data: blob: https:; connect-src \'self\' https://www.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://api.frankfurter.dev https://open.er-api.com; '
+           'frame-src https://accounts.google.com https://drive.google.com https://docs.google.com; worker-src \'self\' blob:; object-src \'none\'; base-uri \'self\'; form-action \'none\'">'
+           '<meta name="referrer" content="strict-origin-when-cross-origin">'
            '</head><body>\n')
     sw = ("<script>window.MYTOOL_VERSION='" + ver + "';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>\n")
     html = pre + seed + "<script>" + read("src/gshim.js") + "</script>\n" + head + "\n<script>\n" + js + "\n</script>\n" + sw + "</body></html>\n"

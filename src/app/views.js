@@ -43,7 +43,7 @@ function ensureCss(){if($("#vcss"))return;const s=document.createElement("style"
 
 /* ---------- render ---------- */
 const vMissing=n=>v=>{v.innerHTML=`<div class="card empty">${esc(n)} is not available in this build.</div>`};
-const VIEWS=()=>({help:typeof vHelp==="function"?vHelp:vHome,home:vHome,purchases:vPurchases,shipments:vShipments,payments:vPayments,stock:vStock,products:vProducts,parties:vParties,calendar:vCalendar,tools:vTools,refs:vRefs,reports:vReports,import:typeof vImport==="function"?vImport:vMissing("Import"),attention:vAttention,log:vLog,trash:vTrash,setup:typeof vSetup==="function"?vSetup:vMissing("Setup"),planner:typeof vPlanner==="function"?vPlanner:vMissing("Planner"),more:vMore,doc:vHome});
+const VIEWS=()=>({help:typeof vHelp==="function"?vHelp:vHome,health:typeof vHealth==="function"?vHealth:vHome,home:vHome,purchases:vPurchases,shipments:vShipments,payments:vPayments,stock:vStock,products:vProducts,parties:vParties,calendar:vCalendar,tools:vTools,refs:vRefs,reports:vReports,import:typeof vImport==="function"?vImport:vMissing("Import"),attention:vAttention,log:vLog,trash:vTrash,setup:typeof vSetup==="function"?vSetup:vMissing("Setup"),planner:typeof vPlanner==="function"?vPlanner:vMissing("Planner"),more:vMore,doc:vHome});
 function render(){ensureCss();S._att=null;const v=$("#view");if(!v)return;const ae=document.activeElement;const inside=s=>!!(ae&&ae.closest&&ae.closest(s));
  const hold=S.holdRender||inside("#setupbody")||inside("#view [data-tool]")||(inside(".drawer")&&!!S.drawer?.form);
  if(!hold){try{nav()}catch(e){console.error(e)}

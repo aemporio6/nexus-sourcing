@@ -147,6 +147,7 @@ document.addEventListener("change",async e=>{const t=e.target;const ds=t.dataset
   /* duplicate check on rename */const m=ds.sp.match(/^(lists\.[^.]+\.items|companies|banks|emails|locations|people)\.(\d+)\.(label|name|address)$/);if(m&&typeof v==="string"){const arr=getPath(SET(),m[1])||[];const dup=arr.some((x,i)=>i!==+m[2]&&norm(x[m[3]]||"")===norm(v)&&(x.parent||"")===(arr[+m[2]]?.parent||""));if(dup){toast(`"${v}" already exists — not saved`);t.value=getPath(SET(),ds.sp)||"";return}}
   /* numbering patterns must keep the running number */if(/^numbering\.[^.]+\.pattern$/.test(ds.sp)&&!String(v||"").includes("{####}")){toast("Pattern needs {####} (the running number) — not saved");t.value=getPath(SET(),ds.sp)||"";return}
   const pairs=[[ds.sp,v]];
+  {const mr=ds.sp.match(/^rates\.history\.(\d+)\.(?!date$|note$|auto$)/);if(mr&&getPath(SET(),`rates.history.${mr[1]}.auto`))pairs.push([`rates.history.${mr[1]}.auto`,false])}/* a rate changed by hand is no longer "auto" — the daily fetch will not overwrite it */
   /* the default company / locations are one setting shown in two places (Companies radio, Locations ticks, Rates › Defaults) */
   if(ds.sp==="defaults.company"&&v)pairs.push(["companies",(SET().companies||[]).map(c=>({...c,default:c.id===v}))]);
   {const dm={receiveLoc:"receive",sellLoc:"sell",shipTo:"ship"};const m1=ds.sp.match(/^defaults\.(receiveLoc|sellLoc|shipTo)$/);if(m1&&v){const fl=dm[m1[1]];pairs.push(["locations",(SET().locations||[]).map(l=>({...l,default:{...(l.default||{}),[fl]:l.id===v}}))])}

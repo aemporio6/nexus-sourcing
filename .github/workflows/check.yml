@@ -1,0 +1,21 @@
+name: check
+# Every push: rebuild from src/ and make sure the published index.html / sw.js are exactly what the source builds (no hand edits, no stale build),
+# and that every JavaScript module parses.
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Syntax check (all modules)
+        run: for f in src/gshim.js src/app/*.js; do node --check "$f" || exit 1; done
+      - name: Build
+        run: python3 build.py
+      - name: Published build matches the source
+        run: git diff --exit-code -- index.html sw.js
+      - name: No data in the repo
+        run: "! git ls-files | grep -iE 'MYTOOL-DATA|start-data|backup.*\\.json'"

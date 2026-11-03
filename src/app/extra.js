@@ -47,7 +47,8 @@ function partyNext(x){if(x.status==="archived")return null;
  if(!x.contact&&!x.wechat&&!x.email&&!x.phone)return{t:"Add a contact (WeChat / email / phone)",b:`<button class="btn sm" data-act="edit" data-col="parties" data-id="${esc(x.code)}">Add contact</button>`};
  return null}
 const nbHtml=n=>n?`<div class="note" style="margin:0 0 10px;display:flex;gap:10px;align-items:center;justify-content:space-between;border-left:3px solid var(--accent)"><span>👉 <b>Next step:</b> ${esc(n.t)}</span>${n.b}</div>`:"";
-[["openShip","shipments",shipNext],["openPay","payments",payNext],["openProduct","products",prodNext],["openParty","parties",partyNext]].forEach(([fn,col,nx])=>{try{const orig=window[fn]||eval(fn);if(typeof orig!=="function")return;const w=function(x){const r=orig(x);try{const d=docOf(col,x);if(r&&d){const h=nbHtml(nx(d));if(h)r.body=h+r.body}}catch(e){console.warn(e)}return r};eval(fn+"=w")}catch(e){console.warn(e)}});
+{const wrapNext=(orig,col,nx)=>function(x){const r=orig(x);try{const d=docOf(col,x);if(r&&d){const h=nbHtml(nx(d));if(h)r.body=h+r.body}}catch(e){console.warn(e)}return r};
+ openShip=wrapNext(openShip,"shipments",shipNext);openPay=wrapNext(openPay,"payments",payNext);openProduct=wrapNext(openProduct,"products",prodNext);openParty=wrapNext(openParty,"parties",partyNext)}
 function nextBlock(p){const n=nextStep(p);return n?`<div class="note" style="margin:0 0 10px;display:flex;gap:10px;align-items:center;justify-content:space-between;border-left:3px solid var(--accent)"><span>👉 <b>Next step:</b> ${esc(n.t)}</span>${n.b}</div>`:""}
 
 /* wrap the order drawer: parts + next step on top */
