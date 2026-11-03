@@ -52,7 +52,7 @@ const LOGO = '<img src="assets/icon-192.png" alt="" width="96" height="96" style
 function gate(html){
   let g = document.getElementById("mt_gate");
   if(!g){ g = document.createElement("div"); g.id = "mt_gate"; document.body.appendChild(g); }
-  g.innerHTML = '<div class="mt_card">' + LOGO + '<h1><span style="color:#c4161c">MY</span> TOOL</h1>' + html + '</div>';
+  g.innerHTML = '<div class="mt_card">' + LOGO + '<h1>MY <span style="color:#d7262e">TOOL</span></h1>' + html + '</div>';
   g.hidden = false;
   return g;
 }
