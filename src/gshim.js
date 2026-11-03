@@ -230,6 +230,7 @@ async function poll(){
       const who = m.lastModifyingUser && (m.lastModifyingUser.displayName || m.lastModifyingUser.emailAddress);
       if(who && lc(m.lastModifyingUser.emailAddress) !== (me && me.email)) status("Updated by " + who, "ok");
     }
+    dailyBackup().catch(() => {}); /* once a day, even on days nothing is edited */
   }catch(e){ /* quiet; next poll */ }
 }
 

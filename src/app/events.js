@@ -32,6 +32,7 @@ document.addEventListener("click",async e=>{if(e.target.matches("input[data-sel]
   case"refresh":{if(window.MYTOOL){toast("Getting the latest…");await MYTOOL.syncNow().catch(()=>{})}_st&&_st.clear&&_st.clear();render();toast("Up to date");break}
   case"syncnow":if(window.MYTOOL){if(MYTOOL.st?.k==="bad")await MYTOOL.reauth().catch(e=>toast(e.message));else await MYTOOL.syncNow().catch(()=>{})}render();break;
   case"signout":if(window.MYTOOL){if(MYTOOL.pending()&&!confirm("Some changes are still being saved. Sign out anyway?"))return;MYTOOL.signOut()}break;
+  case"recnav":{const id=t.dataset.id;if(id&&S.drawer)openDoc(S.drawer.col,id);break}
   case"shareuser":{if(!window.MYTOOL||MYTOOL.demo){toast("Sharing works in the live app");break}const em=String(ds.email||"").trim().toLowerCase();if(!/^[^@\s]+@[^@\s]+\.[a-z]+$/.test(em)){toast("Type a valid Google email first");break}try{await MYTOOL.shareWith(em,ds.ro==="viewer"?"reader":"writer");toast("Data folder shared with "+em)}catch(err){toast("Could not share: "+err.message)}break}
   case"recent":{const p=$("#recentp");if(!p)break;if(p.innerHTML){p.innerHTML="";break}const r=recentList();p.innerHTML=`<div class="recentp" role="menu"><h6>Recently opened</h6>${r.length?r.map(x=>{const d=(D[x.col]||[]).find(v=>(v.no||v.id)===x.id);return`<button type="button" data-open="${esc(x.col)}" data-id="${esc(x.id)}"><span class="ref">${esc(x.id)}</span><span class="lab">${esc(label(x.col,d))}</span></button>`}).join(""):`<p class="note" style="padding:8px 12px">Nothing yet — records you open show here.</p>`}</div>`;break}
   case"back":back();break;case"fwd":fwd();break;case"undo":await undo();break;case"redo":await redo();break;
@@ -140,6 +141,7 @@ async function setupAdd(what,ds){const s=SET();const u=(arr,base)=>{let id=base,
 /* ---------- change ---------- */
 document.addEventListener("change",async e=>{const t=e.target;const ds=t.dataset;
  if(ds.f==="q")return;
+ if(ds.f!==undefined&&t.value==="__multi"){openMultiPick(S.view.k,ds.f,t);return}
  if(ds.f!==undefined){if(t.type!=="checkbox"&&String(F()[ds.f]??"")===t.value)return;setF(S.view.k,ds.f,t.type==="checkbox"?(t.checked?1:""):t.value);if(ds.f==="date"&&t.value){setF(S.view.k,"year","")}render();return}
  if(ds.sp){let v=t.type==="checkbox"?t.checked:t.type==="number"?(t.value===""?null:+t.value):t.value;if(t.dataset.json||ds.sptype==="json"){try{v=JSON.parse(t.value||"null")}catch(_){toast("Not valid JSON");return}}if(ds.sptype==="csv")v=String(t.value).split(",").map(x=>x.trim()).filter(Boolean);
   /* duplicate check on rename */const m=ds.sp.match(/^(lists\.[^.]+\.items|companies|banks|emails|locations|people)\.(\d+)\.(label|name|address)$/);if(m&&typeof v==="string"){const arr=getPath(SET(),m[1])||[];const dup=arr.some((x,i)=>i!==+m[2]&&norm(x[m[3]]||"")===norm(v)&&(x.parent||"")===(arr[+m[2]]?.parent||""));if(dup){toast(`"${v}" already exists — not saved`);t.value=getPath(SET(),ds.sp)||"";return}}

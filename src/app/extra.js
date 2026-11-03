@@ -13,15 +13,41 @@ function partsBlock(p){
 function poCtn(p){if(+p.ctn)return +p.ctn;const c=(p.lines||[]).reduce((s,l)=>{const pr=typeof product==="function"?product(l.sku):null;const per=+(pr?.ctn?.units||pr?.perCtn||0);return s+(per?Math.ceil((+l.q||0)/per):0)},0);if(c)return c;const m=String(p.desc||p.notes||"").match(/(\d+)\s*(?:ctn|cartons?|crtn|box(?:es)?)/i);return m?+m[1]:0}
 
 /* ---------- next step: one clear suggestion with a button ---------- */
-function nextStep(p){const st=poState(p);if(["cancelled","closed"].includes(p.status))return null;
- const sch=(p.schedule||[]);const due=sch.find(m=>!m.paid&&!(m.covered));
- if(!p.piNo&&!p.docs?.pi)return{t:"Add the PI (invoice) number or link so payments and duplicates can be matched",b:`<button class="btn sm" data-act="edit" data-col="purchases" data-id="${esc(p.no)}">Add PI</button>`};
+function nextStep(p){const st=poState(p);if(p.status==="cancelled")return null;if(p.historic&&st.outstandingCur<=0.5)return null;
+ if(p.status==="closed"){return st.outstandingCur>0.5?{t:`Order is closed but ${fmt(st.outstandingCur,p.cur)} is still unpaid — pay it, add a credit note, or correct the order`,b:`<button class="btn sm" data-act="pay" data-po="${esc(p.no)}">Pay</button>`}:null}
+ const sch=(p.schedule||[]);const due=sch.find(m=>!m.paid&&!(m.covered));const shs=(D.shipments||[]).filter(s=>!s.deletedAt&&shipPos(s).includes(p.no));
+ if(!p.yourRef&&!p.piNo&&!p.piLink&&!p.docs?.pi)return{t:"Add the supplier PI number or link so payments and duplicates can be matched",b:`<button class="btn sm" data-act="edit" data-col="purchases" data-id="${esc(p.no)}">Add PI</button>`};
  if(st.outstandingCur>0.5&&st.paidCur<0.5)return{t:`Pay the deposit — ${fmt(Math.min(st.outstandingCur,due?.amount||st.outstandingCur),p.cur)}`,b:`<button class="btn sm pri" data-act="pay" data-po="${esc(p.no)}">Pay</button>`};
- if(["production","ordered","confirmed","part_shipped"].includes(p.status)&&!(D.shipments||[]).some(s=>!s.deletedAt&&(s.purchases||[]).includes(p.no)))return{t:"When the goods leave the factory, record the shipment (cartons, kg, forwarder)",b:`<button class="btn sm" data-act="ship" data-po="${esc(p.no)}">Record shipment</button>`};
+ if(["production","ordered","confirmed","deposit"].includes(p.status)&&!shs.length)return{t:"When the goods leave the factory, record the shipment (cartons, kg, forwarder)",b:`<button class="btn sm" data-act="ship" data-po="${esc(p.no)}">Record shipment</button>`};
  if(st.outstandingCur>0.5)return{t:`Still to pay ${fmt(st.outstandingCur,p.cur)}${due?.label?" — next: "+due.label:""}`,b:`<button class="btn sm" data-act="pay" data-po="${esc(p.no)}">Pay</button>`};
- const sh=(D.shipments||[]).find(s=>!s.deletedAt&&(s.purchases||[]).includes(p.no)&&s.status==="arrived");
+ const sh=shs.find(s=>["arrived","part_delivered"].includes(s.status));
  if(sh)return{t:`${sh.no} has arrived — receive the stock so it counts`,b:`<button class="btn sm pri" data-act="receive" data-sh="${esc(sh.no)}">Receive</button>`};
  return null}
+function shipNext(s){if(s.historic||s.status==="cancelled")return null;const cur=s.costCur||"USD";const T=today();
+ if(!(+s.ctn>0))return{t:"Add the number of cartons (and kg / cbm) so freight per unit can be worked out",b:`<button class="btn sm" data-act="edit" data-col="shipments" data-id="${esc(s.no)}">Add cartons</button>`};
+ if(!shipPos(s).length)return{t:"Link the order(s) in this shipment so stock and cost go to the right products",b:`<button class="btn sm" data-act="edit" data-col="shipments" data-id="${esc(s.no)}">Add orders</button>`};
+ let paid=0;try{paid=paysFor(s.no).reduce((a,x)=>a+paidIn(x,s.no,cur),0)}catch(_){}const tot=(+s.cost||0)*(1+(+s.platformFeePct||0)/100)+(+s.insurance||0);
+ if(tot-paid>0.5&&s.status!=="delivered")return{t:`Pay the forwarder — ${fmt(tot-paid,cur)} still to pay`,b:`<button class="btn sm" data-act="pay" data-sh="${esc(s.no)}">Pay</button>`};
+ if(["booked","in_transit","customs"].includes(s.status)&&s.eta&&s.eta<T)return{t:`ETA ${fmtD(s.eta)} has passed — update the status (arrived?) or the ETA`,b:`<button class="btn sm" data-act="edit" data-col="shipments" data-id="${esc(s.no)}">Update</button>`};
+ if(["arrived","part_delivered"].includes(s.status)&&!live(D.receipts).some(r=>r.src===s.no))return{t:"Goods have arrived — receive them so the stock counts",b:`<button class="btn sm pri" data-act="receive" data-sh="${esc(s.no)}">Receive</button>`};
+ if(tot-paid>0.5)return{t:`Delivered but ${fmt(tot-paid,cur)} freight still unpaid`,b:`<button class="btn sm" data-act="pay" data-sh="${esc(s.no)}">Pay</button>`};
+ return null}
+function payNext(x){if(x.status==="pending")return{t:"Payment is pending — when the money is sent, mark it paid and attach the receipt",b:`<button class="btn sm pri" data-act="edit" data-col="payments" data-id="${esc(x.no)}">Mark paid</button>`};
+ if(x.status==="paid"&&x.direction!=="in"&&!x.receipt&&!x.docs?.receipt)return{t:"Attach the bank / platform receipt (proof of payment)",b:`<button class="btn sm" data-act="edit" data-col="payments" data-id="${esc(x.no)}">Add receipt</button>`};
+ if(x.status==="paid"&&!(x.allocations||[]).length&&!x.ref)return{t:"Link this payment to the order / shipment it pays for",b:`<button class="btn sm" data-act="edit" data-col="payments" data-id="${esc(x.no)}">Link</button>`};
+ return null}
+function prodNext(p){if(p.status&&p.status!=="active")return null;let r={};try{r=reorderInfo(p.sku)}catch(_){}
+ if(r.out)return{t:"Out of stock — reorder now",b:`<button class="btn sm pri" data-act="reorder" data-sku="${esc(p.sku)}">Reorder</button>`};
+ if(r.reorderIn!=null&&r.reorderIn<=(DEF().reorderWarnDays||30))return{t:r.reorderIn<=0?"Reorder date has passed — order now":`Reorder within ${r.reorderIn} days`,b:`<button class="btn sm" data-act="reorder" data-sku="${esc(p.sku)}">Reorder</button>`};
+ if(!(p.suppliers||[]).length)return{t:"Add the supplier and price so reorders and costing work",b:`<button class="btn sm" data-act="edit" data-col="products" data-id="${esc(p.sku)}">Add supplier</button>`};
+ if(!p.asin&&!(p.listings||[]).length&&!p.fnsku)return{t:"Add the ASIN / marketplace listing so sales can be matched",b:`<button class="btn sm" data-act="edit" data-col="products" data-id="${esc(p.sku)}">Add ASIN</button>`};
+ return null}
+function partyNext(x){if(x.status==="archived")return null;
+ if(x.type==="supplier"){const owe=live(D.purchases).filter(p=>p.party===x.code&&p.status!=="cancelled").map(p=>[p,poState(p)]).filter(([p,st])=>st.outstandingCur>0.5);if(owe.length){const[p,st]=owe.sort((a,b)=>(a[0].date||"")<(b[0].date||"")?-1:1)[0];return{t:`${owe.length} order${owe.length>1?"s":""} still owing — oldest ${p.no}: ${fmt(st.outstandingCur,p.cur)}`,b:`<button class="btn sm" data-act="pay" data-po="${esc(p.no)}">Pay ${esc(p.no)}</button>`}}}
+ if(!x.contact&&!x.wechat&&!x.email&&!x.phone)return{t:"Add a contact (WeChat / email / phone)",b:`<button class="btn sm" data-act="edit" data-col="parties" data-id="${esc(x.code)}">Add contact</button>`};
+ return null}
+const nbHtml=n=>n?`<div class="note" style="margin:0 0 10px;display:flex;gap:10px;align-items:center;justify-content:space-between;border-left:3px solid var(--accent)"><span>👉 <b>Next step:</b> ${esc(n.t)}</span>${n.b}</div>`:"";
+[["openShip","shipments",shipNext],["openPay","payments",payNext],["openProduct","products",prodNext],["openParty","parties",partyNext]].forEach(([fn,col,nx])=>{try{const orig=window[fn]||eval(fn);if(typeof orig!=="function")return;const w=function(x){const r=orig(x);try{const d=docOf(col,x);if(r&&d){const h=nbHtml(nx(d));if(h)r.body=h+r.body}}catch(e){console.warn(e)}return r};eval(fn+"=w")}catch(e){console.warn(e)}});
 function nextBlock(p){const n=nextStep(p);return n?`<div class="note" style="margin:0 0 10px;display:flex;gap:10px;align-items:center;justify-content:space-between;border-left:3px solid var(--accent)"><span>👉 <b>Next step:</b> ${esc(n.t)}</span>${n.b}</div>`:""}
 
 /* wrap the order drawer: parts + next step on top */
@@ -36,8 +62,10 @@ async function ensureSetupV4(){try{if(!D.setup||!can("setup"))return;const L0=D.
  add("department","Departments","General",[["sourcing","Sourcing / China"],["warehouse","Warehouse"],["accounts","Accounts / Finance"],["marketing","Marketing / Listings"],["admin","Admin"],["logistics","Logistics"]].map(([id,label])=>({id,label})));
  add("fbaCentre","Amazon FBA centres","Logistics",[["BHX4","BHX4 Coventry"],["LBA4","LBA4 Doncaster"],["LTN4","LTN4 Dunstable"],["EMA1","EMA1 Castle Donington"],["MAN1","MAN1 Manchester"],["BRS1","BRS1 Bristol"]].map(([id,label])=>({id,label})));
  add("packType","Packaging type","Products",[["giftbox","Gift box"],["colourbox","Colour box"],["brownbox","Brown box"],["polybag","Polybag"],["blister","Blister"]].map(([id,label])=>({id,label})));
- add("leadStage","Lead-time stages (days)","Planning",[["mould","Mould",30],["packaging","Packaging",10],["production","Production",25],["toForwarder","To forwarder",4],["sea","Sea",60],["air","Air",15],["road","Road (truck)",30],["agl","AGL",35],["fbaCheckin","FBA check-in",10],["safety","Safety stock",14]].map(([id,label,days])=>({id,label,days})),[["days","Days","num"]]);
- if(pairs.length){await setupPatchMany(pairs,null,{noUndo:true});logEv("setup","setup","main","Setup lists added for MY TOOL v4: "+pairs.map(p=>p[0][1]).join(", "))}}catch(e){console.warn(e)}}
+ add("ukPort","UK arrival ports","Logistics",[["felixstowe","Felixstowe"],["southampton","Southampton"],["london_gateway","London Gateway"],["tilbury","Tilbury"],["immingham","Immingham"],["liverpool","Liverpool"],["lhr","Heathrow (air)"],["man_air","Manchester (air)"],["ema_air","East Midlands (air)"],["dover","Dover (road)"]].map(([id,label],i)=>({id,label,...(i===0?{default:true}:{})})));
+ if(!D.setup.v4defaults){const want={currency:"RMB",purchaseKind:"china",payStatus:"paid",uom:"pack",brand:"WAL",country:"china",productStatus:"active",dutyBy:"us",originPort:"shenzhen",payTerms:"30_50_20_port",goodsType:"gen"};
+  Object.entries(want).forEach(([k,id])=>{const its=(L0[k]&&L0[k].items)||[];if(its.some(i=>i.default))return;const ix=its.findIndex(i=>i.id===id);if(ix>=0)pairs.push([["lists",k,"items",ix,"default"],true])});pairs.push([["v4defaults"],true])}
+ if(pairs.length){await setupPatchMany(pairs,null,{noUndo:true});const nl=pairs.filter(p=>p[0].length===2&&p[0][0]==="lists").map(p=>p[0][1]);logEv("setup","setup","main","MY TOOL v4 setup: "+(nl.length?"lists added "+nl.join(", ")+"; ":"")+"defaults set (change any in Setup › Lists)")}}catch(e){console.warn(e)}}
 setTimeout(function tick(){try{if(S.ready){ensureSetupV4();return}}catch(_){}setTimeout(tick,800)},800);
 
 /* ---------- Data: download backup / load a data file (Owner) ---------- */
@@ -69,3 +97,6 @@ async function checkInbox(){try{if(!window.MYTOOL||MYTOOL.demo||!MYTOOL.drive||!
 if(typeof attention==="function"){const _att2=attention;attention=function(){const out=_att2();try{if(S.inbox?.n)out.push({sev:1,text:`${S.inbox.n} new file${S.inbox.n===1?"":"s"} in Drive folder MY TOOL – INBOX: ${S.inbox.files.slice(0,3).map(f=>f.name).join(", ")}${S.inbox.n>3?"…":""} — open Import → From Google Drive`,col:"imports",id:"inbox",d:today()})}catch(_){}return out}}
 document.addEventListener("click",e=>{const r=e.target.closest('[data-open="imports"][data-id="inbox"]');if(!r)return;e.stopPropagation();e.preventDefault();ls.set("inboxSeen",new Date().toISOString());S.inbox={n:0,files:[]};S._att=null;go("import")},true);
 setTimeout(function tick2(){try{if(S.ready){checkInbox();setInterval(checkInbox,15*60*1000);return}}catch(_){}setTimeout(tick2,1500)},3000);
+
+/* record drawer: Alt+↑ / Alt+↓ = previous / next record in the list it was opened from */
+window.addEventListener("keydown",e=>{try{if(!S.drawer||S.drawer.form||!e.altKey||e.ctrlKey||e.metaKey)return;if(e.key!=="ArrowDown"&&e.key!=="ArrowUp")return;const ids=drawerSiblings(S.drawer);const i=ids.indexOf(S.drawer.id);const nx=ids[i+(e.key==="ArrowDown"?1:-1)];if(i<0||!nx)return;e.preventDefault();openDoc(S.drawer.col,nx)}catch(_){}});

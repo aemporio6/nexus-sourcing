@@ -19,11 +19,11 @@ const ICC_CYCLES=[["30","30 days (1 month)"],["45","45 days"],["60","60 days (2 
 const ICC_DIV=[["6000","÷ 6000 (air / road / AGL)"],["5000","÷ 5000 (express courier)"],["4000","÷ 4000"],["3000","÷ 3000 (rail 1:333)"]];
 const ICC_AMZ={maxKg:23,maxCm:63.5};/* Amazon UK carton limits */
 
-const iccList=k=>{const l=SET().lists?.[k];const d=k==="leadStage"?ICC_STAGE_DEF:ICC_PACK_DEF;return l&&(l.items||[]).length?l:d};
+const iccList=k=>{const l=SET().lists?.[k];const d=k==="leadStage"?ICC_STAGE_DEF:ICC_PACK_DEF;const ok=l&&(l.items||[]).length&&(k!=="leadStage"||(l.items||[]).some(i=>i.stage));return ok?l:d};
 const iccStageItems=st=>iccList("leadStage").items.filter(i=>!i.archived&&i.stage===st);
 const iccStageItem=id=>iccList("leadStage").items.find(i=>i.id===id);
 const iccPackItems=()=>iccList("packType").items.filter(i=>!i.archived);
-async function iccSeedSetup(){if(S._iccSeeded||!D.setup||!can("setup"))return;S._iccSeeded=true;const pairs=[];if(!SET().lists?.leadStage)pairs.push(["lists.leadStage",JSON.parse(JSON.stringify(ICC_STAGE_DEF))]);if(!SET().lists?.packType)pairs.push(["lists.packType",JSON.parse(JSON.stringify(ICC_PACK_DEF))]);if(pairs.length){S.holdRender=true;try{await setupPatchMany(pairs,null,{noUndo:true})}finally{S.holdRender=false}}}
+async function iccSeedSetup(){if(S._iccSeeded||!D.setup||!can("setup"))return;S._iccSeeded=true;const pairs=[];if(!SET().lists?.leadStage||!(SET().lists.leadStage.items||[]).some(i=>i.stage))pairs.push(["lists.leadStage",JSON.parse(JSON.stringify(ICC_STAGE_DEF))]);if(!SET().lists?.packType)pairs.push(["lists.packType",JSON.parse(JSON.stringify(ICC_PACK_DEF))]);if(pairs.length){S.holdRender=true;try{await setupPatchMany(pairs,null,{noUndo:true})}finally{S.holdRender=false}}}
 
 /* ---------- state ---------- */
 function iccInit(){if(S.icc)return S.icc;const st={src:"app",skus:[],q:"",newp:{name:"",price:"",cur:DEF().cur||"RMB",moq:"",party:""},sales:{mode:"data",day:"",month:""},per:{},dimKey:"",dims:{},divisor:"6000",ov:{ctn:"",kg:"",cbm:""},stages:{},packWhen:"along",cycle:String(DEF().cycleDays||90),cycN:"",cycU:"d",nCyc:"4",terms:"",rate:{},moqRule:"sku",moqOrder:"",planName:""};

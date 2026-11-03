@@ -2,13 +2,14 @@
 """Build MY TOOL: index.html (app) + manifest + service worker. Run: python3 build.py [--demo-seed DIR --out FILE]"""
 import json, os, re, sys, glob, subprocess, hashlib
 R = os.path.dirname(os.path.abspath(__file__))
-MODS = ["icons", "core", "forms", "forms2", "views", "drawers", "setup", "importer", "readers", "icc", "extra", "export_ps", "events"]
+MODS = ["icons", "core", "forms", "forms2", "views", "drawers", "setup", "importer", "readers", "icc", "extra", "export_ps", "help_view", "events"]
 
 def read(p): return open(os.path.join(R, p), encoding="utf-8").read()
 
 def build(seed_dir=None, out="index.html"):
     head = read("src/app/head.html")
     js = "\n".join(read(f"src/app/{m}.js") for m in MODS if os.path.exists(os.path.join(R, f"src/app/{m}.js")))
+    js = js.replace("/* ---------- Help page", "const HELP=" + read("src/app/help.json") + ";\n/* ---------- Help page", 1)
     # syntax check
     tmp = "/tmp/mytool_check.js"; open(tmp, "w").write(js)
     subprocess.run(["node", "--check", tmp], check=True)

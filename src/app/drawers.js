@@ -75,11 +75,18 @@ function payRows(pays,ref,cur){return pays.slice().sort((a,b)=>(a.date||"")<(b.d
 const PAY_HEADS=["No","Date","Type",{l:"Amount",n:1},{l:"£",n:1},"Check"];
 
 /* ---------- renderDrawer ---------- */
+const COL_LABEL={purchases:"Orders",shipments:"Shipments",payments:"Payments",inspections:"Inspections",receipts:"Receipts",moves:"Stock moves",credits:"Credit notes",products:"Products",parties:"Parties",imports:"Imports"};
+const recKey=r=>r?(r.no||r.code||r.sku||(r.p&&(r.p.sku||r.p.code||r.p.no))||r.id):"";
+function drawerSiblings(d){const page=d.col==="products"&&S.view?.k==="stock"?"stock":d.col;const rows=(S.lastRows&&S.lastRows[page])||[];const ids=rows.map(recKey).filter(Boolean);return ids.includes(d.id)?ids:[]}
+function drawerNav(d){const ids=drawerSiblings(d);const i=ids.indexOf(d.id);const pg=PAGES.includes(d.col)?d.col:(S.view?.k||"home");
+ const cr=`<nav class="crumb dcrumb" aria-label="Breadcrumb"><button type="button" data-crumb="home">Home</button><span aria-hidden="true">›</span><button type="button" data-crumb="${esc(pg)}">${esc(COL_LABEL[d.col]||d.col)}</button><span aria-hidden="true">›</span><span aria-current="page">${esc(d.id)}</span></nav>`;
+ const nav=ids.length>1?`<span class="dnav"><button type="button" class="btn sm" data-act="recnav" data-id="${esc(ids[i-1]||"")}" ${i>0?"":"disabled"} aria-label="Previous record" title="Previous in this list (Alt+↑)">‹ Prev</button><span class="status num">${i+1} / ${ids.length}</span><button type="button" class="btn sm" data-act="recnav" data-id="${esc(ids[i+1]||"")}" ${i<ids.length-1?"":"disabled"} aria-label="Next record" title="Next in this list (Alt+↓)">Next ›</button></span>`:"";
+ return`<div class="dtop">${cr}${nav}</div>`}
 function renderDrawer(){const d=S.drawer;if(!d||d.form)return"";const map={purchases:openPO,shipments:openShip,payments:openPay,inspections:openInsp,receipts:openReceipt,moves:openMove,credits:openCredit,products:openProduct,parties:openParty,imports:openImport};const fn=map[d.col];const x=docOf(d.col,d.id);let r;
  if(!fn||!x)r={title:esc(d.id||""),status:{text:"Not found",cls:"p-bad"},body:`<div class="empty">${esc(d.id||"This record")} was not found in ${esc(d.col||"the data")}.</div>`,footer:`<button class="btn" data-act="close">Close</button>`};
  else{try{r=fn(x)}catch(e){console.error(e);r={title:esc(d.id),status:{text:"Error",cls:"p-bad"},body:`<div class="badbox">Could not show this record — ${esc(e.message||e)}</div>${auditLine(x)}`,footer:`<button class="btn" data-act="close">Close</button>`}}}
  const box=x?trashBox(d.col,x):"";
- return`<div class="scrim" data-act="close"></div><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="dtitle"><div class="dh"><h2 id="dtitle">${r.title}</h2>${r.status?.text?`<span class="pill ${esc(r.status.cls||"p-mute")}">${esc(r.status.text)}</span>`:""}<button class="x" data-act="close" aria-label="Close">×</button></div><div class="db">${box}${r.body}</div><div class="df">${r.footer||""}</div></div>`}
+ return`<div class="scrim" data-act="close"></div><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="dtitle">${drawerNav(d)}<div class="dh"><h2 id="dtitle">${r.title}</h2>${r.status?.text?`<span class="pill ${esc(r.status.cls||"p-mute")}">${esc(r.status.text)}</span>`:""}<button class="x" data-act="close" aria-label="Close">×</button></div><div class="db">${box}${r.body}</div><div class="df">${r.footer||""}</div></div>`}
 
 /* ---------- purchase ---------- */
 function openPO(p){p=docOf("purchases",p);const no=p.no;const st=poState(p);const kind=item("purchaseKind",p.kind)||{};const china=kind.freight!==false&&p.kind!=="uk";const uk=p.kind==="uk"||(kind.freight===false&&kind.stock!==false);const cur=p.cur||"RMB";const T=today();const closed=["received","closed","cancelled"].includes(p.status);
