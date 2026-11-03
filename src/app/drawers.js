@@ -75,7 +75,7 @@ function payRows(pays,ref,cur){return pays.slice().sort((a,b)=>(a.date||"")<(b.d
 const PAY_HEADS=["No","Date","Type",{l:"Amount",n:1},{l:"£",n:1},"Check"];
 
 /* ---------- renderDrawer ---------- */
-const COL_LABEL={purchases:"Orders",shipments:"Shipments",payments:"Payments",inspections:"Inspections",receipts:"Receipts",moves:"Stock moves",credits:"Credit notes",products:"Products",parties:"Parties",imports:"Imports"};
+const COL_LABEL={purchases:"Purchases",shipments:"Shipments",payments:"Payments",inspections:"Inspections",receipts:"Receipts",moves:"Stock moves",credits:"Credit notes",products:"Products",parties:"Parties",imports:"Imports"};
 const recKey=r=>r?(r.no||r.code||r.sku||(r.p&&(r.p.sku||r.p.code||r.p.no))||r.id):"";
 function drawerSiblings(d){const page=d.col==="products"&&S.view?.k==="stock"?"stock":d.col;const rows=(S.lastRows&&S.lastRows[page])||[];const ids=rows.map(recKey).filter(Boolean);return ids.includes(d.id)?ids:[]}
 function drawerNav(d){const ids=drawerSiblings(d);const i=ids.indexOf(d.id);const pg=PAGES.includes(d.col)?d.col:(S.view?.k||"home");

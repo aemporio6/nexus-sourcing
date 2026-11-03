@@ -205,6 +205,7 @@ document.addEventListener("keydown",e=>{const t=e.target;const inField=t.matches
  if(e.key==="Escape"){if($("#menu").innerHTML){$("#menu").innerHTML="";return}if($("#bellp").innerHTML){$("#bellp").innerHTML="";return}const mm=$("#moremenu");if(mm&&!mm.hidden){mm.hidden=true;return}if(S.drawer){closeDrawer()}return}
  if(mod&&e.key==="Enter"&&S.drawer?.form){e.preventDefault();$('.df [data-act="save"]')?.click();return}
  if(mod&&e.key.toLowerCase()==="z"&&!inField){e.preventDefault();if(e.shiftKey)redo();else undo();return}
+ if(mod&&!e.shiftKey&&e.key.toLowerCase()==="y"&&!inField){e.preventDefault();redo();return}
  if(e.altKey&&e.key==="ArrowLeft"){e.preventDefault();back();return}if(e.altKey&&e.key==="ArrowRight"){e.preventDefault();fwd();return}
  if(!inField&&!mod&&!e.altKey&&e.key.toLowerCase()==="n"&&!S.drawer){e.preventDefault();$('[data-act="newmenu"]')?.click();return}
  if(e.key==="Enter"&&t.matches(".row[role=button]")){t.click()}

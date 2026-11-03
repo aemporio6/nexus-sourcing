@@ -192,7 +192,7 @@ const poReceipts=no=>no?live(D.receipts).filter(r=>(r.pos||[]).includes(no)||(r.
    to a credit note of the order (a refund received, or the credit deducted inside another payment). Each row carries its conversion text. */
 function poPayRows(p){const cur=p.cur||"RMB";const T=today();const rows=[];
  const add=(x,ref,via)=>{const amt=allocAmount(x,ref);const sign=paySignOf(x);const r=payRate(x);const g=r==null?null:amt*r;let inCur,conv="";
-  if(x.cur===cur)inCur=amt;else{const rc=rateOn(T,cur);inCur=g==null||rc==null?null:g/rc;conv=`${fmt(amt,x.cur)} → ${g==null?"no "+x.cur+" rate":gbp2(g)+(x.gbpActual!=null&&x.gbpActual!==""?" (actual £ from the bank)":` (at ${num(r,5)} on ${fmtD(x.date)})`)} → ${inCur==null?"no "+cur+" rate":fmt(inCur,cur)+` at today's ${cur} rate ${num(rc,5)}`}`}
+  if(x.cur===cur)inCur=amt;else{const rd=x.date&&x.date<=T?x.date:T;const rc=rateOn(rd,cur);inCur=g==null||rc==null?null:g/rc;conv=`${fmt(amt,x.cur)} → ${g==null?"no "+x.cur+" rate":gbp2(g)+(x.gbpActual!=null&&x.gbpActual!==""?" (actual £ from the bank)":` (at ${num(r,5)} on ${fmtD(x.date)})`)} → ${inCur==null?"no "+cur+" rate":fmt(inCur,cur)+` at the ${cur} rate on ${fmtD(rd)} (${num(rc,5)})`}`}
   rows.push({x,no:x.no,ref,via:via||null,date:x.date||"",amt:sign*amt,cur:x.cur,inCur:sign*(inCur||0),gbp:sign*(g||0),conv,noRate:inCur==null})};
  paysFor(p.no).forEach(x=>add(x,p.no));live(D.credits).filter(c=>c.po===p.no).forEach(c=>paysFor(c.no).forEach(x=>add(x,c.no,c.no)));
  return rows.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0)}
@@ -201,13 +201,13 @@ function poState(p){const total=poTotal(p);const cur=p.cur||"RMB";const rows=poP
  const crs=creditsFor(p.no);const cr=r2(crs.reduce((s,c)=>s+creditInCur(c,cur),0));/* written off (by hand with a reason, or at migration): positive = unpaid rest forgiven, negative = overpayment the supplier will not return */const wo=p.writtenOff&&+p.writtenOff.amount?r2(+p.writtenOff.amount):0;
  /* within 50p (or 0.50 in the PI currency) an order counts as settled — the same tolerance everywhere *//* billed on another order's invoice for this order: settles what is still owed; anything beyond that is an extra cost of this order billed elsewhere (never an overpayment) */
  const via=poViaRows(p);const viaCur=r2(via.reduce((s,v)=>s+v.inCur,0));const bal0=r2(total-paidCur-cr-wo);const viaUsed=r2(Math.max(0,Math.min(viaCur,bal0)));const viaExtra=r2(viaCur-viaUsed);
- const balance=r2(bal0-viaUsed);const outstandingCur=total>0&&balance>0.5?balance:0;const owedToUs=total>0&&balance<-0.5?-balance:0;
+ const balance=r2(bal0-viaUsed);/* a CLOSED order paid in another currency: what is left is only exchange-rate difference, not money owed either way */const fxDiff=p.status==="closed"&&rows.some(r=>r.cur!==cur)?balance:0;const outstandingCur=total>0&&balance-fxDiff>0.5?balance:0;const owedToUs=total>0&&balance-fxDiff<-0.5?-balance:0;
  const pct=total?Math.min(1.5,(paidCur+cr+wo+viaUsed)/total):0;const over=total?(paidCur+cr+viaUsed)/total:0;const rc=rateOn(today(),cur);
  const st=item("poStatus",p.status);const steps=items("poStatus").filter(i=>i.step>=0).sort((a,b)=>a.step-b.step);const stepIndex=Math.max(0,steps.findIndex(s=>s.id===p.status));
  const ship=poShipments(p.no);const rec=poReceipts(p.no);
  const ordered=(p.lines||[]).reduce((s,l)=>s+(+l.q||0),0);const shipped=ship.reduce((s,sh)=>s+shipLinesExpanded(sh).filter(l=>l.po===p.no).reduce((a,l)=>a+(+l.q||0),0),0);const recL=rec.flatMap(r=>(r.lines||[]).filter(l=>l.po===p.no));const received=recL.reduce((a,l)=>a+(+l.q||0),0);const damaged=recL.reduce((a,l)=>a+(+l.damaged||0),0);
  const payLabel=total===0?(rows.length?"Paid (no PI)":"No PI"):outstandingCur<=0.5?(owedToUs>0.5?"Overpaid":wo?"Written off":"Paid"):paidCur>0||viaUsed>0?"Part paid":"Unpaid";
- return{total,cur,rows,pays:[...new Set(rows.map(r=>r.x))],paidCur,paidGbp,credits:cr,creditDocs:crs,writtenOff:wo,balance,outstandingCur,outstandingGbp:rc==null?0:r2(outstandingCur*rc),owedToUs,owedToUsGbp:rc==null?0:r2(owedToUs*rc),via,viaCur,viaUsed,viaExtra,noRate:rc==null,pct,over,status:st,stepIndex,steps,ship,rec,ordered,shipped,received,damaged,payLabel}}
+ return{fxDiff,total,cur,rows,pays:[...new Set(rows.map(r=>r.x))],paidCur,paidGbp,credits:cr,creditDocs:crs,writtenOff:wo,balance,outstandingCur,outstandingGbp:rc==null?0:r2(outstandingCur*rc),owedToUs,owedToUsGbp:rc==null?0:r2(owedToUs*rc),via,viaCur,viaUsed,viaExtra,noRate:rc==null,pct,over,status:st,stepIndex,steps,ship,rec,ordered,shipped,received,damaged,payLabel}}
 /* orders that can owe money: every live order except cancelled. A closed order owes nothing only when it is settled or its rest is written off (reason shown everywhere) */
 /* products whose stock counts (Home tile, Stock page, Reports): live and not merged away */
 const stockProducts=()=>live(D.products).filter(p=>!p.mergedInto);
