@@ -45,3 +45,27 @@ document.addEventListener("click",e=>{const b=e.target.closest('[data-act="mtbac
 document.addEventListener("change",async e=>{const inp=e.target.closest&&e.target.closest("input.mt_restore");if(!inp||!window.MYTOOL)return;const f=inp.files&&inp.files[0];inp.value="";if(!f)return;
  if(!confirm("Replace ALL data in MY TOOL with \""+f.name+"\"?\n\nEveryone will see the new data. A backup of the current data is downloaded first."))return;
  try{await MYTOOL.backup();toast("Loading "+f.name+"…");await MYTOOL.restore(f)}catch(err){alert("Could not load the file: "+(err.message||err))}},true);
+
+/* ---------- proof & VAT alerts: PI not in our company's name, paid payments without a receipt ---------- */
+function ourCoName(p){return((SET().companies||[]).find(c=>c.id===p.account)?.name||"").trim()}
+function piNotOurs(p){const b=String(p.piBilledTo||"").trim();if(!b)return false;const n=ourCoName(p);return n&&b.toLowerCase().replace(/\s+(ltd|limited)\.?$/,"")!==n.toLowerCase().replace(/\s+(ltd|limited)\.?$/,"")}
+if(typeof attention==="function"){const _att=attention;attention=function(){const out=_att();try{const T=today();
+ live(D.purchases).filter(p=>!["cancelled","closed"].includes(p.status)&&piNotOurs(p)).forEach(p=>out.push({sev:1,text:`${p.no}${p.oldRef?" ("+p.oldRef+")":""} · PI is in the name of ${p.piBilledTo}, not ${ourCoName(p)} — ask the supplier to reissue it (needed for import VAT)`,col:"purchases",id:p.no,d:T}));
+ live(D.payments).filter(x=>x.status==="paid"&&x.direction!=="in"&&(x.date||"")>="2026-01-01"&&!x.receipt&&!x.docs?.receipt?.url&&!x.docs?.receipt).forEach(x=>out.push({sev:0,text:`${x.no} · ${fmt(x.amount,x.cur)} paid ${fmtD(x.date)} — no receipt attached`,col:"payments",id:x.no,d:x.date}));
+}catch(e){console.warn(e)}return out}}
+/* order drawer: who the PI is billed to + extra columns that came with an import */
+if(typeof openPO==="function"){const _o2=openPO;openPO=function(p){const r=_o2(p);try{const x=docOf("purchases",p);if(r&&x){let add="";
+ if(x.piBilledTo)add+=`<div class="${piNotOurs(x)?"warnbox":"note"}" style="margin:0 0 10px">PI billed to <b>${esc(x.piBilledTo)}</b>${piNotOurs(x)?` — not ${esc(ourCoName(x))}. Ask for a reissued PI/CI in ${esc(ourCoName(x))}'s name (import VAT can only be claimed by the importer of record).`:" ✓"}</div>`;
+ const xs=(x.lines||[]).filter(l=>l.x&&Object.keys(l.x).length);if(xs.length){const keys=[...new Set(xs.flatMap(l=>Object.keys(l.x)))];add+=`<div class="card" style="margin:0 0 10px"><div class="card-h"><h2>Extra columns from the import</h2><span class="status">${keys.length} field${keys.length===1?"":"s"}</span></div><div class="tbl" style="overflow:auto"><table><tr><th>Line</th>${keys.map(k=>`<th>${esc(k)}</th>`).join("")}</tr>${xs.map(l=>`<tr><td class="num">${esc(l.sku||"")}</td>${keys.map(k=>`<td>${esc(l.x[k]??"")}</td>`).join("")}</tr>`).join("")}</table></div></div>`}
+ r.body=add+r.body}}catch(e){console.warn(e)}return r}}
+
+/* ---------- Drive inbox: files dropped in "MY TOOL – INBOX" (any Drive folder with that name) show as a task ---------- */
+S.inbox=S.inbox||{n:0,files:[]};
+async function checkInbox(){try{if(!window.MYTOOL||MYTOOL.demo||!MYTOOL.drive||!can("create"))return;
+ let folders=[];for(const root of ["root","shared"]){try{folders=folders.concat((await MYTOOL.drive.list(root,{foldersOnly:true})).filter(f=>/^MY TOOL\s*[–-]\s*INBOX$/i.test(f.name)))}catch(_){}}
+ if(!folders.length)return;const since=ls.get("inboxSeen","2000-01-01T00:00:00Z");let files=[];
+ for(const f of folders){const fs=await MYTOOL.drive.list(f.id,{since});files=files.concat(fs.filter(x=>x.mimeType!=="application/vnd.google-apps.folder"))}
+ S.inbox={n:files.length,files,folder:folders[0].id};S._att=null;if(files.length){toast(`${files.length} new file${files.length===1?"":"s"} in MY TOOL – INBOX — open Import to bring ${files.length===1?"it":"them"} in`);render()}}catch(e){console.warn("inbox",e)}}
+if(typeof attention==="function"){const _att2=attention;attention=function(){const out=_att2();try{if(S.inbox?.n)out.push({sev:1,text:`${S.inbox.n} new file${S.inbox.n===1?"":"s"} in Drive folder MY TOOL – INBOX: ${S.inbox.files.slice(0,3).map(f=>f.name).join(", ")}${S.inbox.n>3?"…":""} — open Import → From Google Drive`,col:"imports",id:"inbox",d:today()})}catch(_){}return out}}
+document.addEventListener("click",e=>{const r=e.target.closest('[data-open="imports"][data-id="inbox"]');if(!r)return;e.stopPropagation();e.preventDefault();ls.set("inboxSeen",new Date().toISOString());S.inbox={n:0,files:[]};S._att=null;go("import")},true);
+setTimeout(function tick2(){try{if(S.ready){checkInbox();setInterval(checkInbox,15*60*1000);return}}catch(_){}setTimeout(tick2,1500)},3000);
