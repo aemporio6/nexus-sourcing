@@ -48,11 +48,11 @@ let pushT = null, pushing = false, pushAgain = false, pollT = null;
 const cacheKey = () => "db:" + (DEMO ? "demo" : lc(me && me.email));
 
 /* ---------------- small UI helpers (login / status) ---------------- */
-const LOGO = '<img src="assets/icon-192.png" alt="" width="96" height="96" style="border-radius:50%">';
+const LOGO = '<img src="assets/icon-192.png" alt="MY TOOL" width="120" height="120" style="border-radius:50%;box-shadow:0 8px 28px rgba(15,143,150,.25)">';
 function gate(html){
   let g = document.getElementById("mt_gate");
   if(!g){ g = document.createElement("div"); g.id = "mt_gate"; document.body.appendChild(g); }
-  g.innerHTML = '<div class="mt_card">' + LOGO + '<h1>MY <span style="color:#d7262e">TOOL</span></h1>' + html + '</div>';
+  g.innerHTML = '<div class="mt_card">' + LOGO + '<h1>MY <span style="color:#d7262e">TOOL</span></h1><p class="mt_small" style="margin-top:-6px;letter-spacing:.14em;text-transform:uppercase">Vartleaves · Engineered Sourcing</p>' + html + '<p class="mt_small" style="margin-top:18px;opacity:.7">Your data stays in your own Google Drive.</p></div>';
   g.hidden = false;
   return g;
 }

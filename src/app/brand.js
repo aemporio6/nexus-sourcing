@@ -1,0 +1,14 @@
+/* ---------- MY TOOL branding everywhere: tab titles, Excel files (properties + "About" sheet), PDFs (logo + footer on every page), print ---------- */
+let BRAND_LOGO=null;(async()=>{try{const r=await fetch("assets/icon-192.png");const b=await r.blob();BRAND_LOGO=await new Promise(ok=>{const f=new FileReader();f.onload=()=>ok(f.result);f.readAsDataURL(b)})}catch(_){}})();
+const brandWho=()=>(window.MYTOOL&&MYTOOL.me&&MYTOOL.me.email)||"";
+/* browser tab: "Purchases · MY TOOL", "PO-26-0065 · MY TOOL" */
+const PAGE_TITLE={home:"Today",purchases:"Purchases",shipments:"Shipments",payments:"Payments",stock:"Stock",products:"Products",parties:"Suppliers & partners",calendar:"Calendar",planner:"Planner (ICC)",tools:"Tools",refs:"References",reports:"Reports",import:"Import",attention:"Alerts",log:"Activity",trash:"Trash",setup:"Setup",more:"All menus",health:"Data health",help:"Help"};
+render=(function(orig){return function(...a){const r=orig.apply(this,a);try{const d=S.drawer;const t=d&&!d.form&&d.id?d.id:d&&d.form?"New "+d.form:(PAGE_TITLE[S.view&&S.view.k]||"");document.title=(t?t+" · ":"")+"MY TOOL"}catch(_){}return r}})(render);
+/* Excel (SheetJS exports): file named MYTOOL_…, document properties, and an "About" sheet */
+exportXlsx=(function(orig){return async function(scope){const _w=XLSX.writeFile,_wr=XLSX.write;const brand=wb=>{try{wb.Props={...(wb.Props||{}),Title:"MY TOOL — "+(scope||"export"),Subject:"Vartleaves sourcing",Author:"MY TOOL",Company:"Vartleaves Ltd",CreatedDate:new Date()};if(!wb.SheetNames.includes("About MY TOOL")){const ws=XLSX.utils.aoa_to_sheet([["MY TOOL — Vartleaves · Engineered Sourcing"],[],["What",String(scope||"export")],["Exported",new Date().toLocaleString("en-GB")],["By",brandWho()||"—"],["Note","Made by MY TOOL. Numbers are as in the app at the time of export."]]);ws["!cols"]=[{wch:14},{wch:60}];XLSX.utils.book_append_sheet(wb,ws,"About MY TOOL")}}catch(_){}};
+ XLSX.writeFile=(wb,name,o)=>{brand(wb);return _w.call(XLSX,wb,String(name).replace(/^NEXUS_/,"MYTOOL_"),o)};XLSX.write=(wb,o)=>{brand(wb);return _wr.call(XLSX,wb,o)};
+ const _sb=saveBlob;saveBlob=(b,name)=>_sb(b,String(name).replace(/^NEXUS_/,"MYTOOL_"));
+ try{return await orig(scope)}finally{XLSX.writeFile=_w;XLSX.write=_wr;saveBlob=_sb}}})(exportXlsx);
+/* PDFs: small logo + "MY TOOL" at the top of page 1, footer on every page */
+pdfNew=(function(orig){return function(){const doc=orig();if(!doc)return doc;try{
+ const _out=doc.output.bind(doc);doc.output=(...a)=>{try{const n=doc.getNumberOfPages();for(let i=1;i<=n;i++){doc.setPage(i);try{if(BRAND_LOGO)doc.addImage(BRAND_LOGO,"PNG",14,285.6,5.5,5.5)}catch(_){}doc.setFontSize(7.5);doc.setTextColor(150);doc.text(`MY TOOL · Vartleaves Ltd · ${new Date().toLocaleDateString("en-GB")}${brandWho()?" · "+brandWho():""}`,21,290);doc.text(`${i} / ${n}`,196,290,{align:"right"})}doc.setTextColor(0)}catch(_){}return _out(...a)}}catch(_){}return doc}})(pdfNew);

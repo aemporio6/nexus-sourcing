@@ -82,6 +82,7 @@ body::before{content:"";position:fixed;right:-60px;bottom:-60px;width:min(520px,
 body::after{content:"MY TOOL · MY TOOL · MY TOOL · MY TOOL · MY TOOL · MY TOOL · MY TOOL · MY TOOL";position:fixed;left:-10%;top:42%;width:130%;transform:rotate(-18deg);font:900 64px/1 var(--f-ui);letter-spacing:.12em;color:var(--fg);opacity:.022;white-space:nowrap;pointer-events:none;z-index:-1;text-align:center}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body::before{opacity:.06}}
 @media print{body::before,body::after{display:none}}
+@media print{.rail,.top,#tabbar,.hmbar,.hmcard{display:none!important}#view::before{content:"MY TOOL · Vartleaves";display:block;font:700 11px var(--f-ui);color:#666;margin:0 0 8px}}
 .chipb{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:5px 10px;font-size:12.5px;font-weight:600}.chipb.on{background:var(--accent-soft);border-color:var(--accent)}
 .list{display:flex;flex-direction:column}
 .row{display:grid;grid-template-columns:118px minmax(0,1fr) 120px 120px 118px;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);background:transparent;border-left:0;border-right:0;border-top:0;text-align:left;width:100%}

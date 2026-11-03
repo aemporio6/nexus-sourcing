@@ -49,11 +49,11 @@ let pushT = null, pushing = false, pushAgain = false, pollT = null;
 const cacheKey = () => "db:" + (DEMO ? "demo" : lc(me && me.email));
 
 /* ---------------- small UI helpers (login / status) ---------------- */
-const LOGO = '<img src="assets/icon-192.png" alt="" width="96" height="96" style="border-radius:50%">';
+const LOGO = '<img src="assets/icon-192.png" alt="MY TOOL" width="120" height="120" style="border-radius:50%;box-shadow:0 8px 28px rgba(15,143,150,.25)">';
 function gate(html){
   let g = document.getElementById("mt_gate");
   if(!g){ g = document.createElement("div"); g.id = "mt_gate"; document.body.appendChild(g); }
-  g.innerHTML = '<div class="mt_card">' + LOGO + '<h1>MY <span style="color:#d7262e">TOOL</span></h1>' + html + '</div>';
+  g.innerHTML = '<div class="mt_card">' + LOGO + '<h1>MY <span style="color:#d7262e">TOOL</span></h1><p class="mt_small" style="margin-top:-6px;letter-spacing:.14em;text-transform:uppercase">Vartleaves · Engineered Sourcing</p>' + html + '<p class="mt_small" style="margin-top:18px;opacity:.7">Your data stays in your own Google Drive.</p></div>';
   g.hidden = false;
   return g;
 }
@@ -765,6 +765,7 @@ body::before{content:"";position:fixed;right:-60px;bottom:-60px;width:min(520px,
 body::after{content:"MY TOOL · MY TOOL · MY TOOL · MY TOOL · MY TOOL · MY TOOL · MY TOOL · MY TOOL";position:fixed;left:-10%;top:42%;width:130%;transform:rotate(-18deg);font:900 64px/1 var(--f-ui);letter-spacing:.12em;color:var(--fg);opacity:.022;white-space:nowrap;pointer-events:none;z-index:-1;text-align:center}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body::before{opacity:.06}}
 @media print{body::before,body::after{display:none}}
+@media print{.rail,.top,#tabbar,.hmbar,.hmcard{display:none!important}#view::before{content:"MY TOOL · Vartleaves";display:block;font:700 11px var(--f-ui);color:#666;margin:0 0 8px}}
 .chipb{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:5px 10px;font-size:12.5px;font-weight:600}.chipb.on{background:var(--accent-soft);border-color:var(--accent)}
 .list{display:flex;flex-direction:column}
 .row{display:grid;grid-template-columns:118px minmax(0,1fr) 120px 120px 118px;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);background:transparent;border-left:0;border-right:0;border-top:0;text-align:left;width:100%}
@@ -5464,7 +5465,7 @@ vProducts=(function(orig){return function(v){orig(v);try{const h=v.querySelector
 if(typeof vImport==="function")vImport=(function(orig){return function(v){orig(v);try{const h=v.querySelector("h1");if(h)h.insertAdjacentHTML("afterend",`<div class="note" style="margin:0 0 10px">📄 A <b>Product Information Sheet</b> (product / packing / carton sizes, HS code)? Use ${pisBtn()} — it fills the products directly.</div>`)}catch(_){}}})(vImport);
 /* WRITE: the sheet for one order */
 async function pisExport(poNo){const p=docOf("purchases",poNo);if(!p)return;let EX;try{EX=await psLoadLib()}catch(e){toast(e.message);return}
- const wb=new EX.Workbook();const ws=wb.addWorksheet("Product Info");const k=packingOf(p);
+ const wb=new EX.Workbook();const ws=wb.addWorksheet("Product Info");wb.creator="MY TOOL";wb.company="Vartleaves Ltd";wb.created=new Date();try{if(typeof BRAND_LOGO==="string"&&BRAND_LOGO){const im=wb.addImage({base64:BRAND_LOGO,extension:"png"});ws.addImage(im,{tl:{col:24.2,row:0.1},ext:{width:40,height:40}})}}catch(_){}const k=packingOf(p);
  ws.addRow(["Product Info","","","","","","","","","","Product Material","Product Specification","Product Weight","Product Dimensions","Packing Dimensions","Weight with Packing:","Total Carton","Units Per Master Carton:","Master Carton Dimensions:","","","GW/ Carton ","Total Weight","TOTAL CBM"]);
  ws.addRow(["Carton No.","Photo","Product Name","ASIN","Product Link","Product Price","30% of Selling Price","HS Code","Dimension/Size","Required QTY","","","","","","","","","L","W","H","KGS","KGS","m³"]);
  ws.mergeCells("A1:J1");ws.mergeCells("S1:U1");
@@ -5566,6 +5567,21 @@ setTimeout(function tick(){try{if(S.ready){if(hmOn())hmSet(true);return}}catch(_
 /* the More page and the phone: a switch for help mode */
 vMore=(function(orig){return function(v){orig(v);try{const h=v.querySelector("h1");if(h)h.insertAdjacentHTML("afterend",`<div class="card" style="margin:0 0 12px;padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>❓ Help mode</b><span class="status" style="flex:1">${esc(T2("Point at (or tap) any field, button or number to see what it is and what to do.","Kisi bhi field, button ya number pe jayein — kya hai aur kya karna hai."))}</span><button type="button" class="btn sm ${hmOn()?"pri":""}" data-hm="${hmOn()?"off":"on"}">${hmOn()?"On — turn off":"Turn on"}</button></div>`)}catch(_){}}})(vMore);
 document.addEventListener("click",e=>{const b=e.target.closest('[data-hm="on"]');if(!b)return;e.preventDefault();hmSet(true);render()},true);
+
+/* ---------- MY TOOL branding everywhere: tab titles, Excel files (properties + "About" sheet), PDFs (logo + footer on every page), print ---------- */
+let BRAND_LOGO=null;(async()=>{try{const r=await fetch("assets/icon-192.png");const b=await r.blob();BRAND_LOGO=await new Promise(ok=>{const f=new FileReader();f.onload=()=>ok(f.result);f.readAsDataURL(b)})}catch(_){}})();
+const brandWho=()=>(window.MYTOOL&&MYTOOL.me&&MYTOOL.me.email)||"";
+/* browser tab: "Purchases · MY TOOL", "PO-26-0065 · MY TOOL" */
+const PAGE_TITLE={home:"Today",purchases:"Purchases",shipments:"Shipments",payments:"Payments",stock:"Stock",products:"Products",parties:"Suppliers & partners",calendar:"Calendar",planner:"Planner (ICC)",tools:"Tools",refs:"References",reports:"Reports",import:"Import",attention:"Alerts",log:"Activity",trash:"Trash",setup:"Setup",more:"All menus",health:"Data health",help:"Help"};
+render=(function(orig){return function(...a){const r=orig.apply(this,a);try{const d=S.drawer;const t=d&&!d.form&&d.id?d.id:d&&d.form?"New "+d.form:(PAGE_TITLE[S.view&&S.view.k]||"");document.title=(t?t+" · ":"")+"MY TOOL"}catch(_){}return r}})(render);
+/* Excel (SheetJS exports): file named MYTOOL_…, document properties, and an "About" sheet */
+exportXlsx=(function(orig){return async function(scope){const _w=XLSX.writeFile,_wr=XLSX.write;const brand=wb=>{try{wb.Props={...(wb.Props||{}),Title:"MY TOOL — "+(scope||"export"),Subject:"Vartleaves sourcing",Author:"MY TOOL",Company:"Vartleaves Ltd",CreatedDate:new Date()};if(!wb.SheetNames.includes("About MY TOOL")){const ws=XLSX.utils.aoa_to_sheet([["MY TOOL — Vartleaves · Engineered Sourcing"],[],["What",String(scope||"export")],["Exported",new Date().toLocaleString("en-GB")],["By",brandWho()||"—"],["Note","Made by MY TOOL. Numbers are as in the app at the time of export."]]);ws["!cols"]=[{wch:14},{wch:60}];XLSX.utils.book_append_sheet(wb,ws,"About MY TOOL")}}catch(_){}};
+ XLSX.writeFile=(wb,name,o)=>{brand(wb);return _w.call(XLSX,wb,String(name).replace(/^NEXUS_/,"MYTOOL_"),o)};XLSX.write=(wb,o)=>{brand(wb);return _wr.call(XLSX,wb,o)};
+ const _sb=saveBlob;saveBlob=(b,name)=>_sb(b,String(name).replace(/^NEXUS_/,"MYTOOL_"));
+ try{return await orig(scope)}finally{XLSX.writeFile=_w;XLSX.write=_wr;saveBlob=_sb}}})(exportXlsx);
+/* PDFs: small logo + "MY TOOL" at the top of page 1, footer on every page */
+pdfNew=(function(orig){return function(){const doc=orig();if(!doc)return doc;try{
+ const _out=doc.output.bind(doc);doc.output=(...a)=>{try{const n=doc.getNumberOfPages();for(let i=1;i<=n;i++){doc.setPage(i);try{if(BRAND_LOGO)doc.addImage(BRAND_LOGO,"PNG",14,285.6,5.5,5.5)}catch(_){}doc.setFontSize(7.5);doc.setTextColor(150);doc.text(`MY TOOL · Vartleaves Ltd · ${new Date().toLocaleDateString("en-GB")}${brandWho()?" · "+brandWho():""}`,21,290);doc.text(`${i} / ${n}`,196,290,{align:"right"})}doc.setTextColor(0)}catch(_){}return _out(...a)}}catch(_){}return doc}})(pdfNew);
 
 /* ===================== events & boot v3 ===================== */
 const FORM_FOR_COL={purchases:"purchase",shipments:"shipment",payments:"payment",inspections:"inspection",receipts:"receive",moves:"move",credits:"credit",products:"product",parties:"party"};
@@ -5827,5 +5843,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='79d2563ee6';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='9bb3e8dba9';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
 </body></html>

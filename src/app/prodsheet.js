@@ -49,7 +49,7 @@ vProducts=(function(orig){return function(v){orig(v);try{const h=v.querySelector
 if(typeof vImport==="function")vImport=(function(orig){return function(v){orig(v);try{const h=v.querySelector("h1");if(h)h.insertAdjacentHTML("afterend",`<div class="note" style="margin:0 0 10px">📄 A <b>Product Information Sheet</b> (product / packing / carton sizes, HS code)? Use ${pisBtn()} — it fills the products directly.</div>`)}catch(_){}}})(vImport);
 /* WRITE: the sheet for one order */
 async function pisExport(poNo){const p=docOf("purchases",poNo);if(!p)return;let EX;try{EX=await psLoadLib()}catch(e){toast(e.message);return}
- const wb=new EX.Workbook();const ws=wb.addWorksheet("Product Info");const k=packingOf(p);
+ const wb=new EX.Workbook();const ws=wb.addWorksheet("Product Info");wb.creator="MY TOOL";wb.company="Vartleaves Ltd";wb.created=new Date();try{if(typeof BRAND_LOGO==="string"&&BRAND_LOGO){const im=wb.addImage({base64:BRAND_LOGO,extension:"png"});ws.addImage(im,{tl:{col:24.2,row:0.1},ext:{width:40,height:40}})}}catch(_){}const k=packingOf(p);
  ws.addRow(["Product Info","","","","","","","","","","Product Material","Product Specification","Product Weight","Product Dimensions","Packing Dimensions","Weight with Packing:","Total Carton","Units Per Master Carton:","Master Carton Dimensions:","","","GW/ Carton ","Total Weight","TOTAL CBM"]);
  ws.addRow(["Carton No.","Photo","Product Name","ASIN","Product Link","Product Price","30% of Selling Price","HS Code","Dimension/Size","Required QTY","","","","","","","","","L","W","H","KGS","KGS","m³"]);
  ws.mergeCells("A1:J1");ws.mergeCells("S1:U1");
