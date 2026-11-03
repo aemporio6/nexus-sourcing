@@ -237,10 +237,20 @@ function sawMine(k, sv, base, rrevs, rtomb){
   const [c, id] = k.split("/"); const has = !!(base[c] && base[c][id]); const rv = rrevs[k];
   if(rv && (rv.r === sv.r || (rv.h || []).includes(sv.r))) return true;
   if(!has && rtomb[k] && sv.del) return true;                     // still deleted
-  if(!has && rtomb[k] && !sv.del) return !!rtomb[k] && Date.parse(rtomb[k]) > sv.at;  // deleted by someone after my write
+  /* deleted by someone: only counts as "after my write" if their deletion's revision grew from mine (clocks on devices can differ, so no time check) */
   return false;
 }
 function mergeRemote(rj){
+  try{ return mergeRemote3(rj); }
+  catch(e){                                                       // never let an unexpected case stop saving: fall back to "my unsent changes win", and say so
+    console.error("merge fallback", e);
+    const base = (rj && rj.data) || {}; const next = clone(base);
+    for(const k of Object.keys(dirty)){ const [c, id] = k.split("/"); next[c] = next[c] || {}; const d = store[c] && store[c][id]; if(d) next[c][id] = clone(d); else delete next[c][id]; }
+    noteConflict({ kind: "merge", key: "setup/main", note: "Two saves crossed in an unusual way — this device's changes were kept. Please check recent edits. (" + (e && e.message) + ")" });
+    store = next; shadow = clone(base); shadowRevs = clone((rj && rj.revs) || {}); tomb = { ...((rj && rj.tomb) || {}), ...tomb };
+  }
+}
+function mergeRemote3(rj){
   const base = (rj && rj.data) || {};
   const rtomb = (rj && rj.tomb) || {};
   const rrevs = (rj && rj.revs) || {};
@@ -262,6 +272,7 @@ function mergeRemote(rj){
   for(const [k, o] of Object.entries(baseOf)){ const rv = rrevs[k]; if(o.b !== undefined && o.br && (!rv || (rv.r !== o.br && !(rv.h || []).includes(o.br)))){ o.orig = o.b; o.b = {}; } }
   const next = clone(base); const nrevs = clone(rrevs);
   const renamed = {};
+  const relocated = new Set();                                   // keys that received another record's edits in this merge — must be saved
   const t = { ...rtomb };
   for(const k of Object.keys(dirty)){
     const [c, id] = k.split("/");
@@ -275,13 +286,14 @@ function mergeRemote(rj){
     if(!forceMine.has(k) && !sameRecordStamps && mi && th && ident(mi) && ident(th) && ident(mi) !== ident(th) && (sh0 === undefined || shId === ident(mi) || shId === ident(th))){
       /* the number now belongs to a DIFFERENT record (two records were created with the same number) */
       const im = ident(mi); const k2id = Object.keys(next[c]).find(x => x !== id && ident(next[c][x]) === im);
-      if(k2id){ const b2 = ident(sh0) === im && baseOf[k].orig === undefined ? sh : {}; next[c][k2id] = mergeDoc(c + "/" + k2id, b2, next[c][k2id], { ...mi, id: next[c][k2id].id, no: next[c][k2id].no }, theirsBy); dirty[c + "/" + k2id] = ++editSeq; bumpRev(c + "/" + k2id, [rrevs[c + "/" + k2id] && rrevs[c + "/" + k2id].r]); nrevs[c + "/" + k2id] = revs[c + "/" + k2id]; delete dirty[k]; delete held[k]; continue; }
-      const mineToRenumber = mi.createdBy === (me && me.email) || (held[k] && Date.now() - held[k].since > 10 * 60000);
+      if(k2id){ const b2 = ident(sh0) === im && baseOf[k].orig === undefined ? sh : {}; next[c][k2id] = mergeDoc(c + "/" + k2id, b2, next[c][k2id], { ...mi, id: next[c][k2id].id, no: next[c][k2id].no }, theirsBy); dirty[c + "/" + k2id] = ++editSeq; relocated.add(c + "/" + k2id); bumpRev(c + "/" + k2id, [rrevs[c + "/" + k2id] && rrevs[c + "/" + k2id].r]); nrevs[c + "/" + k2id] = revs[c + "/" + k2id]; delete dirty[k]; delete held[k + "#" + im]; continue; }
+      const hk = k + "#" + im;                                    // one held entry per record (several records can wait on one number)
+      const mineToRenumber = mi.createdBy === (me && me.email) || (held[hk] && Date.now() - held[hk].since > 10 * 60000);
       if(renumberable(c, id) && mineToRenumber){
         const taken = [...Object.keys(next[c]), ...Object.keys(mine[c] || {}), ...Object.values(renamed).map(x => x.nid), ...Object.keys(rtomb).filter(x => x.startsWith(c + "/")).map(x => x.slice(c.length + 1))];
-        const nid = freeNumber(id, taken); if(nid){ renamed[k] = { c, id, nid }; delete held[k]; continue; }
+        const nid = freeNumber(id, taken); if(nid){ renamed[k] = { c, id, nid }; delete held[hk]; continue; }
       }
-      if(renumberable(c, id)){ held[k] = { doc: clone(mi), base: clone(ident(sh0) === ident(mi) && baseOf[k].orig === undefined ? sh : {}), since: (held[k] && held[k].since) || Date.now() }; delete dirty[k]; continue; }   // the maker's device will renumber it; my edit follows it there
+      if(renumberable(c, id)){ held[hk] = { doc: clone(mi), base: clone(ident(sh0) === ident(mi) && baseOf[k].orig === undefined ? sh : {}), since: (held[hk] && held[hk].since) || Date.now() }; delete dirty[k]; continue; }   // the maker's device will renumber it; my edit follows it there
     }
     if(forceMine.has(k) || eq(th, sh) || eq(th, mi)){ keepMine(); continue; }
     if(!mi){                                                      // I deleted it, someone else changed it → keep theirs
@@ -306,8 +318,8 @@ function mergeRemote(rj){
      Only MY records (and only the fields I changed) are rewritten to point to the new number. */
   const rn = Object.values(renamed);
   if(rn.length){
-    const fix = o => { let s = JSON.stringify(o); for(const r of rn) s = s.split('"' + r.id + '"').join('"' + r.nid + '"'); return JSON.parse(s); };
-    for(const r of rn){ const k = r.c + "/" + r.id; const nd = fix(mine[r.c][r.id]); nd.id = r.nid; if(nd.no === r.id || nd.no === r.nid) nd.no = r.nid; next[r.c][r.nid] = nd; }
+    const fix = o => { if(o === undefined || o === null || typeof o !== "object" && typeof o !== "string") return o; let s = JSON.stringify(o); for(const r of rn) s = s.split('"' + r.id + '"').join('"' + r.nid + '"'); return JSON.parse(s); };
+    for(const r of rn){ const k = r.c + "/" + r.id; if(!(mine[r.c] && mine[r.c][r.id])) continue; const nd = fix(mine[r.c][r.id]); nd.id = r.nid; if(nd.no === r.id || nd.no === r.nid) nd.no = r.nid; next[r.c][r.nid] = nd; }
     for(const k2 of Object.keys(dirty)){
       if(renamed[k2]) continue; const [c2, id2] = k2.split("/"); const m2 = mine[c2] && mine[c2][id2]; const d2 = next[c2] && next[c2][id2]; if(!m2 || !d2) continue;
       const b2 = (baseOf[k2] && baseOf[k2].b) || {};
@@ -315,18 +327,18 @@ function mergeRemote(rj){
     }
     for(const r of rn){
       const ok = r.c + "/" + r.id, nk = r.c + "/" + r.nid;
-      delete dirty[ok]; delete sent[ok]; dirty[nk] = ++editSeq; revs[nk] = { r: newRev(), h: ["0"] }; nrevs[nk] = revs[nk]; delete t[nk];
+      if(relocated.has(ok)) dirty[ok] = ++editSeq; else delete dirty[ok]; delete sent[ok]; dirty[nk] = ++editSeq; revs[nk] = { r: newRev(), h: ["0"] }; nrevs[nk] = revs[nk]; delete t[nk];
       noteConflict({ kind: "renumber", key: nk, from: r.id, to: r.nid, other: theirsBy, note: (theirsBy || "Someone") + " saved " + r.id + " at the same moment — yours is now " + r.nid });
     }
   }
   /* held edits: apply them to their record wherever it now lives (found by who made it and when) */
   for(const [k, h] of Object.entries(held)){
-    const [c] = k.split("/"); const im = ident(h.doc); next[c] = next[c] || {};
+    const [c, rest] = k.split("/"); const hid = rest.split("#")[0]; const im = ident(h.doc); next[c] = next[c] || {};
     const k2id = Object.keys(next[c]).find(x => ident(next[c][x]) === im);
     if(k2id){ const k2 = c + "/" + k2id; next[c][k2id] = mergeDoc(k2, h.base || {}, next[c][k2id], { ...h.doc, id: next[c][k2id].id, no: next[c][k2id].no }, theirsBy); dirty[k2] = ++editSeq; bumpRev(k2, [rrevs[k2] && rrevs[k2].r]); nrevs[k2] = revs[k2]; delete held[k]; continue; }
     if(Date.now() - h.since > 10 * 60000){                        // its maker never renumbered it → give it a new number here
-      const nid = freeNumber(k.split("/")[1], [...Object.keys(next[c]), ...Object.keys(rtomb).filter(x => x.startsWith(c + "/")).map(x => x.slice(c.length + 1))]);
-      if(nid){ next[c][nid] = { ...clone(h.doc), id: nid, no: nid }; const nk = c + "/" + nid; dirty[nk] = ++editSeq; revs[nk] = { r: newRev(), h: ["0"] }; nrevs[nk] = revs[nk]; delete held[k]; noteConflict({ kind: "renumber", key: nk, from: k.split("/")[1], to: nid, note: "Two records had the same number — this one is now " + nid }); }
+      const nid = freeNumber(hid, [...Object.keys(next[c]), ...Object.keys(rtomb).filter(x => x.startsWith(c + "/")).map(x => x.slice(c.length + 1))]);
+      if(nid){ next[c][nid] = { ...clone(h.doc), id: nid, no: nid }; const nk = c + "/" + nid; dirty[nk] = ++editSeq; revs[nk] = { r: newRev(), h: ["0"] }; nrevs[nk] = revs[nk]; delete held[k]; noteConflict({ kind: "renumber", key: nk, from: hid, to: nid, note: "Two records had the same number — this one is now " + nid }); }
     }
   }
   /* one record must live under one number: if the same record (same maker + time) ended up under two numbers, keep the later number */
@@ -334,7 +346,7 @@ function mergeRemote(rj){
     if(c === "setup" || !docs) continue; const by = {};
     for(const id of Object.keys(docs)){ if(!renumberable(c, id)) continue; const im = ident(docs[id]); if(im) (by[im] = by[im] || []).push(id); }
     for(const ids of Object.values(by)){ if(ids.length < 2) continue; ids.sort(); const keep = ids[ids.length - 1];
-      for(const o of ids.slice(0, -1)){ const kk = c + "/" + keep; docs[keep] = mergeDoc(kk, {}, docs[keep], { ...docs[o], id: docs[keep].id, no: docs[keep].no }, theirsBy); delete docs[o]; t[c + "/" + o] = nowIso(); delete dirty[c + "/" + o]; dirty[kk] = ++editSeq; bumpRev(kk, [rrevs[kk] && rrevs[kk].r]); nrevs[kk] = revs[kk]; } }
+      for(const o of ids.slice(0, -1)){ const kk = c + "/" + keep, ko = c + "/" + o; docs[keep] = mergeDoc(kk, {}, docs[keep], { ...docs[o], id: docs[keep].id, no: docs[keep].no }, theirsBy); delete docs[o]; t[ko] = nowIso(); bumpRev(ko, [rrevs[ko] && rrevs[ko].r]); nrevs[ko] = revs[ko]; delete dirty[c + "/" + o]; dirty[kk] = ++editSeq; bumpRev(kk, [rrevs[kk] && rrevs[kk].r]); nrevs[kk] = revs[kk]; } }
   }
   for(const key of Object.keys(t)){ if(dirty[key] && !(next[key.split("/")[0]] || {})[key.split("/")[1]]) continue; const [c, id] = key.split("/"); if(!dirty[key] && next[c]) delete next[c][id]; }
   for(const [c, docs] of Object.entries(next)) for(const id of Object.keys(docs || {})) delete t[c + "/" + id];   // a document that exists is never also marked deleted
@@ -563,6 +575,7 @@ window.MYTOOL = {
   get me(){ return me; }, get st(){ return lastSt; },
   async reauth(){ await requestToken(""); await push(); }, demo: DEMO, signOut, cfg: CFG,
   async syncNow(){ await push(); await poll(); },
+  async pullNow(){ if(!pushing && !polling){ remote.version = remote.version; await poll(); } },
   pending(){ return Object.keys(dirty).length; },
   /* two people changed the same thing at the same time — listed in Alerts until someone checks and dismisses it */
   conflicts(){ return conflicts.filter(x => !x.done).map(x => clone(x)); },

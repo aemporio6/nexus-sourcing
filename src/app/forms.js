@@ -51,7 +51,7 @@ const FORM_DEFAULTS={
   {k:"sellGbp",l:"Sell price £ inc VAT",t:"num"},{k:"ean",l:"Barcodes / EAN (comma separated)",t:"text"},{k:"fnsku",l:"FNSKU",t:"text"},{k:"asin",l:"ASIN",t:"text"},
   {k:"listings",l:"Listings",t:"rows",w:1,rows:"listings"},{k:"suppliers",l:"Suppliers & prices (latest first)",t:"rows",w:1,rows:"suppliers"},
   {k:"item",l:"Product itself L×W×H cm / kg",t:"dims"},{k:"pkType",l:"Packaging type",t:"list",list:"packType"},{k:"pk",l:"Pack / gift box size L×W×H cm / kg",t:"dims"},{k:"ctn",l:"Carton size L×W×H cm / gross kg",t:"dims"},{k:"perCtn",l:"Packs per carton",t:"int"},{k:"ctnPerPallet",l:"Cartons per pallet",t:"int"},
-  {k:"hs",l:"HS code (auto from category)",t:"text"},{k:"dutyPct",l:"Duty % (auto)",t:"num"},{k:"goodsType",l:"Goods type (auto)",t:"list",list:"goodsType"},{k:"originCountry",l:"Country of origin",t:"list",list:"country"},
+  {k:"material",l:"Material",t:"text"},{k:"spec",l:"Specification (as on the product information sheet)",t:"textarea",w:1},{k:"link",l:"Product link (Amazon page)",t:"link"},{k:"hs",l:"HS code (auto from category)",t:"text"},{k:"dutyPct",l:"Duty % (auto)",t:"num"},{k:"goodsType",l:"Goods type (auto)",t:"list",list:"goodsType"},{k:"originCountry",l:"Country of origin",t:"list",list:"country"},
   {k:"cycleDays",l:"Stock cycle days",t:"int"},{k:"safetyDays",l:"Safety days",t:"int"},{k:"defaultMode",l:"Usual freight",t:"list",list:"mode"},{k:"velocityOverride",l:"Sales per day (override)",t:"num"},
   {k:"components",l:"Bundle components",t:"rows",w:1,rows:"components"},{k:"photo",l:"Photo link",t:"link"},{k:"tags",l:"Tags",t:"tags"},{k:"notes",l:"Notes",t:"textarea",w:1}],
  party:[
@@ -71,7 +71,7 @@ const ROWS={
  destinations:{cls:"c4",add:"+ Destination",cols:[{k:"loc",t:"loc",l:"Location"},{k:"ctn",t:"num",l:"Ctn"},{k:"fbaId",t:"text",l:"FBA id"},{k:"slot",t:"date",l:"Slot"}]},
  ukCosts:{cls:"c6",add:"+ UK cost",cols:[{k:"type",t:"list",list:"ukCost",l:"Type"},{k:"gbp",t:"num",l:"£"},{k:"party",t:"party",l:"Paid to"},{k:"invoice",t:"text",l:"Invoice"},{k:"payRef",t:"payref",l:"Paid by payment"}]},
  allocations:{cls:"c3",add:"+ Another reference",cols:[{k:"ref",t:"ref",l:"Reference"},{k:"amount",t:"num",l:"Amount"}],more:[{k:"belongsTo",t:"owner",l:"This part is for",other:true},{k:"oref",t:"ownref",l:"For (order / shipment / company / client)"},{k:"note",t:"text",l:"Note (what it is for)"}],moreLabel:"Part of this payment is for something else?"},
- rcLines:{cls:"c6",add:"+ Line",cols:[{k:"sku",t:"sku",l:"Product"},{k:"po",t:"poref",l:"Order"},{k:"loc",t:"loc",l:"Into"},{k:"q",t:"num",l:"Packs"},{k:"damaged",t:"num",l:"Damaged"}]},
+ rcLines:{cls:"c6",add:"+ Line",cols:[{k:"sku",t:"sku",l:"Product"},{k:"po",t:"poref",l:"Order"},{k:"loc",t:"loc",l:"Into"},{k:"q",t:"num",l:"Packs"},{k:"damaged",t:"num",l:"Damaged"},{k:"batch",t:"text",l:"Supplier batch no. (empty = auto)"}]},
  countLines:{cls:"c4",add:"+ Product",cols:[{k:"sku",t:"sku",l:"Product"},{k:"system",t:"calc",l:"System"},{k:"counted",t:"num",l:"Counted"}]},
  listings:{cls:"c4",add:"+ Listing",cols:[{k:"marketplace",t:"list",list:"marketplace",l:"Marketplace"},{k:"id",t:"text",l:"Listing / ASIN id"},{k:"url",t:"text",l:"URL"}]},
  suppliers:{cls:"c6",add:"+ Supplier price",cols:[{k:"party",t:"party",ptype:"supplier",l:"Supplier"},{k:"price",t:"num",l:"Price"},{k:"cur",t:"list",list:"currency",l:"Cur"},{k:"moq",t:"num",l:"MOQ"},{k:"validFrom",t:"date",l:"From"}]},

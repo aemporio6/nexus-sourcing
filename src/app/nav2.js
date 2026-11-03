@@ -3,18 +3,32 @@
    - "☰ All menus" (top bar + phone): every module and every part on one screen
    - every link is a real address (#/purchases?owing=1, #/doc/purchases/PO-26-0065): Ctrl/⌘-click, middle-click or
      right-click › "Open in new tab" all work; records and pages also have a ↗ "open in new window" button */
-const NAV_MODULES=[
+/* ONE list of everything that can be created. "+ Create" (top bar, key N) and the "+ New …" lines in every module's menu are both built
+   from it, so anything added here shows in both places, and each new record goes to its own module. */
+const CREATE_REG=[
+ {k:"purchase",l:"Purchase",menu:"New purchase order",hint:"China or UK · PI lines · schedule",mod:"purchases"},
+ {k:"inspection",l:"Inspection",menu:"Book inspection",hint:"Inspector · result · fee",mod:"purchases"},
+ {k:"shipment",l:"Shipment",menu:"New shipment",hint:"Forwarder · orders · cost · ETA",mod:"shipments"},
+ {k:"payment",l:"Payment",menu:"New payment",hint:"Party → reference → amount → receipt",mod:"payments"},
+ {k:"credit",l:"Credit note",menu:"New credit note",hint:"Supplier credit / claim",mod:"payments"},
+ {k:"receive",l:"Receive stock",menu:"Receive goods",hint:"Shipment → count → batches",mod:"stock"},
+ {k:"count",l:"Stock count",menu:"Stock count",hint:"Counted vs system",mod:"stock"},
+ {k:"move",l:"Stock move",menu:"Move stock",hint:"Transfer · sale · return · adjust",mod:"stock"},
+ {k:"product",l:"Product",menu:"New product",hint:"Brand · category · SKU auto",mod:"products"},
+ {k:"party",l:"Party",menu:"New party",hint:"Supplier · forwarder · inspector · courier",mod:"parties"}];
+const NAV_MODULES_BASE=[
  {k:"home",l:"Home",ic:"home",items:[["Dashboard","home"],["Alerts — needs attention","attention"],["Calendar","calendar"]]},
- {k:"purchases",l:"Purchases",ic:"purchases",items:[["All orders","purchases",{}],["Still to pay","purchases",{owing:1}],["On hold","purchases",{hold:1}],["Missing documents","purchases",{nodocs:1}],["+ New purchase order",null,null,"purchase"]]},
- {k:"shipments",l:"Shipments",ic:"shipments",items:[["All shipments","shipments",{}],["On the way","shipments",{open:1}],["Late","shipments",{late:1}],["+ New shipment",null,null,"shipment"]]},
- {k:"payments",l:"Payments",ic:"payments",items:[["All payments","payments",{}],["Pending","payments",{status:"pending"}],["Paid","payments",{status:"paid"}],["+ New payment",null,null,"payment"]]},
- {k:"stock",l:"Stock",ic:"stock",items:[["Stock on hand","stock",{}],["Needs reorder","stock",{reorder:1}],["Only items with stock","stock",{only:1}],["+ Receive goods",null,null,"receive"],["+ Stock count",null,null,"count"],["+ Move stock",null,null,"move"]]},
- {k:"products",l:"Products",ic:"products",items:[["All products","products",{}],["Active","products",{status:"active"}],["Missing carton size","products",{noctn:1}],["+ New product",null,null,"product"]]},
- {k:"parties",l:"Suppliers & partners",ic:"parties",items:[["All parties","parties",{}],["Suppliers","parties",{type:"supplier"}],["Forwarders","parties",{type:"forwarder"}],["Inspectors","parties",{type:"inspector"}],["We still owe","parties",{owing:1}],["+ New party",null,null,"party"]]},
+ {k:"purchases",l:"Purchases",ic:"purchases",items:[["All orders","purchases",{}],["Still to pay","purchases",{owing:1}],["On hold","purchases",{hold:1}],["Missing documents","purchases",{nodocs:1}]]},
+ {k:"shipments",l:"Shipments",ic:"shipments",items:[["All shipments","shipments",{}],["On the way","shipments",{open:1}],["Late","shipments",{late:1}]]},
+ {k:"payments",l:"Payments",ic:"payments",items:[["All payments","payments",{}],["Pending","payments",{status:"pending"}],["Paid","payments",{status:"paid"}]]},
+ {k:"stock",l:"Stock",ic:"stock",items:[["Stock on hand","stock",{}],["Needs reorder","stock",{reorder:1}],["Only items with stock","stock",{only:1}]]},
+ {k:"products",l:"Products",ic:"products",items:[["All products","products",{}],["Active","products",{status:"active"}],["Missing carton size","products",{noctn:1}]]},
+ {k:"parties",l:"Suppliers & partners",ic:"parties",items:[["All parties","parties",{}],["Suppliers","parties",{type:"supplier"}],["Forwarders","parties",{type:"forwarder"}],["Inspectors","parties",{type:"inspector"}],["We still owe","parties",{owing:1}]]},
  {k:"planner",l:"Planning",ic:"trend",items:[["Planner (ICC)","planner"],["Calendar","calendar"],["Tools & calculators","tools"],["References","refs"]]},
  {k:"reports",l:"Reports",ic:"trend",items:[["Reports & Payment Summary","reports"],["Activity log","log"]]},
  {k:"import",l:"Data",ic:"import",items:[["Import files","import"],["Data health","health"],["Trash","trash"]],need:"create"},
  {k:"setup",l:"Settings",ic:"setup",items:[["Setup","setup"],["Help / team guide","help"]]}];
+const NAV_MODULES=NAV_MODULES_BASE.map(m=>({...m,items:[...m.items,...CREATE_REG.filter(c=>c.mod===m.k).map(c=>["+ "+c.menu,null,null,c.k])]}));
 const NAV_OF_PAGE={home:"home",attention:"home",calendar:"planner",purchases:"purchases",shipments:"shipments",payments:"payments",stock:"stock",products:"products",parties:"parties",planner:"planner",tools:"planner",refs:"planner",reports:"reports",log:"reports",import:"import",health:"import",trash:"import",setup:"setup",help:"setup",more:"home"};
 /* addresses */
 function navHref(page,f){const q=f&&Object.keys(f).length?"?"+Object.entries(f).map(([a,b])=>encodeURIComponent(a)+"="+encodeURIComponent(b)).join("&"):"";return"#/"+page+q}
@@ -47,3 +61,9 @@ const NAV_INIT_HASH=location.hash;   /* the address the app was opened with (a b
 setTimeout(function tick(){try{if(S.ready){const p=parseHash(NAV_INIT_HASH);if(p&&p.doc){if(!(S.drawer&&S.drawer.id===p.doc[1]))openDoc(p.doc[0],p.doc[1])}else if(p&&p.page&&PAGES.includes(p.page)&&(p.page!==S.view.k||Object.keys(p.f).length)){S.f[p.page]={...p.f};go(p.page,{},{force:true})}return}}catch(_){}setTimeout(tick,300)},300);
 /* other tabs of MY TOOL on this computer: when one saves, the others look for changes at once */
 try{const bc=new BroadcastChannel("mytool");bc.onmessage=ev=>{if(ev.data==="saved"&&window.MYTOOL&&MYTOOL.syncNow&&!MYTOOL.demo)MYTOOL.syncNow().catch(()=>{})};window.__mtBC=bc}catch(_){}
+
+/* a new record's number is chosen when its form opens; someone else may have used it meanwhile. Just before saving: get the latest data
+   (a second or two) and, if the number is now taken, move to the next free one — so two people rarely end up with the same number */
+async function freshNumberBeforeSave(form){try{const col=FORM_COL[form];const d=S.drawer;if(!col||!d||(d.ctx&&d.ctx.edit&&d.ctx.edit.no))return;
+ if(window.MYTOOL&&MYTOOL.pullNow&&!MYTOOL.demo)await Promise.race([MYTOOL.pullNow(),new Promise(r=>setTimeout(r,4000))]);
+ const no=val("no");if(no&&(D[col]||[]).some(x=>(x.no||x.id)===no)){const nn=nextNo(col,val("date"));setv("no",nn,true);toast(`${no} was just used by someone else — this one is ${nn}`,{ms:6000})}}catch(e){console.warn(e)}}
