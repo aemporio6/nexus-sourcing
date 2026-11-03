@@ -13,13 +13,13 @@ function flowSteps(){const T=today();const pos=live(D.purchases).filter(p=>p.sta
  const arrived=shs.filter(s=>["arrived","part_delivered"].includes(s.status)&&!rcvd.has(s.no));
  let reo=0;try{reo=live(D.products).filter(p=>{const r=reorderInfo(p.sku);return r.out||(r.reorderIn!=null&&r.reorderIn<=(DEF().reorderWarnDays||30))}).length}catch(_){}
  return[
-  {n:1,l:"Order placed — add PI",c:noPI.length,href:navHref("purchases",{nodocs:1}),hint:"PI number / link missing"},
-  {n:2,l:"Pay deposit",c:dep.length,href:navHref("purchases",{owing:1}),hint:"nothing paid yet"},
-  {n:3,l:"In production",c:prod.length,href:navHref("purchases",{status:"ordered|deposit|production"}),hint:"waiting for the factory"},
+  {n:1,l:"Order placed — add PI",c:noPI.length,href:navHref("purchases",{nopi:1}),hint:"PI number / link missing"},
+  {n:2,l:"Pay deposit",c:dep.length,href:navHref("purchases",{needdep:1}),hint:"nothing paid yet"},
+  {n:3,l:"In production",c:prod.length,href:navHref("purchases",{status:"ordered|deposit|production|confirmed"}),hint:"waiting for the factory"},
   {n:4,l:"Book inspection",c:insp.length,href:navHref("purchases",{status:"production"}),hint:"in production, no inspection yet"},
-  {n:5,l:"Pay balance",c:bal.length,href:navHref("purchases",{owing:1}),hint:"part paid, rest due"},
+  {n:5,l:"Pay balance",c:bal.length,href:navHref("purchases",{needbal:1}),hint:"part paid, rest due"},
   {n:6,l:"Ready → ship",c:ready.length,href:navHref("purchases",{status:"inspected"}),hint:"inspected, not shipped"},
-  {n:7,l:"On the way",c:onway.length,href:navHref("shipments",{open:1}),hint:"booked / in transit / customs"},
+  {n:7,l:"On the way",c:onway.length,href:navHref("shipments",{status:"booked|in_transit|customs"}),hint:"booked / in transit / customs"},
   {n:8,l:"Arrived → receive",c:arrived.length,href:navHref("shipments",{status:"arrived|part_delivered"}),hint:"count it into stock"},
   {n:9,l:"Reorder",c:reo,href:navHref("stock",{reorder:1}),hint:"running low"}]}
 function flowCard(){let steps=[];try{steps=flowSteps()}catch(e){console.warn(e);return""}

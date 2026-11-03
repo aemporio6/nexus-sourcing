@@ -12,4 +12,10 @@ async function dataFix20261103(){try{if(!S.ready||!can("setup")||!D.setup||D.set
  const p54=docOf("payments","PAY-24-0054");if(p54&&!(p54.tags||[]).includes("not_duplicate"))await up("payments","PAY-24-0054",{tags:[...new Set([...(p54.tags||[]),"not_duplicate"])],notes:note(p54,"Kept as in the sheet (two lines P4 and P5 of £1,884.75 on 8 Nov 2024)")},"2024: kept as in the sheet");
  const p15=docOf("purchases","PO-24-0015");if(p15&&!p15.samePiAs)await up("purchases","PO-24-0015",{samePiAs:"PO-24-0013",notes:note(p15,"Same PI VCL-202407-10 as PO-24-0013 — kept as in the sheet")},"2024: kept as in the sheet");
  await setupPatchMany([[["fix20261103"],nowIso()]],null,{noUndo:true});if(done.length)logEv("setup","setup","main","Data check 3 Nov 2026 applied to "+done.join(", "));S._att=null}catch(e){console.warn(e)}}
-setTimeout(function tick(){try{if(S.ready){setTimeout(dataFix20261103,2500);return}}catch(_){}setTimeout(tick,1000)},1500);
+setTimeout(function tick(){try{if(S.ready){setTimeout(async()=>{await dataFix20261103();await dataFix20261103b()},2500);return}}catch(_){}setTimeout(tick,1000)},1500);
+
+/* 3 Nov 2026 (b): orders split from VAL-104 kept the £ total of the whole 546-carton PI — recompute £ at order from their own total × rate on the order date */
+async function dataFix20261103b(){try{if(!S.ready||!can("setup")||!D.setup||D.setup.fix20261103b)return;const done=[];
+ for(const no of ["PO-26-0065","PO-26-0066","PO-26-0069"]){const p=docOf("purchases",no);if(!p||p.status==="cancelled")continue;const want=r2(toGbp(poTotal(p),p.cur,p.date));if(!(want>0))continue;const have=+p.totalGbpAtOrder||0;
+  if(Math.abs(have-want)>Math.max(1,want*0.005)){const ok=await updateDoc("purchases",no,{totalGbpAtOrder:want},null,{noUndo:true,quiet:true,derived:true});if(ok){done.push(no);logEv("update","purchases",no,`Data check 3 Nov 2026: £ at order ${fmt(have,"GBP")} → ${fmt(want,"GBP")} (its own total × rate on ${fmtD(p.date)})`)}}}
+ await setupPatchMany([[["fix20261103b"],nowIso()]],null,{noUndo:true});S._att=null}catch(e){console.warn(e)}}

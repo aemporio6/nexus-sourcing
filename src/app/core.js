@@ -514,7 +514,7 @@ function logEv(kind,col,id,text){const e={id:nid()+Date.now().toString(36),at:no
 /* ---------- navigation & history ---------- */
 function snapshot(){return{view:{...S.view},f:JSON.parse(JSON.stringify(S.f)),limit:{...S.limit},scrollY:window.scrollY,drawer:S.drawer&&!S.drawer.form?{col:S.drawer.col,id:S.drawer.id}:null}}
 function refreshHist(){if(S.hi>=0&&S.hist[S.hi])S.hist[S.hi]=snapshot()}
-function pushHist(){S.hist=S.hist.slice(0,S.hi+1);S.hist.push(snapshot());if(S.hist.length>80)S.hist.shift();S.hi=S.hist.length-1;S._seq=(S._seq||0)+1;S.hseq=S.hseq||[];S.hseq=S.hseq.slice(0,S.hi);S.hseq[S.hi]=S._seq;try{const h=S.drawer&&!S.drawer.form?`#/doc/${S.drawer.col}/${S.drawer.id}`:`#/${S.view.k}`;if(S.hi===0&&!S._hinit){S._hinit=1;history.replaceState({mt:S._seq},"",h)}else history.pushState({mt:S._seq},"",h)}catch(_){}}
+function pushHist(){S.hist=S.hist.slice(0,S.hi+1);S.hist.push(snapshot());if(S.hist.length>80)S.hist.shift();S.hi=S.hist.length-1;S._seq=(S._seq||0)+1;S.hseq=S.hseq||[];S.hseq=S.hseq.slice(0,S.hi);S.hseq[S.hi]=S._seq;try{const h=S.drawer&&!S.drawer.form?`#/doc/${S.drawer.col}/${S.drawer.id}`:(typeof navHref==="function"&&typeof fNow==="function"?navHref(S.view.k,fNow(S.view.k)):`#/${S.view.k}`);if(S.hi===0&&!S._hinit){S._hinit=1;history.replaceState({mt:S._seq},"",h)}else history.pushState({mt:S._seq},"",h)}catch(_){}}
 /* Recent: last opened records (this browser) — Home + top bar clock */
 function noteRecent(col,id){try{const r=ls.get("recent",[]).filter(x=>!(x.col===col&&x.id===id));r.unshift({col,id,at:nowIso()});ls.set("recent",r.slice(0,20))}catch(_){}}
 function recentList(){return ls.get("recent",[]).filter(r=>(D[r.col]||[]).some(v=>(v.no||v.id)===r.id&&!v.deletedAt))}

@@ -55,7 +55,7 @@ function render(){ensureCss();S._att=null;const v=$("#view");if(!v)return;const 
 function foldFilters(v){const fb=v.querySelector('.filters[role=group]');if(!fb||S.view.k==="setup")return;const f=F();const n=Object.keys(f).filter(k=>f[k]!==""&&f[k]!=null&&k!=="sort").length;const open=!!(S.fopen||{})[S.view.k];fb.classList.add("fold");fb.classList.toggle("open",open);const b=document.createElement("button");b.type="button";b.className="chipb ftoggle";b.dataset.act="ffold";b.setAttribute("aria-expanded",String(open));b.textContent=(open?"Hide filters":"Filters")+(n?` (${n})`:"");fb.parentNode.insertBefore(b,fb)}
 function renderLayer(){const layer=$("#layer");if(!layer)return;const d=S.drawer;if(!d?.form){const b=$("#dirtybar");if(b)b.hidden=true}const key=d?(d.form?"form:"+d.form+":"+(d._k||(d._k=nid())):"doc:"+d.col+":"+d.id):"";const same=layer.dataset.key===key;
  if(!(key.startsWith("form:")&&same)){/* an open form keeps its live DOM (typed values); doc drawers always refresh */
-  const st=same?($(".drawer .db")?.scrollTop||0):0;layer.innerHTML=d?(d.form?formShell(d.form):(typeof renderDrawer==="function"?renderDrawer():"")):"";layer.dataset.key=key;const db=$(".drawer .db");if(db&&st)db.scrollTop=st}
+  const st=same?($(".drawer .db")?.scrollTop||0):0;layer.innerHTML=d?(d.form?formShell(d.form):(typeof renderDrawer==="function"?renderDrawer():"")):"";layer.dataset.key=key;if(same)$(".drawer")?.classList.add("noanim");const db=$(".drawer .db");if(db&&st)db.scrollTop=st}
  [$(".app"),$("#tabbar")].forEach(el=>{if(el)el.toggleAttribute("inert",!!d)});$("#toast")?.classList.toggle("top",!!d)}
 
 /* ---------- nav: rail (desktop) + tab bar (phone), badges = items needing action ---------- */
@@ -151,6 +151,7 @@ const LIST={
 function purchaseRows(){const f=F("purchases");const docTypes=items("docType").filter(d=>(d.for||[]).includes("purchases"));
  const rows=live(D.purchases).filter(p=>{if(f.party&&!fIn(f.party,p.party))return false;if(f.status&&!fIn(f.status,p.status))return false;if(f.kind&&!fIn(f.kind,p.kind||"china"))return false;if(f.account&&!fIn(f.account,p.account))return false;if(f.cur&&!fIn(f.cur,p.cur))return false;
   if(!inPeriod(p.date,f))return false;if(f.sku&&!(p.lines||[]).some(l=>l.sku===f.sku))return false;if(f.tag&&!String(f.tag).split("|").some(t=>(p.tags||[]).includes(t)))return false;
+  if(f.nopi&&(p.yourRef||p.piNo||p.piLink||(p.docs&&p.docs.pi)||["cancelled","closed"].includes(p.status)||p.historic))return false;if((f.needdep||f.needbal)&&(["cancelled","closed"].includes(p.status)||p.historic))return false;if(f.needdep||f.needbal){const s_=poState(p);if(!(s_.outstandingCur>0.5))return false;if(f.needdep&&!(s_.paidCur<0.5))return false;if(f.needbal&&!(s_.paidCur>=0.5))return false}
   if(f.hold&&!p.hold)return false;if(f.nosku&&!(p.lines||[]).some(l=>!l.sku))return false;if(f.legacy&&!Object.keys(p.legacy||{}).length)return false;if(f.nodocs&&!docTypes.some(d=>!p.docs?.[d.id]))return false;
   if(f.min||f.max){const g=poGbp(p);if(f.min&&g<+f.min)return false;if(f.max&&g>+f.max)return false}
   if(f.owing){if(p.status==="cancelled")return false;const st=poState(p);if(!(st.total>0&&st.outstandingCur>0.5))return false}
