@@ -5247,7 +5247,7 @@ const NAV_OF_PAGE={home:"home",attention:"home",calendar:"planner",purchases:"pu
 function navHref(page,f){const q=f&&Object.keys(f).length?"?"+Object.entries(f).map(([a,b])=>encodeURIComponent(a)+"="+encodeURIComponent(b)).join("&"):"";return"#/"+page+q}
 function docHref(col,id){return"#/doc/"+col+"/"+encodeURIComponent(id)}
 function parseHash(h){h=h||location.hash;let m=h.match(/^#\/doc\/([a-z]+)\/(.+)$/);if(m)return{doc:[m[1],decodeURIComponent(m[2])]};m=h.match(/^#\/([a-z]+)(?:\?(.*))?$/);if(!m)return null;const f={};(m[2]||"").split("&").filter(Boolean).forEach(kv=>{const[a,b]=kv.split("=");f[decodeURIComponent(a)]=decodeURIComponent(b||"")});return{page:m[1],f}}
-const fNow=k=>{const f=F(k)||{};return Object.fromEntries(Object.entries(f).filter(([a,v])=>v!==""&&v!=null&&v!==0&&a!=="q"))};
+const fNow=k=>{const f=F(k)||{};return Object.fromEntries(Object.entries(f).filter(([a,v])=>v!==""&&v!=null&&v!==0&&a!=="q"&&(typeof v==="string"||typeof v==="number"||typeof v==="boolean")&&String(v).length<=120).slice(0,12))};
 const sameF=(a,b)=>{const n=o=>JSON.stringify(Object.entries(o||{}).map(([k,v])=>[k,String(v)]).sort());return n(a)===n(b)};
 /* the address bar always shows where you are (with filters), so it can be copied, bookmarked or opened in a new tab */
 mirrorHash=function(){try{const h=S.drawer&&!S.drawer.form?docHref(S.drawer.col,S.drawer.id):navHref(S.view.k,fNow(S.view.k));if(location.hash!==h)history.replaceState(history.state,"",h)}catch(_){}};
@@ -5856,5 +5856,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='aff3bf9ea8';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='079153a3cc';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
 </body></html>
