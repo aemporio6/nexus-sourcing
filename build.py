@@ -2,7 +2,7 @@
 """Build MY TOOL: index.html (app) + manifest + service worker. Run: python3 build.py [--demo-seed DIR --out FILE]"""
 import json, os, re, sys, glob, subprocess, hashlib
 R = os.path.dirname(os.path.abspath(__file__))
-MODS = ["icons", "core", "forms", "forms2", "views", "drawers", "setup", "importer", "readers", "icc", "extra", "events"]
+MODS = ["icons", "core", "forms", "forms2", "views", "drawers", "setup", "importer", "readers", "icc", "extra", "export_ps", "events"]
 
 def read(p): return open(os.path.join(R, p), encoding="utf-8").read()
 

@@ -1,6 +1,6 @@
 /* MY TOOL service worker: app shell works offline; data always goes to Google live. */
-const V = "mytool-e37e0a3ad0";
-const SHELL = ["./", "index.html", "manifest.webmanifest", "vendor/xlsx.full.min.js", "vendor/jspdf.umd.min.js", "assets/icon-192.png", "assets/icon-512.png", "assets/icon-180.png", "assets/icon-32.png", "vendor/pdfjs/pdf.min.js", "vendor/pdfjs/pdf.worker.min.js"];
+const V = "mytool-7846879d1c";
+const SHELL = ["./", "index.html", "manifest.webmanifest", "vendor/xlsx.full.min.js", "vendor/jspdf.umd.min.js", "assets/icon-192.png", "assets/icon-512.png", "assets/icon-180.png", "assets/icon-32.png", "vendor/pdfjs/pdf.min.js", "vendor/pdfjs/pdf.worker.min.js", "vendor/exceljs/exceljs.min.js"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener("fetch", e => {
