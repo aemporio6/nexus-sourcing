@@ -2,7 +2,7 @@
 """Build MY TOOL: index.html (app) + manifest + service worker. Run: python3 build.py [--demo-seed DIR --out FILE]"""
 import json, os, re, sys, glob, subprocess, hashlib
 R = os.path.dirname(os.path.abspath(__file__))
-MODS = ["icons", "core", "forms", "forms2", "views", "drawers", "setup", "importer", "readers", "icc", "extra", "export_ps", "help_view", "health", "rates_auto", "nav2", "home_flow", "datafix", "alloc_multi", "packing", "landing", "prodsheet", "connect", "events"]
+MODS = ["icons", "core", "forms", "forms2", "views", "drawers", "setup", "importer", "readers", "icc", "extra", "export_ps", "help_view", "health", "rates_auto", "nav2", "home_flow", "datafix", "alloc_multi", "packing", "landing", "prodsheet", "connect", "helpmode", "events"]
 
 def read(p): return open(os.path.join(R, p), encoding="utf-8").read()
 
@@ -30,6 +30,8 @@ def build(seed_dir=None, out="index.html"):
            'img-src \'self\' data: blob: https:; connect-src \'self\' https://www.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://api.frankfurter.dev https://open.er-api.com; '
            'frame-src https://accounts.google.com https://drive.google.com https://docs.google.com; worker-src \'self\' blob:; object-src \'none\'; base-uri \'self\'; form-action \'none\'">'
            '<meta name="referrer" content="strict-origin-when-cross-origin">'
+           '<title>MY TOOL</title><link rel="icon" type="image/png" sizes="16x16" href="assets/icon-16.png?v=2"><link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png?v=2"><link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png?v=2">'
+           '<link rel="shortcut icon" href="assets/icon-32.png?v=2"><link rel="apple-touch-icon" href="assets/icon-180.png?v=2"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0f8f96">'
            '</head><body>\n')
     sw = ("<script>window.MYTOOL_VERSION='" + ver + "';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>\n")
     html = pre + seed + "<script>" + read("src/gshim.js") + "</script>\n" + head + "\n<script>\n" + js + "\n</script>\n" + sw + "</body></html>\n"
