@@ -185,7 +185,10 @@ function showErrors(errors,warnings){const fa=typeof faState==="function"?faStat
 /* Edit: a field that was empty before and is still empty keeps its stored form (null / missing), so Save without changes changes nothing */
 const isEmptyV=v=>v==null||v===""||v===false||(Array.isArray(v)&&!v.length)||(typeof v==="object"&&!Array.isArray(v)&&Object.values(v).every(x=>x==null||x===""));
 function keepStored(form,d,old){if(!old||!old.no&&!old.sku&&!old.code)return d;fields(form).forEach(f=>{if(f.custom||f.k==="no"||f.k==="code")return;const k=f.k;if(isEmptyV(d[k])&&isEmptyV(old[k])){if(old[k]===undefined)delete d[k];else d[k]=old[k]}});if(old.custom===undefined&&isEmptyV(d.custom))delete d.custom;return d}
-async function uploadFile(file){if(!assets||!file)return null;try{const r=await assets.upload(file,{name:file.name,contentType:file.type});return r?.id||r?.url||null}catch(e){console.warn(e);return null}}
+/* upload an attachment; on failure it THROWS with a clear reason (the caller keeps the user's input and offers a retry — never a silent null) */
+async function uploadFile(file){if(!assets||!file)return null;if(file.size>20*1024*1024)throw new Error("This file is bigger than 20 MB — attach a smaller copy or a link");const okType=/^(image\/|application\/pdf|application\/vnd\.|application\/msword|application\/vnd\.ms-|text\/|application\/json|application\/zip|application\/x-zip)/.test(file.type||"")||/\.(pdf|xlsx?|xlsm|docx?|csv|txt|png|jpe?g|gif|webp|heic|zip|json|ods|odt)$/i.test(file.name||"");if(!okType)throw new Error("This file type cannot be attached ("+(file.type||file.name)+") — use PDF, images, Excel, Word, CSV or ZIP");
+ let last=null;for(let i=0;i<2;i++){try{const r=await assets.upload(file,{name:file.name,contentType:file.type});const id=r?.id||r?.url||null;if(id)return id;throw new Error("no file id returned")}catch(e){last=e;console.warn(e);if(/bigger|type|not allowed|cannot/i.test(e.message||""))break;await new Promise(z=>setTimeout(z,1200))}}
+ throw new Error("Upload failed: "+(last&&last.message||"no answer")+(navigator.onLine?"":" (you are offline)"))}
 function remember(form,k,v){if(v!=null&&v!=="")ls.set("last."+form+"."+k,v)}
 function last(form,k){return ls.get("last."+form+"."+k)}
 function markDirty(){if(S.drawer)S.drawer.dirty=true}

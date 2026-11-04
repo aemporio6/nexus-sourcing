@@ -75,10 +75,13 @@ function gate(html){
 }
 function ungate(){ const g = document.getElementById("mt_gate"); if(g) g.hidden = true; }
 let lastSt = { t: "", k: "ok" };
+/* one place for the sync state the person sees: Synced · Syncing… · Saved on this device (waiting) · Conflict · Failed */
 function status(t, kind){
-  lastSt = { t, k: kind || "ok" };
+  let open = 0; try{ open = conflicts.filter(x => !x.done).length; }catch(_){}
+  if(open && kind !== "bad") t += " · " + open + " conflict" + (open > 1 ? "s" : "") + " to check";
+  lastSt = { t, k: open && kind === "ok" ? "warn" : (kind || "ok") };
   const f = document.getElementById("mt_sync"); if(!f) return;
-  f.textContent = t; f.dataset.kind = kind || "ok";
+  f.textContent = t; f.dataset.kind = lastSt.k; f.title = t;
 }
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c])); }
 
@@ -402,14 +405,14 @@ function schedulePush(){
   clearTimeout(pushT);
   saveCache();
   if(DEMO){ status("Saved on this device (demo)", "ok"); return; }
-  status("Saving…", "busy");
+  status("Syncing…", "busy");
   pushT = setTimeout(push, 1200);
 }
 async function push(){
   if(DEMO) return false;
   if(pushing || polling){ pushAgain = true; return false; }
-  if(!Object.keys(dirty).length && !metaDirty){ status("All saved", "ok"); return true; }
-  if(!navigator.onLine){ status("Offline — changes kept on this device, will save when online", "warn"); return false; }
+  if(!Object.keys(dirty).length && !metaDirty){ status("Synced", "ok"); return true; }
+  if(!navigator.onLine){ status("Saved on this device — waiting for internet", "warn"); return false; }
   pushing = true; clearTimeout(retryT); let ok = false;
   try{
     const m = await metaVersion();
@@ -431,7 +434,7 @@ async function push(){
     if(Object.keys(dirty).length === 0) forceMine = new Set();
     dailyBackup().catch(() => {});
     await saveCache();
-    status("All saved · " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), "ok");
+    status("Synced · " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), "ok");
     ok = true; retryN = 0;
     try{ window.__mtBC && window.__mtBC.postMessage("saved"); }catch(_){}   // other MY TOOL tabs on this computer: look now
     clearTimeout(pollT); pollT = setTimeout(poll, 6000);           // look again soon: catches a save that crossed with ours
@@ -439,7 +442,7 @@ async function push(){
     console.warn(e);
     if(e.noRetry){ status(e.message + " — your changes stay on this device", "bad"); pushing = false; return false; }
     retryN = Math.min(retryN + 1, 5); const wait = 15000 * Math.pow(2, retryN - 1);   /* 15 s, 30 s, 1, 2, 4 min — then stays at 4 min */
-    status("Not saved yet — will retry in " + Math.round(wait / 1000) + " s (" + e.message + ")", "warn");
+    status("Save failed — retrying in " + Math.round(wait / 1000) + " s (" + e.message + ")", "warn");
     clearTimeout(retryT); retryT = setTimeout(push, wait);
   }finally{
     pushing = false;
@@ -528,7 +531,7 @@ async function start(){
     }
     await saveCache();
     ungate(); readyRes(); poll();
-    status("All saved", "ok");
+    status("Synced", "ok");
   }catch(e){
     console.error(e);
     gate('<p class="mt_bad">' + esc(e.message || e) + '</p><button type="button" class="mt_btn" id="mt_retry">Try again</button> <button type="button" class="mt_btn ghost" id="mt_out">Use another account</button>');
@@ -542,7 +545,7 @@ async function firstRun(){
     '<label class="mt_btn">⬆ Load my starting file / old NEXUS backup<input type="file" id="mt_file" accept=".json,application/json" hidden></label>' +
     '<button type="button" class="mt_btn ghost" id="mt_empty">Start empty</button><p class="mt_small" id="mt_err"></p>');
   const go = async (data) => {
-    try{ gate('<p>Creating your data file in Google Drive…</p>'); dirty = {}; tomb = {}; await createRemote(data); await saveCache(); ungate(); readyRes(); poll(); status("All saved", "ok"); }
+    try{ gate('<p>Creating your data file in Google Drive…</p>'); dirty = {}; tomb = {}; await createRemote(data); await saveCache(); ungate(); readyRes(); poll(); status("Synced", "ok"); }
     catch(e){ g.querySelector && (gate('<p class="mt_bad">' + esc(e.message) + '</p><button class="mt_btn" onclick="location.reload()">Try again</button>')); }
   };
   g.querySelector("#mt_file").onchange = async ev => {

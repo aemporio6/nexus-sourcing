@@ -76,10 +76,13 @@ function gate(html){
 }
 function ungate(){ const g = document.getElementById("mt_gate"); if(g) g.hidden = true; }
 let lastSt = { t: "", k: "ok" };
+/* one place for the sync state the person sees: Synced · Syncing… · Saved on this device (waiting) · Conflict · Failed */
 function status(t, kind){
-  lastSt = { t, k: kind || "ok" };
+  let open = 0; try{ open = conflicts.filter(x => !x.done).length; }catch(_){}
+  if(open && kind !== "bad") t += " · " + open + " conflict" + (open > 1 ? "s" : "") + " to check";
+  lastSt = { t, k: open && kind === "ok" ? "warn" : (kind || "ok") };
   const f = document.getElementById("mt_sync"); if(!f) return;
-  f.textContent = t; f.dataset.kind = kind || "ok";
+  f.textContent = t; f.dataset.kind = lastSt.k; f.title = t;
 }
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c])); }
 
@@ -403,14 +406,14 @@ function schedulePush(){
   clearTimeout(pushT);
   saveCache();
   if(DEMO){ status("Saved on this device (demo)", "ok"); return; }
-  status("Saving…", "busy");
+  status("Syncing…", "busy");
   pushT = setTimeout(push, 1200);
 }
 async function push(){
   if(DEMO) return false;
   if(pushing || polling){ pushAgain = true; return false; }
-  if(!Object.keys(dirty).length && !metaDirty){ status("All saved", "ok"); return true; }
-  if(!navigator.onLine){ status("Offline — changes kept on this device, will save when online", "warn"); return false; }
+  if(!Object.keys(dirty).length && !metaDirty){ status("Synced", "ok"); return true; }
+  if(!navigator.onLine){ status("Saved on this device — waiting for internet", "warn"); return false; }
   pushing = true; clearTimeout(retryT); let ok = false;
   try{
     const m = await metaVersion();
@@ -432,7 +435,7 @@ async function push(){
     if(Object.keys(dirty).length === 0) forceMine = new Set();
     dailyBackup().catch(() => {});
     await saveCache();
-    status("All saved · " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), "ok");
+    status("Synced · " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), "ok");
     ok = true; retryN = 0;
     try{ window.__mtBC && window.__mtBC.postMessage("saved"); }catch(_){}   // other MY TOOL tabs on this computer: look now
     clearTimeout(pollT); pollT = setTimeout(poll, 6000);           // look again soon: catches a save that crossed with ours
@@ -440,7 +443,7 @@ async function push(){
     console.warn(e);
     if(e.noRetry){ status(e.message + " — your changes stay on this device", "bad"); pushing = false; return false; }
     retryN = Math.min(retryN + 1, 5); const wait = 15000 * Math.pow(2, retryN - 1);   /* 15 s, 30 s, 1, 2, 4 min — then stays at 4 min */
-    status("Not saved yet — will retry in " + Math.round(wait / 1000) + " s (" + e.message + ")", "warn");
+    status("Save failed — retrying in " + Math.round(wait / 1000) + " s (" + e.message + ")", "warn");
     clearTimeout(retryT); retryT = setTimeout(push, wait);
   }finally{
     pushing = false;
@@ -529,7 +532,7 @@ async function start(){
     }
     await saveCache();
     ungate(); readyRes(); poll();
-    status("All saved", "ok");
+    status("Synced", "ok");
   }catch(e){
     console.error(e);
     gate('<p class="mt_bad">' + esc(e.message || e) + '</p><button type="button" class="mt_btn" id="mt_retry">Try again</button> <button type="button" class="mt_btn ghost" id="mt_out">Use another account</button>');
@@ -543,7 +546,7 @@ async function firstRun(){
     '<label class="mt_btn">⬆ Load my starting file / old NEXUS backup<input type="file" id="mt_file" accept=".json,application/json" hidden></label>' +
     '<button type="button" class="mt_btn ghost" id="mt_empty">Start empty</button><p class="mt_small" id="mt_err"></p>');
   const go = async (data) => {
-    try{ gate('<p>Creating your data file in Google Drive…</p>'); dirty = {}; tomb = {}; await createRemote(data); await saveCache(); ungate(); readyRes(); poll(); status("All saved", "ok"); }
+    try{ gate('<p>Creating your data file in Google Drive…</p>'); dirty = {}; tomb = {}; await createRemote(data); await saveCache(); ungate(); readyRes(); poll(); status("Synced", "ok"); }
     catch(e){ g.querySelector && (gate('<p class="mt_bad">' + esc(e.message) + '</p><button class="mt_btn" onclick="location.reload()">Try again</button>')); }
   };
   g.querySelector("#mt_file").onchange = async ev => {
@@ -936,6 +939,7 @@ th{text-align:left;background:var(--soft);padding:7px 9px;font-weight:600;white-
 .recentp h6{margin:0;padding:10px 12px 4px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.recentp button{display:flex;gap:10px;width:100%;border:0;background:transparent;text-align:left;padding:9px 12px;align-items:center}.recentp button:hover{background:var(--soft)}.recentp .ref{font:600 12px var(--f-data);min-width:96px}
 .who{display:flex;align-items:center;gap:8px;margin-top:6px}.who img{width:22px;height:22px;border-radius:50%}
 .mlogo{display:none;border-radius:50%;flex:none}@media (max-width:860px){.brand img{width:32px;height:32px}.mlogo{display:block}}
+.cfbox{margin:6px 0 2px;overflow-x:auto}.cft{border-collapse:collapse;font-size:12.5px;min-width:320px}.cft th,.cft td{padding:3px 8px;border-bottom:1px solid var(--line,#e3e8ea);text-align:left}.cft th{font-weight:600;color:var(--muted,#5b6b70)}
 </style>
 <div class="app">
   <aside class="rail" id="rail"></aside>
@@ -1733,7 +1737,10 @@ function showErrors(errors,warnings){const fa=typeof faState==="function"?faStat
 /* Edit: a field that was empty before and is still empty keeps its stored form (null / missing), so Save without changes changes nothing */
 const isEmptyV=v=>v==null||v===""||v===false||(Array.isArray(v)&&!v.length)||(typeof v==="object"&&!Array.isArray(v)&&Object.values(v).every(x=>x==null||x===""));
 function keepStored(form,d,old){if(!old||!old.no&&!old.sku&&!old.code)return d;fields(form).forEach(f=>{if(f.custom||f.k==="no"||f.k==="code")return;const k=f.k;if(isEmptyV(d[k])&&isEmptyV(old[k])){if(old[k]===undefined)delete d[k];else d[k]=old[k]}});if(old.custom===undefined&&isEmptyV(d.custom))delete d.custom;return d}
-async function uploadFile(file){if(!assets||!file)return null;try{const r=await assets.upload(file,{name:file.name,contentType:file.type});return r?.id||r?.url||null}catch(e){console.warn(e);return null}}
+/* upload an attachment; on failure it THROWS with a clear reason (the caller keeps the user's input and offers a retry — never a silent null) */
+async function uploadFile(file){if(!assets||!file)return null;if(file.size>20*1024*1024)throw new Error("This file is bigger than 20 MB — attach a smaller copy or a link");const okType=/^(image\/|application\/pdf|application\/vnd\.|application\/msword|application\/vnd\.ms-|text\/|application\/json|application\/zip|application\/x-zip)/.test(file.type||"")||/\.(pdf|xlsx?|xlsm|docx?|csv|txt|png|jpe?g|gif|webp|heic|zip|json|ods|odt)$/i.test(file.name||"");if(!okType)throw new Error("This file type cannot be attached ("+(file.type||file.name)+") — use PDF, images, Excel, Word, CSV or ZIP");
+ let last=null;for(let i=0;i<2;i++){try{const r=await assets.upload(file,{name:file.name,contentType:file.type});const id=r?.id||r?.url||null;if(id)return id;throw new Error("no file id returned")}catch(e){last=e;console.warn(e);if(/bigger|type|not allowed|cannot/i.test(e.message||""))break;await new Promise(z=>setTimeout(z,1200))}}
+ throw new Error("Upload failed: "+(last&&last.message||"no answer")+(navigator.onLine?"":" (you are offline)"))}
 function remember(form,k,v){if(v!=null&&v!=="")ls.set("last."+form+"."+k,v)}
 function last(form,k){return ls.get("last."+form+"."+k)}
 function markDirty(){if(S.drawer)S.drawer.dirty=true}
@@ -1975,7 +1982,7 @@ function validatePay(o){const errors={},warnings=[];requiredCheck("payment",o,er
  if(!unchanged){const dup=live(D.payments).find(p=>p.no!==S.drawer.id&&p.party===o.party&&+p.amount===+o.amount&&p.cur===o.cur&&Math.abs(diffDays(p.date,o.date||today()))<=3&&p.status!=="cancelled");if(dup)warnings.push(`Same party, amount and date as ${dup.no} — duplicate?`)}
  if(o.paidBy==="person"&&!o.person)errors.person="Pick the person";return{errors,warnings}}
 async function savePay(){const o=collect("payment");const{errors,warnings}=validatePay(o);showErrors(errors,warnings);if(Object.keys(errors).length)return;if(warnings.length&&!S.drawer.ack)return;
- const old=S.drawer.ctx.edit||{};const isEdit=!!old.no;const ch=S.drawer.changed||{};const no=old.no||val("no")||nextNo("payments",o.date);const file=val("receiptFile");let receiptAsset=old.receiptAsset||null;if(file){$("#formstatus").textContent="Uploading receipt…";receiptAsset=await uploadFile(file)||receiptAsset}
+ const old=S.drawer.ctx.edit||{};const isEdit=!!old.no;const ch=S.drawer.changed||{};const no=old.no||val("no")||nextNo("payments",o.date);const file=val("receiptFile");let receiptAsset=old.receiptAsset||null;if(file){$("#formstatus").textContent="Uploading receipt…";try{receiptAsset=await uploadFile(file)}catch(e){$("#formstatus").textContent=e.message+" — the payment was NOT saved. Try again, or remove the file and save without it.";toast(e.message,{ms:8000});return false}}
  /* allocations: the reference(s) + any part for something else (belongsTo / oref / note; never counted on the main order) */
  const allocs=o.allocations.filter(allocKept).map(a=>{const x={};Object.entries(a).forEach(([k,v])=>{if(!k.startsWith("_"))x[k]=v});x.amount=a.amount!=null&&a.amount!==""?+a.amount:+o.amount;if(isOtherAlloc(a)){x.ref=a.oref&&colOfRef(a.oref)?a.oref:(a.ref||null);if(!x.ref)delete x.ref;if(!x.oref)delete x.oref;x.note=String(a.note||"").trim();if(!x.note)delete x.note}else{["belongsTo","oref","note"].forEach(k=>{if(x[k]==null||x[k]==="")delete x[k]})}return x});if(allocs.length===1)allocs[0].amount=+o.amount;const mainA=allocs.find(a=>a.ref&&!isOtherAlloc(a))||allocs.find(a=>a.ref);
  const moved=!isEdit||+o.amount!==+old.amount||o.cur!==old.cur||o.date!==old.date;const allocMoved=!isEdit||!sameJ((old.allocations||[]).map(a=>[a.ref,+a.amount]),allocs.map(a=>[a.ref,+a.amount]));
@@ -5689,6 +5696,19 @@ trashDoc=(function(orig){return async function(col,id,labelTxt){
    if(!ok){toast(`${id} not trashed — ${dep.length} record${dep.length>1?"s":""} depend on it (${dep.slice(0,3).map(d=>d.id).join(", ")}${dep.length>3?"…":""})`,{ms:7000});try{recordAppError&&recordAppError(`guard: trash refused ${col}/${id} — ${dep.length} dependants`)}catch(_){}return false}}}
  return orig.call(this,col,id,labelTxt)}})(trashDoc);
 
+/* ---------- Conflicts: show both versions, let the person choose — never a silent winner ----------
+   A "field" conflict (two people changed the same field at the same moment) gets a chooser: each field shows the value kept
+   (this device's) and the other person's value, with "Keep" / "Use theirs". A choice is a normal, logged edit. */
+function conflictBox(x){const[c,id]=String(x.key||"").split("/");if(x.kind!=="field")return"";
+ return`<div class="cfbox" data-cfkey="${esc(x.key)}" data-cfat="${esc(x.at)}"><table class="cft"><tr><th>Field</th><th>Kept (${esc(x.by||"this device")})</th><th>${esc(x.other||"other person")}</th><th></th></tr>${x.fields.map(f=>`<tr><td><b>${esc(f)}</b></td><td class="num">${esc(short(x.mine&&x.mine[f]))}</td><td class="num">${esc(short(x.theirs&&x.theirs[f]))}</td><td><button type="button" class="btn sm" data-act="syncuse" data-col="${esc(c)}" data-id="${esc(id)}" data-field="${esc(f)}" data-at="${esc(x.at)}" data-key="${esc(x.key)}" title="Replace the kept value with ${esc(x.other||"the other")}'s">Use theirs</button></td></tr>`).join("")}</table></div>`}
+attAct=(function(orig){return function(a){if(a.act&&a.act.k==="sync"){const x=(window.MYTOOL&&MYTOOL.conflicts?MYTOOL.conflicts():[]).find(y=>y.at===a.act.at&&y.key===a.act.key);const base=orig(a);return x&&x.kind==="field"?base.replace('title="I checked it','title="Keep the values shown as kept').replace("Checked ✓","Keep all ✓")+conflictBox(x):base}return orig(a)}})(attAct);
+document.addEventListener("click",async e=>{const b=e.target.closest('[data-act="syncuse"]');if(!b)return;e.preventDefault();e.stopImmediatePropagation();const ds=b.dataset;
+ const x=(MYTOOL.conflicts()||[]).find(y=>y.at===ds.at&&y.key===ds.key);if(!x){toast("This conflict is already closed");return}
+ const v=x.theirs?x.theirs[ds.field]:undefined;if(!can("edit")){toast("Your role cannot edit records");return}
+ const ok=await updateDoc(ds.col,ds.id,{[ds.field]:v},`${ds.id}: took ${x.other||"the other person"}'s ${ds.field} (${short(v)}) after a sync clash`);
+ if(ok){const row=b.closest("tr");if(row)row.querySelector("td:nth-child(2)").textContent=short(v);b.textContent="Used ✓";b.disabled=true;
+  if(![...b.closest(".cfbox").querySelectorAll('[data-act="syncuse"]')].some(z=>!z.disabled)){MYTOOL.dismissConflict(ds.at,ds.key);toast("Conflict resolved — all fields chosen");render()}}},true);
+
 /* ===================== events & boot v3 ===================== */
 const FORM_FOR_COL={purchases:"purchase",shipments:"shipment",payments:"payment",inspections:"inspection",receipts:"receive",moves:"move",credits:"credit",products:"product",parties:"party"};
 function createMenu(date){const items_=CREATE_REG.map(c=>[c.k,c.l,c.hint]);/* one list: the same entries appear in + Create and in each module's menu */
@@ -5857,7 +5877,7 @@ document.addEventListener("change",async e=>{const t=e.target;const ds=t.dataset
  if(t.id==="imp_file"&&t.files[0]){await handleImport(t.files[0]);return}if(t.id==="imp_kind"){impSetKind(t.value);return}if(t.id==="imp_datefmt"){impSetDateFmt(t.value);return}if(t.id==="imp_loc"){impSetLoc(t.value);return}
  if(t.id==="setup_file"&&t.files[0]){await importSetupJson(t.files[0]);t.value="";return}
  if(ds.act==="mapsku"){const p=D.purchases.find(x=>x.no===ds.po);if(!p||!t.value)return;if(t.value==="__new"){t.value="";openForm("product",{name:p.lines[+ds.i]?.p?.slice(0,60),force:true});return}const lines=p.lines.map((l,i)=>i===+ds.i?{...l,sku:t.value,skuAuto:false}:l);await updateDoc("purchases",p.no,{lines},`${p.no} line mapped to ${t.value}`);return}
- if(ds.act==="docfile"){const f=t.files?.[0];if(!f)return;toast("Uploading…");const id=await uploadFile(f);if(!id){toast("Upload failed");return}const patch={url:null,assetId:id,name:f.name,at:nowIso(),by:uid||"local"};const x=(D[ds.col]||[]).find(v=>(v.no||v.id)===ds.id);const docs={...(x?.docs||{}),[ds.doc]:patch};const p={docs};if(ds.col==="payments"&&ds.doc==="receipt")p.receiptAsset=id;await updateDoc(ds.col,x.id,p,`${L("docType",ds.doc)||ds.doc} uploaded`);return}
+ if(ds.act==="docfile"){const f=t.files?.[0];if(!f)return;toast("Uploading…");let id=null;try{id=await uploadFile(f)}catch(e){toast(e.message+" — choose the file again to retry",{ms:9000});try{t.value=""}catch(_){}return}if(!id){toast("Upload failed — choose the file again to retry");return}const patch={url:null,assetId:id,name:f.name,at:nowIso(),by:uid||"local"};const x=(D[ds.col]||[]).find(v=>(v.no||v.id)===ds.id);const docs={...(x?.docs||{}),[ds.doc]:patch};const p={docs};if(ds.col==="payments"&&ds.doc==="receipt")p.receiptAsset=id;await updateDoc(ds.col,x.id,p,`${L("docType",ds.doc)||ds.doc} uploaded`);return}
  if(ds.sel!==undefined){const page=S.view.k;S.sel[page]=S.sel[page]||{};if(t.checked)S.sel[page][ds.sel]=true;else delete S.sel[page][ds.sel];const bb=$("#bulkbar");if(bb)bb.outerHTML=bulkBar(page);return}
  if(ds.row!==undefined){rowChanged(ds.row,+ds.i,ds.k,t.value,t);return}
  if(t.id==="cal_month"||ds.act==="cal-month"){S.cal=t.value;render();return}
@@ -5952,5 +5972,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='770b2387d8';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='eacffd4276';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
 </body></html>

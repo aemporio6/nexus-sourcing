@@ -68,8 +68,16 @@ function mkRoute(ctx){
   const c = await A.p.evaluate(() => MYTOOL.conflicts());
   ok(c.length === 1 && c.some(x => x.kind === "field" && x.fields.join() === "notes"), "same field changed by both → clash listed (" + JSON.stringify(c.map(x => x.kind + ":" + (x.fields || []).join())) + ")");
   ok(await A.p.evaluate(() => healthRun(true).issues.some(i => i.rule === "sync")), "clash shows in Data health / Alerts");
-  await A.p.evaluate(() => MYTOOL.conflicts().forEach(x => MYTOOL.dismissConflict(x.at, x.key))); await A.p.waitForTimeout(2500); await sync(B.p);
-  ok((await B.p.evaluate(() => MYTOOL.conflicts().length)) === 0, "Checked ✓ on one device clears it for everyone");
+  // 2b. the chooser: both versions shown, "Use theirs" takes the other value as a logged edit and closes the conflict
+  ok(/conflict/.test(await A.p.evaluate(() => MYTOOL.st.t)), "status pill says a conflict is waiting: " + await A.p.evaluate(() => MYTOOL.st.t));
+  await A.p.evaluate(() => { S.view = { k: "alerts", params: {} }; render(); });
+  await A.p.waitForSelector('.cfbox [data-act="syncuse"]', { timeout: 5000 });
+  const shown = await A.p.evaluate(() => [...document.querySelectorAll(".cft td")].map(t => t.textContent));
+  ok(shown.includes("A2") && shown.includes("B2"), "chooser shows both values (" + shown.filter(x => /^[AB]2$/.test(x)).join("/") + ")");
+  await A.p.click('.cfbox [data-act="syncuse"]'); await A.p.waitForTimeout(2800); await sync(B.p);
+  ok(await A.p.evaluate(no => D.purchases.find(x => x.no === no).notes, po) === await A.p.evaluate(() => { const c = MYTOOL._debug().conflicts.find(x => x.kind === "field"); return c.theirs.notes; }), "'Use theirs' put the other person's value on the record");
+  ok(await A.p.evaluate(() => D.log.some(l => /after a sync clash/.test(l.text || l.label || JSON.stringify(l)))), "the choice is in the activity log");
+  ok((await B.p.evaluate(() => MYTOOL.conflicts().length)) === 0, "choosing on one device clears it for everyone");
   // 3. both create the same new number at the same moment → one is renumbered, its payment follows
   const nid = await A.p.evaluate(() => nextNo("purchases"));
   const mk = (P, who) => P.evaluate(([nid, who]) => { const base = D.purchases.find(p => p.status === "closed"); const doc = { ...JSON.parse(JSON.stringify(base)), id: nid, no: nid, notes: "made by " + who, oldRef: null, createdAt: nowIso(), createdBy: MYTOOL.me.email }; return claude.use("db").then(db => Promise.all([db.collection("purchases").doc(nid).set(doc), db.collection("payments").doc("PAYX-" + who).set({ id: "PAYX-" + who, no: "PAYX-" + who, party: base.party, cur: base.cur, amount: 1, status: "pending", date: today(), allocations: [{ ref: nid, amount: 1 }] })])) }, [nid, who]);
@@ -106,6 +114,20 @@ function mkRoute(ctx){
   await A.p.waitForTimeout(3000); await sync(A.p); await sync(B.p); await sync(A.p);
   const pd = Object.values(fileData().data.parties).find(x => x.code === pk2);
   ok(pd && pd.phone === "0300-B", "edit made while someone trashed the record is kept (" + (pd ? "deletedAt=" + (pd.deletedAt || "none") : "gone") + ")");
+  // 6. offline: create while offline → kept on this device with a clear state → saved when back online
+  await A.ctx.setOffline(true); await A.p.waitForTimeout(300);
+  await A.p.evaluate(() => writeDoc("parties", "SUP-OFF1", { code: "SUP-OFF1", type: "supplier", name: "Made offline", cur: "RMB" }, "t"));
+  await A.p.waitForTimeout(2500);
+  const stOff = await A.p.evaluate(() => MYTOOL.st.t); ok(/waiting for internet/.test(stOff) && (await A.p.evaluate(() => MYTOOL.pending())) > 0, "offline: 'Saved on this device — waiting for internet' (" + stOff + ")");
+  ok(!JSON.stringify(fileData().data.parties).includes("Made offline"), "nothing reached Drive while offline");
+  await A.ctx.setOffline(false); await A.p.waitForTimeout(4000);
+  ok(JSON.stringify(fileData().data.parties).includes("Made offline") && (await A.p.evaluate(() => MYTOOL.pending())) === 0, "back online → saved by itself, nothing pending");
+  // 7. attachment upload fails → clear error, input kept, no silent null
+  await A.ctx.route(/upload\/drive\/v3\/files\?uploadType=multipart/, r => r.fulfill({ status: 500, contentType: "application/json", body: '{"error":{"message":"boom"}}' }));
+  const upErr = await A.p.evaluate(async () => { try{ await uploadFile(new File(["x"], "proof.pdf", { type: "application/pdf" })); return "no error"; }catch(e){ return e.message; } });
+  ok(/Upload failed/.test(upErr) && /boom|answer/.test(upErr), "upload failure throws a clear reason: " + upErr);
+  const badType = await A.p.evaluate(async () => { try{ await uploadFile(new File(["x"], "virus.exe", { type: "application/x-msdownload" })); return "no error"; }catch(e){ return e.message; } });
+  ok(/cannot be attached/.test(badType), "unsupported file type refused before upload");
   // 5. nothing lost overall, no errors
   ok(A.errs.length === 0 && B.errs.length === 0, "no page errors " + JSON.stringify([...A.errs, ...B.errs]).slice(0, 300));
   await b.close(); console.log(fails ? fails + " FAILED" : "ALL PASS"); process.exit(fails ? 1 : 0);
