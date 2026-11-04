@@ -940,6 +940,7 @@ th{text-align:left;background:var(--soft);padding:7px 9px;font-weight:600;white-
 .who{display:flex;align-items:center;gap:8px;margin-top:6px}.who img{width:22px;height:22px;border-radius:50%}
 .mlogo{display:none;border-radius:50%;flex:none}@media (max-width:860px){.brand img{width:32px;height:32px}.mlogo{display:block}}
 .cfbox{margin:6px 0 2px;overflow-x:auto}.cft{border-collapse:collapse;font-size:12.5px;min-width:320px}.cft th,.cft td{padding:3px 8px;border-bottom:1px solid var(--line,#e3e8ea);text-align:left}.cft th{font-weight:600;color:var(--muted,#5b6b70)}
+.recon tr.bad td{background:#fff4f2}.recon tr.bad td:first-child{border-left:3px solid var(--brand-red,#d7262e)}
 </style>
 <div class="app">
   <aside class="rail" id="rail"></aside>
@@ -1061,7 +1062,8 @@ const gbp2=a=>fmt(a,"GBP",2);
 /* "ⓘ How" toggle: shows the working behind a number with the actual figures (native <details>, no script) */
 const how=(html,label)=>html?`<details class="how"><summary>ⓘ ${esc(label||"How")}</summary><div class="howb">${html}</div></details>`:"";
 const num=(a,d=0)=>a==null||isNaN(+a)?"—":Number(a).toLocaleString("en-GB",{maximumFractionDigits:d});
-const r2=x=>Math.round((+x||0)*100)/100;
+/* money rounding, one place: half away from zero on a float-safe basis (1.005 → 1.01, −1.005 → −1.01) */
+const r2=x=>{x=+x||0;const s=x<0?-1:1;return s*Math.round((Math.abs(x)+1e-9)*100)/100};
 
 /* ---------- numbering & references ---------- */
 const noNum=no=>{const n=parseInt(String(no||"").split("-").pop(),10);return isNaN(n)?null:n};
@@ -5709,6 +5711,33 @@ document.addEventListener("click",async e=>{const b=e.target.closest('[data-act=
  if(ok){const row=b.closest("tr");if(row)row.querySelector("td:nth-child(2)").textContent=short(v);b.textContent="Used ✓";b.disabled=true;
   if(![...b.closest(".cfbox").querySelectorAll('[data-act="syncuse"]')].some(z=>!z.disabled)){MYTOOL.dismissConflict(ds.at,ds.key);toast("Conflict resolved — all fields chosen");render()}}},true);
 
+/* ---------- Calculations you can trace ----------
+   1. Override log: when a value MY TOOL filled in by itself (AUTO) is changed by hand, the record keeps what the automatic value was,
+      who changed it and when (`overrides`). Shown on the record page. Historical records are never recalculated.
+   2. Reconciliation on every order: PI total vs lines + fee + extras, paid vs total, shipped vs ordered, received vs shipped —
+      each number next to the one it must agree with, so a difference is visible on the record itself (Data health lists them too).
+   3. Money rounding lives in core.js r2 (float-safe, half away from zero). */
+setv=(function(orig){return function(k,v,auto){if(auto&&S.drawer){S.drawer.autoVal=S.drawer.autoVal||{};S.drawer.autoVal[k]=v==null?"":(Array.isArray(v)?v.join(", "):String(v))}return orig(k,v,auto)}})(setv);
+writeDoc=(function(orig){return async function(col,id,data,labelTxt,opts){
+ try{const d=S.drawer;if(d&&d.form&&FORM_COL[d.form]===col&&d.autoVal&&data&&typeof data==="object"){const ov={...(data.overrides||{})};let n=0;
+  for(const k of Object.keys(d.autoVal)){if(!d.changed[k])continue;const now=data[k];const cur=now==null?"":(Array.isArray(now)?now.join(", "):String(now));if(cur===d.autoVal[k])continue;ov[k]={auto:d.autoVal[k],value:cur,by:uid||"local",at:nowIso()};n++}
+  if(n)data.overrides=ov}}catch(e){console.warn(e)}
+ return orig.call(this,col,id,data,labelTxt,opts)}})(writeDoc);
+function overridesBlock(x){const ov=x&&x.overrides;if(!ov||!Object.keys(ov).length)return"";
+ return`<div class="kv" style="margin-top:8px"><div class="kvh" style="grid-column:1/-1"><b>Changed by hand</b> <small class="status">the automatic value was replaced — kept here so the difference stays traceable</small></div>${Object.entries(ov).map(([k,o])=>`<div><small class="status">${esc(k)}</small><b>${esc(o.value===""?"(empty)":o.value)}</b><br><small class="status">auto was ${esc(o.auto===""?"(empty)":o.auto)} · ${esc(o.by||"")} · ${esc(fmtD(o.at))}</small></div>`).join("")}</div>`}
+function reconBlock(p){let sp,st;try{sp=poSplit(p);st=poState(p)}catch(e){return""}const cur=p.cur||"RMB";const tol=0.5;const row=(l,a,b,why)=>{const ok=Math.abs(a-b)<=tol;return`<tr class="${ok?"":"bad"}"><td>${esc(l)}</td><td class="num">${esc(fmt(a,cur))}</td><td class="num">${esc(fmt(b,cur))}</td><td class="num">${ok?"✓":"<b>"+esc(fmt(a-b,cur))+"</b>"}</td><td><small class="status">${esc(ok?"":why)}</small></td></tr>`};
+ const q=(l,a,b,why)=>{const ok=b<=a+0.001;return`<tr class="${ok?"":"bad"}"><td>${esc(l)}</td><td class="num">${esc(num(a))}</td><td class="num">${esc(num(b))}</td><td class="num">${ok?(b<a?num(a-b)+" open":"✓"):"<b>"+esc(num(b-a))+" over</b>"}</td><td><small class="status">${esc(ok?"":why)}</small></td></tr>`};
+ const stored=p.total!=null&&p.total!=="";
+ return`<div class="card" style="margin-top:8px"><div class="card-h"><h3 style="margin:0">Does it add up?</h3><span class="status">each number beside the one it must match</span></div><div class="tbl"><table class="recon"><tr><th>Check</th><th class="num">Is</th><th class="num">Should be</th><th class="num">Diff</th><th></th></tr>
+ ${stored?row("PI total vs lines + fee + extras",+p.total,sp.computed,"PI total typed on the order differs from the lines — fix the lines, or use ‘Use lines total’ in Data health"):""}
+ ${row("Paid + credits + written off + balance vs total",r2(st.paidCur+st.credits+st.writtenOff+st.viaUsed+st.balance),st.total,"money does not add up — a payment may be allocated twice or missing")}
+ ${q("Ordered vs shipped (units)",st.ordered||0,st.shipped||0,"more shipped than ordered")}
+ ${q("Shipped vs received (units)",st.shipped||0,st.received||0,"more received than shipped")}
+ </table></div></div>`}
+openPO=(function(orig){return function(p){const r=orig(p);try{const x=docOf("purchases",p);if(r&&x){const h=reconBlock(x)+overridesBlock(x);const i=r.body.indexOf('<div class="kv');r.body=i>0?r.body.slice(0,i)+h+r.body.slice(i):r.body+h}}catch(e){console.warn(e)}return r}})(openPO);
+["openShip","openPay","openInsp","openReceipt","openProduct","openParty","openCredit","openMove"].forEach(fn=>{if(typeof window[fn]!=="function")return;const col={openShip:"shipments",openPay:"payments",openInsp:"inspections",openReceipt:"receipts",openProduct:"products",openParty:"parties",openCredit:"credits",openMove:"moves"}[fn];
+ window[fn]=(function(orig){return function(x){const r=orig(x);try{const d=docOf(col,x);if(r&&d){const h=overridesBlock(d);if(h){const i=r.body.indexOf('<div class="kv');r.body=i>0?r.body.slice(0,i)+h+r.body.slice(i):r.body+h}}}catch(e){console.warn(e)}return r}})(window[fn])});
+
 /* ===================== events & boot v3 ===================== */
 const FORM_FOR_COL={purchases:"purchase",shipments:"shipment",payments:"payment",inspections:"inspection",receipts:"receive",moves:"move",credits:"credit",products:"product",parties:"party"};
 function createMenu(date){const items_=CREATE_REG.map(c=>[c.k,c.l,c.hint]);/* one list: the same entries appear in + Create and in each module's menu */
@@ -5972,5 +6001,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='eacffd4276';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='f028321977';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
 </body></html>

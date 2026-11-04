@@ -73,7 +73,8 @@ const gbp2=a=>fmt(a,"GBP",2);
 /* "ⓘ How" toggle: shows the working behind a number with the actual figures (native <details>, no script) */
 const how=(html,label)=>html?`<details class="how"><summary>ⓘ ${esc(label||"How")}</summary><div class="howb">${html}</div></details>`:"";
 const num=(a,d=0)=>a==null||isNaN(+a)?"—":Number(a).toLocaleString("en-GB",{maximumFractionDigits:d});
-const r2=x=>Math.round((+x||0)*100)/100;
+/* money rounding, one place: half away from zero on a float-safe basis (1.005 → 1.01, −1.005 → −1.01) */
+const r2=x=>{x=+x||0;const s=x<0?-1:1;return s*Math.round((Math.abs(x)+1e-9)*100)/100};
 
 /* ---------- numbering & references ---------- */
 const noNum=no=>{const n=parseInt(String(no||"").split("-").pop(),10);return isNaN(n)?null:n};
