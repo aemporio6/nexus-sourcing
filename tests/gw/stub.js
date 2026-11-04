@@ -19,7 +19,6 @@ function makeGateway(seed, tokens, clientId){
     UrlFetchApp: { fetch: url => { const t = decodeURIComponent(url.split("access_token=")[1]); const u = tokens[t]; return { getResponseCode: () => u ? 200 : 400, getContentText: () => JSON.stringify(u ? { aud: u.aud || CID, email: u.email, email_verified: "true", expires_in: 3000 } : { error: "invalid" }) }; } },
     Utilities: { base64EncodeWebSafe: b => Buffer.from(b).toString("base64url"), computeDigest: (a, s) => [...require("crypto").createHash("sha256").update(s).digest()], DigestAlgorithm: { SHA_256: 1 }, formatDate: (d, tz, fmt) => fmt === "yyyy-MM" ? d.toISOString().slice(0, 7) : fmt === "yyyy-MM-dd" ? d.toISOString().slice(0, 10) : d.toISOString().slice(0, 16).replace(/[T:]/g, "-"), base64Decode: s => [...Buffer.from(s, "base64")], newBlob: (bytes, mime, name) => ({ bytes, mime, name }) },
     ContentService: { createTextOutput: s => ({ setMimeType: () => ({ text: s }) }), MimeType: { JSON: 1 } },
-    Session: { getEffectiveUser: () => ({ getEmail: () => "aemporio6@gmail.com" }) },
     Logger: { log: () => {} }, JSON, Number, String, Object, Array, Math, Date, Error, RegExp, encodeURIComponent, Buffer
   };
   ctx.DriveApp.createFile = undefined;

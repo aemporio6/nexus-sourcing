@@ -16,6 +16,7 @@
 
 var CLIENT_ID = "605045779540-pjncsnms1af0s9al9k0de2om67fg0hce.apps.googleusercontent.com";
 var ADMINS = ["aemporio6@gmail.com", "maashiq123@gmail.com", "maashiq@gmail.com"];
+var OWNER = "aemporio6@gmail.com";   /* the account this script runs as */
 var FOLDER = "MY TOOL – DATA", FILE = "MYTOOL-DATA.json", FILES_FOLDER = "MY TOOL – FILES";
 var SENSITIVE = ["bank", "beneficiary", "account", "accountNo", "iban", "swift", "sortCode", "sort", "routing", "number"]; /* hidden from roles without "bank" */
 var MAX_UPLOAD = 20 * 1024 * 1024;
@@ -161,7 +162,7 @@ function reattach(cd, nd){
 /* ================= attachments: the FILES folder is shared, the data is not ================= */
 function filesFolder(){
   var it = DriveApp.getFoldersByName(FILES_FOLDER), f = null;
-  while(it.hasNext()){ var x = it.next(); if(x.getOwner() && x.getOwner().getEmail().toLowerCase() === Session.getEffectiveUser().getEmail().toLowerCase()){ f = x; break; } }
+  while(it.hasNext()){ var x = it.next(); if(x.getOwner() && x.getOwner().getEmail().toLowerCase() === OWNER){ f = x; break; } }
   if(!f) f = DriveApp.createFolder(FILES_FOLDER);
   var parents = f.getParents(); if(parents.hasNext() && parents.next().getName() === FOLDER) f.moveTo(DriveApp.getRootFolder());   // never inside the data folder
   return f;
