@@ -140,9 +140,11 @@ async function signIn(){
   me = { email: lc(u.email), name: u.name || u.email, picture: u.picture || "" };
   try{ localStorage.setItem("mt_hint", me.email); }catch(_){}
 }
-function signOut(){
+async function signOut(){
   try{ if(token && google && google.accounts) google.accounts.oauth2.revoke(token, () => {}); }catch(_){}
   try{ sessionStorage.removeItem("mt_tok"); localStorage.removeItem("mt_hint"); }catch(_){}
+  /* a shared computer must not keep the business data after sign-out: the on-device cache goes too (only when nothing is unsaved) */
+  try{ if(!Object.keys(dirty).length){ await kvDel(cacheKey()); for(const y of Object.keys(archMeta)) await kvDel("arch:" + y); } }catch(_){}
   location.reload();
 }
 
@@ -6171,5 +6173,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='af8d855d99';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='f6272331f7';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
 </body></html>

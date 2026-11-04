@@ -139,9 +139,11 @@ async function signIn(){
   me = { email: lc(u.email), name: u.name || u.email, picture: u.picture || "" };
   try{ localStorage.setItem("mt_hint", me.email); }catch(_){}
 }
-function signOut(){
+async function signOut(){
   try{ if(token && google && google.accounts) google.accounts.oauth2.revoke(token, () => {}); }catch(_){}
   try{ sessionStorage.removeItem("mt_tok"); localStorage.removeItem("mt_hint"); }catch(_){}
+  /* a shared computer must not keep the business data after sign-out: the on-device cache goes too (only when nothing is unsaved) */
+  try{ if(!Object.keys(dirty).length){ await kvDel(cacheKey()); for(const y of Object.keys(archMeta)) await kvDel("arch:" + y); } }catch(_){}
   location.reload();
 }
 
