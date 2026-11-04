@@ -49,7 +49,7 @@ let calls = [];
   await V.p.evaluate(() => { S.role = "owner"; return updateDoc("purchases", D.purchases[0].no, { note: "va-hack" }, "t"); });   /* pretend the UI check was bypassed */
   await V.p.waitForTimeout(6000);
   ok(!JSON.stringify(dataFile()).includes("va-hack"), "VA edit of an existing order refused by the gateway (file unchanged)");
-  const st = await V.p.evaluate(() => MYTOOL.st.t); ok(/Not allowed/.test(st), "VA sees 'Not allowed' status: " + st);
+  const st = await V.p.evaluate(() => MYTOOL.st.t); ok(/Not allowed: your role cannot change/.test(st), "VA sees 'Not allowed' status: " + st);
 
   /* 3. compare-and-swap: admin and finance edit different records at the same time → both land */
   let F = await open("finance@x.com"); await F.p.waitForSelector("#mt_signin"); await F.p.click("#mt_signin"); await ready(F.p);
@@ -61,6 +61,13 @@ let calls = [];
   const df = JSON.stringify(dataFile());
   ok(df.includes("cas-A") && df.includes("cas-F"), "both edits in the file after crossing saves (version " + vBefore + " → " + G.drive.props.v + ")");
 
+  /* 3b. attachments: upload goes through the gateway, the link opens the file through the gateway (no Drive sharing anywhere) */
+  const up = await V.p.evaluate(async () => { const r = await uploadFile(new File(["hello proof"], "proof.pdf", { type: "application/pdf" })); return r; });
+  ok(/^drive:F\d+$/.test(up) && G.drive.files[up.slice(6)] && G.drive.files[up.slice(6)].content === "hello proof", "VA uploaded a file through the gateway: " + up);
+  const opened = await Promise.all([Promise.race([V.ctx.waitForEvent("page", { timeout: 8000 }).then(pg => "popup:" + pg.url().slice(0, 5)).catch(() => null), V.p.waitForEvent("download", { timeout: 8000 }).then(d => "download:" + d.suggestedFilename()).catch(() => null)]), V.p.evaluate(id => { const a = document.createElement("a"); a.href = "https://drive.google.com/file/d/" + id.slice(6) + "/view"; a.textContent = "Open file"; document.body.appendChild(a); a.click(); }, up)]);
+  ok(opened[0] && /^(popup:blob:|download:proof)/.test(opened[0]), "clicking the attachment link opened it via the gateway (" + opened[0] + " · " + await V.p.evaluate(() => MYTOOL.st.t) + ")");
+  ok(calls.some(c => c === "file:va@x.com") && calls.some(c => c === "upload:va@x.com"), "upload + file ops went through the gateway");
+  const sh = await A.p.evaluate(() => MYTOOL.shareWith("va@x.com", "writer")); ok(sh === true && !calls.some(c => c.startsWith("share:")), "Share data is a no-op with the gateway (nothing to share)");
   /* 4. stranger */
   let N = await open("nobody@x.com"); await N.p.waitForSelector("#mt_signin"); await N.p.click("#mt_signin"); await N.p.waitForTimeout(2500);
   ok(await N.p.evaluate(() => /not allowed|Setup › Users/.test(document.body.textContent)), "stranger blocked by the gateway");

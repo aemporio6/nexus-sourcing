@@ -618,6 +618,21 @@ const assets = {
     return { id: "drive:" + j.id, url: j.webViewLink || ("https://drive.google.com/file/d/" + j.id + "/view") };
   }
 };
+/* attachments through the gateway: the link opens the file in a new tab after fetching it as the signed-in user (no Drive sharing) */
+const gwBlobCache = {};
+async function gwOpen(fileId){
+  if(gwBlobCache[fileId]){ window.open(gwBlobCache[fileId], "_blank", "noopener"); return; }
+  status("Opening file…", "busy");
+  const j = await gw("file", { id: fileId });
+  const bin = atob(j.b64); const u8 = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([u8], { type: j.mime || "application/octet-stream" })); gwBlobCache[fileId] = url;
+  status(lastSt.k === "busy" ? "Synced" : lastSt.t, lastSt.k === "busy" ? "ok" : lastSt.k);
+  const w = window.open(url, "_blank", "noopener"); if(!w){ const a = document.createElement("a"); a.href = url; a.download = j.name || "file"; a.click(); }
+}
+document.addEventListener("click", e => {
+  if(!viaGw()) return; const a = e.target.closest('a[href^="https://drive.google.com/file/d/"]'); if(!a) return;
+  const m = a.href.match(/\/file\/d\/([^/]+)/); if(!m) return; e.preventDefault(); gwOpen(m[1]).catch(err => { status("Could not open the file: " + err.message, "bad"); });
+}, true);
 window.__blobUrl = id => { id = String(id || ""); if(id.startsWith("drive:")) return "https://drive.google.com/file/d/" + id.slice(6) + "/view"; if(/^https?:/.test(id)) return id; return assetMem[id] || ""; };
 (async () => { try{ const d = await idb(); const keys = await new Promise(res => { const t = d.transaction(ST).objectStore(ST).getAllKeys(); t.onsuccess = () => res(t.result || []); t.onerror = () => res([]); }); for(const k of keys) if(String(k).startsWith("asset:")) assetMem[k.slice(6)] = await kvGet(k); }catch(_){} })();
 
@@ -727,7 +742,7 @@ window.MYTOOL = {
   async shareWith(email, role){
     if(DEMO) throw new Error("demo mode");
     if(me.email !== CFG.dataOwner && !CFG.admins.includes(me.email)) throw new Error("only an admin can share");
-    if(viaGw()){ await gw("share", { email, role: role || "writer" }); return true; }   /* attachments folder only — the data stays private to the owner */
+    if(viaGw()) return true;   /* nothing to share: data and attachments both come through the gateway */
     const folder = remote.folderId || (await findOrCreateFolder(CFG.folderName, null, false));
     if(!folder) throw new Error("data folder not found");
     await gjson(API + "/drive/v3/files/" + folder + "/permissions?sendNotificationEmail=false", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: role || "writer", type: "user", emailAddress: email }) });

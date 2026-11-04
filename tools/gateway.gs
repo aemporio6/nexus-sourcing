@@ -11,7 +11,7 @@
    3. Run `selfTest` once (allow permissions). It must print "OK".
    4. Deploy → New deployment → type "Web app" → Execute as: Me · Who has access: Anyone → Deploy → copy the Web app URL.
    5. In MY TOOL (signed in as admin): Setup › Users › Data gateway → paste the URL → "Use gateway". Then "Lock data folder"
-      (removes everyone else's Drive access to the data; attachments folder stays shared).
+      (removes everyone else's Drive access to the data and the attachments — both are served through the gateway).
    Nothing is stored here except a version counter. No Client Secret anywhere.                                                      */
 
 var CLIENT_ID = "605045779540-pjncsnms1af0s9al9k0de2om67fg0hce.apps.googleusercontent.com";
@@ -56,6 +56,7 @@ function handle(req){
     case "backupNow": needAdmin(who); var d = "MYTOOL-DATA backup " + Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd") + ".json"; var bk = backupsFolder(); if(!bk.getFilesByName(d).hasNext()) snapshot(cur, d, bk); return { ok: true, email: email };
     case "share":   needAdmin(who); return { ok: true, shared: shareFiles(req.email, req.role), email: email };
     case "revoke":  needAdmin(who); return { ok: true, removed: lockDataFolder(), email: email };
+    case "file":    return fileOut(req.id, email);
     case "upload":  if(!(who.admin || who.perms.create || who.perms.edit)) fail(403, "your role cannot add files"); return upload(req, email);
     default: fail(400, "unknown op " + req.op);
   }
@@ -172,13 +173,21 @@ function shareFiles(email, role){
   var f = filesFolder(); if(role === "reader") f.addViewer(email); else f.addEditor(email); return f.getId();
 }
 function lockDataFolder(){
-  var removed = [], targets = [dataFolder(), dataFile()].filter(Boolean);
+  var removed = [], targets = [dataFolder(), dataFile(), filesFolder()].filter(Boolean);   /* data AND attachments: the gateway serves both */
   targets.forEach(function(t){
     t.getEditors().forEach(function(u){ var e = u.getEmail().toLowerCase(); if(ADMINS.indexOf(e) < 0){ t.removeEditor(u); removed.push(e); } });
     t.getViewers().forEach(function(u){ var e = u.getEmail().toLowerCase(); if(ADMINS.indexOf(e) < 0){ t.removeViewer(u); removed.push(e); } });
     try{ t.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE); }catch(_){}
   });
   return removed;
+}
+/* an attachment, for someone allowed to use MY TOOL: only files inside the FILES folder are served */
+function fileOut(id, email){
+  var f; try{ f = DriveApp.getFileById(String(id || "")); }catch(e){ fail(404, "file not found"); }
+  var ok = false, it = f.getParents(); while(it.hasNext()){ if(it.next().getName() === FILES_FOLDER) ok = true; }
+  if(!ok) fail(403, "not a MY TOOL attachment");
+  var blob = f.getBlob(); if(blob.getBytes().length > MAX_UPLOAD) fail(413, "file too big to open here — ask the admin for the Drive link");
+  return { ok: true, name: f.getName(), mime: blob.getContentType(), b64: Utilities.base64Encode(blob.getBytes()), email: email };
 }
 function upload(req, email){
   var bytes = Utilities.base64Decode(req.b64 || "");

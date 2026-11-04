@@ -33,7 +33,7 @@ def build(seed_dir=None, out="index.html"):
            '<title>MY TOOL</title><link rel="icon" type="image/png" sizes="16x16" href="assets/icon-16.png?v=2"><link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png?v=2"><link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png?v=2">'
            '<link rel="shortcut icon" href="assets/icon-32.png?v=2"><link rel="apple-touch-icon" href="assets/icon-180.png?v=2"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0f8f96">'
            '</head><body>\n')
-    sw = ("<script>window.MYTOOL_VERSION='" + ver + "';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>\n")
+    sw = ("<script>window.MYTOOL_VERSION='" + ver + "';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type=\"button\">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>\n")
     html = pre + seed + "<script>" + read("src/gshim.js") + "</script>\n" + head + "\n<script>\n" + js + "\n</script>\n" + sw + "</body></html>\n"
     open(os.path.join(R, out) if not os.path.isabs(out) else out, "w", encoding="utf-8").write(html)
     if not seed_dir:
