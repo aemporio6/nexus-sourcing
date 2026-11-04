@@ -40,7 +40,7 @@ let revs = {};            // {"col/id": {r, h:[older revs]}} revision of every d
 let sent = {};            // {"col/id": {r, at, del}} what this device wrote recently — to spot a write that someone else's save rolled back
 let conflicts = [];       // same field changed by two people at once / renumbered records — shown in Alerts until dismissed
 let metaDirty = false;
-let lastPacked = null;
+let lastPacked = null, retryN = 0;
 let retryT = null, polling = false;
 let remote = { fileId: null, folderId: null, filesFolderId: null, version: null, owner: null };
 let readyRes; const ready = new Promise(r => readyRes = r);
@@ -146,13 +146,16 @@ async function readRemote(){
   const r = await gfetch(API + "/drive/v3/files/" + remote.fileId + "?alt=media");
   if(!r.ok) throw new Error("Could not read the data file (" + r.status + ")");
   const j = await r.json();
+  if(j && typeof j === "object" && j.schema && j.schema > SCHEMA){ status("The data file was saved by a newer MY TOOL — reload the app", "bad"); throw new Error("newer data schema " + j.schema); }
+  if(j && typeof j !== "object" || Array.isArray(j)) throw new Error("data file is not readable");
   return j;
 }
 async function metaVersion(){
   const j = await gjson(API + "/drive/v3/files/" + remote.fileId + "?fields=version,modifiedTime,lastModifyingUser(emailAddress,displayName)");
   return j;
 }
-function packFile(){ return JSON.stringify({ format: "mytool-1", savedAt: nowIso(), savedBy: me ? me.email : "", data: store, tomb, revs, conflicts: conflicts.slice(-300) }); }
+const SCHEMA = 1;   /* data-file schema; raise only with a tested migration, older apps refuse newer files */
+function packFile(){ return JSON.stringify({ format: "mytool-1", schema: SCHEMA, savedAt: nowIso(), savedBy: me ? me.email : "", data: store, tomb, revs, conflicts: conflicts.slice(-300) }); }
 async function writeRemote(){
   const body = packFile(); lastPacked = body;
   const r = await gfetch("https://www.googleapis.com/upload/drive/v3/files/" + remote.fileId + "?uploadType=media&fields=version", { method: "PATCH", headers: { "Content-Type": "application/json" }, body });
@@ -395,12 +398,14 @@ async function push(){
     dailyBackup().catch(() => {});
     await saveCache();
     status("All saved · " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), "ok");
-    ok = true;
+    ok = true; retryN = 0;
     try{ window.__mtBC && window.__mtBC.postMessage("saved"); }catch(_){}   // other MY TOOL tabs on this computer: look now
     clearTimeout(pollT); pollT = setTimeout(poll, 6000);           // look again soon: catches a save that crossed with ours
   }catch(e){
-    console.warn(e); status("Not saved yet — will retry (" + e.message + ")", "warn");
-    clearTimeout(retryT); retryT = setTimeout(push, 15000);
+    console.warn(e);
+    retryN = Math.min(retryN + 1, 5); const wait = 15000 * Math.pow(2, retryN - 1);   /* 15 s, 30 s, 1, 2, 4 min — then stays at 4 min */
+    status("Not saved yet — will retry in " + Math.round(wait / 1000) + " s (" + e.message + ")", "warn");
+    clearTimeout(retryT); retryT = setTimeout(push, wait);
   }finally{
     pushing = false;
     if(pushAgain){ pushAgain = false; setTimeout(push, 300); }
@@ -585,8 +590,12 @@ window.MYTOOL = {
   async listBackups(){
     if(DEMO) return [];
     const folder = remote.folderId; if(!folder) return [];
-    const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent("name contains 'MYTOOL-DATA backup' and trashed=false and '" + folder + "' in parents") + "&fields=files(id,name,modifiedTime,size)&orderBy=name desc&pageSize=200");
-    return j.files || [];
+    /* copies made by the app (in the data folder) and by the nightly Apps Script (in its "backups" subfolder) */
+    const sub = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent("name = 'backups' and mimeType = 'application/vnd.google-apps.folder' and trashed=false and '" + folder + "' in parents") + "&fields=files(id)");
+    const parents = [folder].concat((sub.files || []).map(f => f.id));
+    const q = "name contains 'MYTOOL-DATA backup' and trashed=false and (" + parents.map(p => "'" + p + "' in parents").join(" or ") + ")";
+    const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent(q) + "&fields=files(id,name,modifiedTime,size,parents)&orderBy=name desc&pageSize=200");
+    const seen = new Set(); return (j.files || []).filter(f => !seen.has(f.name) && seen.add(f.name)).map(f => ({ ...f, nightly: !(f.parents || []).includes(folder) }));
   },
   async readBackup(id){ const r = await gfetch(API + "/drive/v3/files/" + id + "?alt=media"); if(!r.ok) throw new Error("Could not read the backup (" + r.status + ")"); const j = await r.json(); return j.data || j; },
   async restoreFromDrive(id){
@@ -4117,7 +4126,7 @@ async function undoImport(id){const im=D.imports.find(i=>i.no===id||i.id===id);i
  toast(`${im.no} undone — ${n} record${n===1?"":"s"} removed or restored`,{undo:true});render()}
 
 /* ---------- 14. CSV: convert any sheet (detected header + data) and export list views ---------- */
-const ixCsvCell=v=>{if(v==null)return"";let s=v instanceof Date?v.toISOString().slice(0,10):String(v);return/[",\r\n;]/.test(s)||/^\s|\s$/.test(s)?`"${s.replace(/"/g,'""')}"`:s};
+const ixCsvCell=v=>{if(v==null)return"";let s=v instanceof Date?v.toISOString().slice(0,10):String(v);if(typeof v!=="number"&&/^[=+\-@\t\r]/.test(s)&&!/^-?\d+(\.\d+)?$/.test(s))s="'"+s;/* formula injection guard */return/[",\r\n;]/.test(s)||/^\s|\s$/.test(s)?`"${s.replace(/"/g,'""')}"`:s};
 const ixToCsv=rows=>"﻿"+rows.map(r=>r.map(ixCsvCell).join(",")).join("\r\n")+"\r\n";
 function ixCsvDownload(I,i){const sh=I.sheets[i];if(!sh)return;const keep=sh.headers.map((h,c)=>c).filter(c=>sh.headers[c]||sh.data.some(r=>r[c]!==""&&r[c]!=null));const rows=[keep.map(c=>sh.headers[c]||`Column ${c+1}`)].concat(sh.data.filter(r=>r.some(c=>c!==""&&c!=null)).map(r=>keep.map(c=>r[c])));const base=String(I.file||"sheet").replace(/\.[a-z0-9]+$/i,"").replace(/[^\w\-]+/g,"_").slice(0,40);const name=`${base}${I.sheets.length>1?"_"+String(sh.name).replace(/[^\w\-]+/g,"_").slice(0,30):""}.csv`;saveBlob(new Blob([ixToCsv(rows)],{type:"text/csv;charset=utf-8"}),name);toast(`CSV ready: ${name} (${rows.length-1} rows)`)}
 function exportCsvView(){if(!can("export")){toast("Export is not allowed for your role");return}const col=S.view?.k;const rows=S.lastRows?.[col]||[];const fn0=XROW[col]||(col==="stock"?XROW.stock:null);if(!rows.length||!fn0){toast("Nothing to export on this page");return}const fn=withCustom(col,fn0);const objs=rows.map(x=>fn(unwrapRow(x)));const keys=[...new Set(objs.flatMap(o=>Object.keys(o)))];const name=`NEXUS_${col}_${today()}.csv`;saveBlob(new Blob([ixToCsv([keys].concat(objs.map(o=>keys.map(k=>o[k]))))],{type:"text/csv;charset=utf-8"}),name);toast("CSV ready: "+name)}
@@ -5596,6 +5605,27 @@ exportXlsx=(function(orig){return async function(scope){const _w=XLSX.writeFile,
 pdfNew=(function(orig){return function(){const doc=orig();if(!doc)return doc;try{
  const _out=doc.output.bind(doc);doc.output=(...a)=>{try{const n=doc.getNumberOfPages();for(let i=1;i<=n;i++){doc.setPage(i);try{if(BRAND_LOGO)doc.addImage(BRAND_LOGO,"PNG",14,285.6,5.5,5.5)}catch(_){}doc.setFontSize(7.5);doc.setTextColor(150);doc.text(`MY TOOL · Vartleaves Ltd · ${new Date().toLocaleDateString("en-GB")}${brandWho()?" · "+brandWho():""}`,21,290);doc.text(`${i} / ${n}`,196,290,{align:"right"})}doc.setTextColor(0)}catch(_){}return _out(...a)}}catch(_){}return doc}})(pdfNew);
 
+/* ---------- Records that other records depend on cannot be trashed by accident ----------
+   Before a record goes to Trash, MY TOOL lists everything that still hangs on it (payments allocated to an order, shipments carrying it,
+   receipts / stock moves made from it, orders of a product or party). The user sees the list and decides; the record itself is never
+   changed. The check runs at the write boundary (trashDoc), so every path — drawer menu, bulk bar, keyboard — goes through it. */
+function dependantsOf(col,id){const dep=[];const add=(c,x,why)=>{if(x&&!x.deletedAt)dep.push({col:c,id:x.no||x.id,why})};
+ const pays=ref=>live(D.payments).filter(p=>(p.allocations||[]).some(a=>a.ref===ref)).forEach(p=>add("payments",p,"money allocated"));
+ if(col==="purchases"){pays(id);live(D.shipments).filter(s=>(s.lines||[]).some(l=>l.po===id)||(s.purchases||[]).includes(id)).forEach(s=>add("shipments",s,"carries this order"));live(D.receipts).filter(r=>(r.pos||[]).includes(id)||(r.lines||[]).some(l=>l.po===id)).forEach(r=>add("receipts",r,"received from it"));live(D.inspections).filter(i=>i.po===id).forEach(i=>add("inspections",i,"inspection"));live(D.credits).filter(c=>c.po===id).forEach(c=>add("credits",c,"credit note"));live(D.purchases).filter(p=>p.partOf===id||p.samePiAs===id).forEach(p=>add("purchases",p,"part of this PI"))}
+ if(col==="shipments"){pays(id);live(D.receipts).filter(r=>r.src===id).forEach(r=>add("receipts",r,"received from it"))}
+ if(col==="receipts"){live(D.moves).filter(m=>m.receipt===id&&!m.auto).forEach(m=>add("moves",m,"stock move"));live(D.credits).filter(c=>c.receipt===id).forEach(c=>add("credits",c,"credit note"))}
+ if(col==="inspections"){pays(id);live(D.inspections).filter(i=>i.reInspectionOf===id).forEach(i=>add("inspections",i,"re-inspection"))}
+ if(col==="credits")pays(id);
+ if(col==="products"){live(D.purchases).filter(p=>(p.lines||[]).some(l=>l.sku===id)).forEach(p=>add("purchases",p,"ordered"));live(D.moves).filter(m=>m.sku===id||(m.lines||[]).some(l=>l.sku===id)).slice(0,5).forEach(m=>add("moves",m,"stock"))}
+ if(col==="parties"){live(D.purchases).filter(p=>p.party===id).forEach(p=>add("purchases",p,"order"));live(D.shipments).filter(s=>s.party===id).forEach(s=>add("shipments",s,"shipment"));live(D.payments).filter(p=>p.party===id).forEach(p=>add("payments",p,"payment"));live(D.inspections).filter(i=>i.party===id).forEach(i=>add("inspections",i,"inspection"))}
+ return dep}
+trashDoc=(function(orig){return async function(col,id,labelTxt){
+ if(!S.batch||!S.batch.force){const dep=dependantsOf(col,id);
+  if(dep.length){const list=dep.slice(0,8).map(d=>`${d.id} (${d.why})`).join(", ")+(dep.length>8?` … and ${dep.length-8} more`:"");
+   const ok=typeof confirm==="function"&&!S.quietGuard?confirm(`${id} is still used by ${dep.length} record${dep.length>1?"s":""}:\n${list}\n\nThey will keep pointing at a trashed record. Move ${id} to Trash anyway?`):false;
+   if(!ok){toast(`${id} not trashed — ${dep.length} record${dep.length>1?"s":""} depend on it (${dep.slice(0,3).map(d=>d.id).join(", ")}${dep.length>3?"…":""})`,{ms:7000});try{recordAppError&&recordAppError(`guard: trash refused ${col}/${id} — ${dep.length} dependants`)}catch(_){}return false}}}
+ return orig.call(this,col,id,labelTxt)}})(trashDoc);
+
 /* ===================== events & boot v3 ===================== */
 const FORM_FOR_COL={purchases:"purchase",shipments:"shipment",payments:"payment",inspections:"inspection",receipts:"receive",moves:"move",credits:"credit",products:"product",parties:"party"};
 function createMenu(date){const items_=CREATE_REG.map(c=>[c.k,c.l,c.hint]);/* one list: the same entries appear in + Create and in each module's menu */
@@ -5856,5 +5886,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='079153a3cc';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='c60b98d326';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
 </body></html>

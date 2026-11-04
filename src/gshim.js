@@ -39,7 +39,7 @@ let revs = {};            // {"col/id": {r, h:[older revs]}} revision of every d
 let sent = {};            // {"col/id": {r, at, del}} what this device wrote recently — to spot a write that someone else's save rolled back
 let conflicts = [];       // same field changed by two people at once / renumbered records — shown in Alerts until dismissed
 let metaDirty = false;
-let lastPacked = null;
+let lastPacked = null, retryN = 0;
 let retryT = null, polling = false;
 let remote = { fileId: null, folderId: null, filesFolderId: null, version: null, owner: null };
 let readyRes; const ready = new Promise(r => readyRes = r);
@@ -145,13 +145,16 @@ async function readRemote(){
   const r = await gfetch(API + "/drive/v3/files/" + remote.fileId + "?alt=media");
   if(!r.ok) throw new Error("Could not read the data file (" + r.status + ")");
   const j = await r.json();
+  if(j && typeof j === "object" && j.schema && j.schema > SCHEMA){ status("The data file was saved by a newer MY TOOL — reload the app", "bad"); throw new Error("newer data schema " + j.schema); }
+  if(j && typeof j !== "object" || Array.isArray(j)) throw new Error("data file is not readable");
   return j;
 }
 async function metaVersion(){
   const j = await gjson(API + "/drive/v3/files/" + remote.fileId + "?fields=version,modifiedTime,lastModifyingUser(emailAddress,displayName)");
   return j;
 }
-function packFile(){ return JSON.stringify({ format: "mytool-1", savedAt: nowIso(), savedBy: me ? me.email : "", data: store, tomb, revs, conflicts: conflicts.slice(-300) }); }
+const SCHEMA = 1;   /* data-file schema; raise only with a tested migration, older apps refuse newer files */
+function packFile(){ return JSON.stringify({ format: "mytool-1", schema: SCHEMA, savedAt: nowIso(), savedBy: me ? me.email : "", data: store, tomb, revs, conflicts: conflicts.slice(-300) }); }
 async function writeRemote(){
   const body = packFile(); lastPacked = body;
   const r = await gfetch("https://www.googleapis.com/upload/drive/v3/files/" + remote.fileId + "?uploadType=media&fields=version", { method: "PATCH", headers: { "Content-Type": "application/json" }, body });
@@ -394,12 +397,14 @@ async function push(){
     dailyBackup().catch(() => {});
     await saveCache();
     status("All saved · " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), "ok");
-    ok = true;
+    ok = true; retryN = 0;
     try{ window.__mtBC && window.__mtBC.postMessage("saved"); }catch(_){}   // other MY TOOL tabs on this computer: look now
     clearTimeout(pollT); pollT = setTimeout(poll, 6000);           // look again soon: catches a save that crossed with ours
   }catch(e){
-    console.warn(e); status("Not saved yet — will retry (" + e.message + ")", "warn");
-    clearTimeout(retryT); retryT = setTimeout(push, 15000);
+    console.warn(e);
+    retryN = Math.min(retryN + 1, 5); const wait = 15000 * Math.pow(2, retryN - 1);   /* 15 s, 30 s, 1, 2, 4 min — then stays at 4 min */
+    status("Not saved yet — will retry in " + Math.round(wait / 1000) + " s (" + e.message + ")", "warn");
+    clearTimeout(retryT); retryT = setTimeout(push, wait);
   }finally{
     pushing = false;
     if(pushAgain){ pushAgain = false; setTimeout(push, 300); }
@@ -584,8 +589,12 @@ window.MYTOOL = {
   async listBackups(){
     if(DEMO) return [];
     const folder = remote.folderId; if(!folder) return [];
-    const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent("name contains 'MYTOOL-DATA backup' and trashed=false and '" + folder + "' in parents") + "&fields=files(id,name,modifiedTime,size)&orderBy=name desc&pageSize=200");
-    return j.files || [];
+    /* copies made by the app (in the data folder) and by the nightly Apps Script (in its "backups" subfolder) */
+    const sub = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent("name = 'backups' and mimeType = 'application/vnd.google-apps.folder' and trashed=false and '" + folder + "' in parents") + "&fields=files(id)");
+    const parents = [folder].concat((sub.files || []).map(f => f.id));
+    const q = "name contains 'MYTOOL-DATA backup' and trashed=false and (" + parents.map(p => "'" + p + "' in parents").join(" or ") + ")";
+    const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent(q) + "&fields=files(id,name,modifiedTime,size,parents)&orderBy=name desc&pageSize=200");
+    const seen = new Set(); return (j.files || []).filter(f => !seen.has(f.name) && seen.add(f.name)).map(f => ({ ...f, nightly: !(f.parents || []).includes(folder) }));
   },
   async readBackup(id){ const r = await gfetch(API + "/drive/v3/files/" + id + "?alt=media"); if(!r.ok) throw new Error("Could not read the backup (" + r.status + ")"); const j = await r.json(); return j.data || j; },
   async restoreFromDrive(id){
