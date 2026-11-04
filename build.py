@@ -27,7 +27,7 @@ def build(seed_dir=None, out="index.html"):
            '<meta name="description" content="MY TOOL — sourcing, orders, payments, shipments and stock for Vartleaves">'
            '<meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\' \'unsafe-inline\' https://accounts.google.com; '
            'style-src \'self\' \'unsafe-inline\' https://fonts.googleapis.com https://accounts.google.com; font-src \'self\' data: https://fonts.gstatic.com; '
-           'img-src \'self\' data: blob: https:; connect-src \'self\' https://www.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://api.frankfurter.dev https://open.er-api.com; '
+           'img-src \'self\' data: blob: https:; connect-src \'self\' https://www.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://api.frankfurter.dev https://open.er-api.com https://script.google.com https://script.googleusercontent.com; '
            'frame-src https://accounts.google.com https://drive.google.com https://docs.google.com; worker-src \'self\' blob:; object-src \'none\'; base-uri \'self\'; form-action \'none\'">'
            '<meta name="referrer" content="strict-origin-when-cross-origin">'
            '<title>MY TOOL</title><link rel="icon" type="image/png" sizes="16x16" href="assets/icon-16.png?v=2"><link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png?v=2"><link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png?v=2">'

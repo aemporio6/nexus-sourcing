@@ -11,11 +11,28 @@ const CFG = {
   folderName: "MY TOOL – DATA",
   fileName: "MYTOOL-DATA.json",
   filesFolder: "MY TOOL – FILES",
-  pollMs: 45000
+  pollMs: 45000,
+  gateway: ""                                   // Apps Script data gateway URL (tools/gateway.gs). Empty = direct Drive. Admins can set one per device with MYTOOL.setGateway(url)
 };
 window.MYTOOL_CFG = CFG;
 const DEMO = /[?&]demo\b/.test(location.search) || location.protocol === "file:";
 const API = "https://www.googleapis.com";
+/* ---------------- data gateway (roles enforced at the data boundary; tools/gateway.gs) ---------------- */
+let GW = ""; try{ GW = localStorage.getItem("mt_gw") || CFG.gateway || ""; }catch(_){ GW = CFG.gateway || ""; }
+const viaGw = () => !DEMO && !!GW;
+async function gw(op, extra){
+  for(let attempt = 0; attempt < 2; attempt++){
+    const t = await getToken();
+    let r;
+    try{ r = await fetch(GW, { method: "POST", redirect: "follow", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ op, token: t, ...(extra || {}) }) }); }
+    catch(e){ throw new Error("Gateway not reachable (" + e.message + ")"); }
+    const j = await r.json().catch(() => ({ error: "gateway answered with something that is not JSON", status: 502 }));
+    if(j.status === 401 && attempt === 0){ token = null; continue; }
+    if(j.error){ const e = new Error(j.error); e.status = j.status || 500; throw e; }
+    return j;
+  }
+  throw new Error("Signed out — sign in again");
+}
 const clone = o => o === undefined ? undefined : JSON.parse(JSON.stringify(o));
 const nowIso = () => new Date().toISOString();
 const lc = s => String(s || "").trim().toLowerCase();
@@ -136,27 +153,45 @@ async function findOrCreateFolder(name, parent, create){
   return f.id;
 }
 async function findDataFile(){
+  if(viaGw()){ const m = await gw("meta"); if(!m.exists) return null; remote.gw = true; return { id: "gateway", version: m.version, parents: ["gateway"], role: m.role }; }
   const q = "name='" + CFG.fileName + "' and trashed=false";
   const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent(q) + "&fields=files(id,version,modifiedTime,owners(emailAddress),parents)&pageSize=20&orderBy=modifiedTime desc");
   const files = j.files || [];
   return files.find(f => (f.owners || []).some(o => lc(o.emailAddress) === CFG.dataOwner)) || null;
 }
-async function readRemote(){
-  const r = await gfetch(API + "/drive/v3/files/" + remote.fileId + "?alt=media");
-  if(!r.ok) throw new Error("Could not read the data file (" + r.status + ")");
-  const j = await r.json();
+function checkFile(j){
   if(j && typeof j === "object" && j.schema && j.schema > SCHEMA){ status("The data file was saved by a newer MY TOOL — reload the app", "bad"); throw new Error("newer data schema " + j.schema); }
   if(j && typeof j !== "object" || Array.isArray(j)) throw new Error("data file is not readable");
   return j;
 }
+async function readRemote(){
+  if(viaGw()){ const m = await gw("read"); remote.version = m.version; return checkFile(m.file); }
+  const r = await gfetch(API + "/drive/v3/files/" + remote.fileId + "?alt=media");
+  if(!r.ok) throw new Error("Could not read the data file (" + r.status + ")");
+  const j = await r.json();
+  return checkFile(j);
+}
 async function metaVersion(){
+  if(viaGw()){ const m = await gw("meta"); return { version: m.version, lastModifyingUser: { emailAddress: m.savedBy, displayName: m.savedBy } }; }
   const j = await gjson(API + "/drive/v3/files/" + remote.fileId + "?fields=version,modifiedTime,lastModifyingUser(emailAddress,displayName)");
   return j;
 }
 const SCHEMA = 1;   /* data-file schema; raise only with a tested migration, older apps refuse newer files */
 function packFile(){ return JSON.stringify({ format: "mytool-1", schema: SCHEMA, savedAt: nowIso(), savedBy: me ? me.email : "", data: store, tomb, revs, conflicts: conflicts.slice(-300) }); }
 async function writeRemote(){
-  const body = packFile(); lastPacked = body;
+  let body = packFile(); lastPacked = body;
+  if(viaGw()){
+    /* compare-and-swap: a save from an old version comes back with the newer file → merge it in and save again (at most 3 rounds) */
+    for(let round = 0; round < 3; round++){
+      let m;
+      try{ m = await gw("write", { base: remote.version, body }); }
+      catch(e){ if(e.status === 403){ const err = new Error("Not allowed: " + e.message); err.noRetry = true; throw err; } throw e; }
+      if(m.ok){ remote.version = m.version; return; }
+      if(m.conflict){ mergeRemote(checkFile(m.file)); remote.version = m.version; const again = packFile(); lastPacked = again; if(again === body) return; body = again; continue; }
+      throw new Error("Save failed");
+    }
+    throw new Error("The file keeps changing under us — will retry");
+  }
   const r = await gfetch("https://www.googleapis.com/upload/drive/v3/files/" + remote.fileId + "?uploadType=media&fields=version", { method: "PATCH", headers: { "Content-Type": "application/json" }, body });
   const j = await r.json().catch(() => ({}));
   if(!r.ok) throw new Error((j.error && j.error.message) || ("Save failed " + r.status));
@@ -402,6 +437,7 @@ async function push(){
     clearTimeout(pollT); pollT = setTimeout(poll, 6000);           // look again soon: catches a save that crossed with ours
   }catch(e){
     console.warn(e);
+    if(e.noRetry){ status(e.message + " — your changes stay on this device", "bad"); pushing = false; return false; }
     retryN = Math.min(retryN + 1, 5); const wait = 15000 * Math.pow(2, retryN - 1);   /* 15 s, 30 s, 1, 2, 4 min — then stays at 4 min */
     status("Not saved yet — will retry in " + Math.round(wait / 1000) + " s (" + e.message + ")", "warn");
     clearTimeout(retryT); retryT = setTimeout(push, wait);
@@ -437,6 +473,7 @@ async function dailyBackup(){
   if(DEMO || !CFG.admins.includes(me.email) || !remote.fileId) return;
   const day = new Date().toISOString().slice(0, 10);
   if(localStorage.getItem("mt_bk") === day) return;
+  if(viaGw()){ await gw("backupNow"); localStorage.setItem("mt_bk", day); return; }
   const folder = remote.folderId || null; if(!folder) return;
   const bkName = "MYTOOL-DATA backup " + day + ".json";
   const ex = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent("name contains 'MYTOOL-DATA backup' and trashed=false and '" + folder + "' in parents") + "&fields=files(id,name)&orderBy=name desc&pageSize=50");
@@ -474,7 +511,7 @@ async function start(){
     try{ f = await findDataFile(); }
     catch(e){ if(!c) throw e; }
     if(f){
-      remote.fileId = f.id; remote.folderId = (f.parents || [])[0] || null;
+      remote.fileId = f.id; remote.folderId = viaGw() ? null : ((f.parents || [])[0] || null);
       const rj = await readRemote(); mergeRemote(rj); remote.version = f.version;
       if(Object.keys(dirty).length) schedulePush();
     }else if(!c){
@@ -550,6 +587,12 @@ const assets = {
       const url = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(file); });
       const id = "a" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); assetMem[id] = url; await kvSet("asset:" + id, url); return { id, url };
     }
+    if(file.size > 20 * 1024 * 1024) throw new Error("This file is bigger than 20 MB — attach a smaller copy or a link");
+    if(viaGw()){
+      const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1] || ""); r.onerror = () => rej(r.error); r.readAsDataURL(file); });
+      const j = await gw("upload", { name: file.name || "file", mime: file.type || "application/octet-stream", b64 });
+      return { id: "drive:" + j.id, url: j.url };
+    }
     if(!remote.filesFolderId){
       const parent = remote.folderId || (await findOrCreateFolder(CFG.folderName, null, me.email === CFG.dataOwner));
       remote.filesFolderId = await findOrCreateFolder(CFG.filesFolder, parent, true);
@@ -580,6 +623,17 @@ window.MYTOOL = {
   get me(){ return me; }, get st(){ return lastSt; },
   async reauth(){ await requestToken(""); await push(); }, demo: DEMO, signOut, cfg: CFG,
   async syncNow(){ await push(); await poll(); },
+  get gateway(){ return viaGw() ? GW : ""; },
+  /* admin: point this device at the data gateway (tools/gateway.gs). Checks it answers for this account before switching; "" goes back to direct Drive */
+  async setGateway(url){
+    url = String(url || "").trim();
+    if(!CFG.admins.includes(me.email)) throw new Error("only an admin can change the gateway");
+    if(url){ if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url)) throw new Error("That is not an Apps Script web-app URL (…/macros/s/…/exec)");
+      const keep = GW; GW = url; try{ const m = await gw("meta"); if(!m.exists) throw new Error("the gateway sees no data file"); }catch(e){ GW = keep; throw new Error("Gateway check failed: " + e.message); } }
+    try{ if(url) localStorage.setItem("mt_gw", url); else localStorage.removeItem("mt_gw"); }catch(_){}
+    location.reload();
+  },
+  async lockDataFolder(){ if(!viaGw()) throw new Error("switch to the gateway first"); return (await gw("revoke")).removed || []; },
   async pullNow(){ if(!pushing && !polling){ remote.version = remote.version; await poll(); } },
   pending(){ return Object.keys(dirty).length; },
   /* two people changed the same thing at the same time — listed in Alerts until someone checks and dismisses it */
@@ -588,6 +642,7 @@ window.MYTOOL = {
   /* version history: the daily backup copies in the data folder (newest first) */
   async listBackups(){
     if(DEMO) return [];
+    if(viaGw()) return (await gw("backups")).list || [];
     const folder = remote.folderId; if(!folder) return [];
     /* copies made by the app (in the data folder) and by the nightly Apps Script (in its "backups" subfolder) */
     const sub = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent("name = 'backups' and mimeType = 'application/vnd.google-apps.folder' and trashed=false and '" + folder + "' in parents") + "&fields=files(id)");
@@ -596,13 +651,13 @@ window.MYTOOL = {
     const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent(q) + "&fields=files(id,name,modifiedTime,size,parents)&orderBy=name desc&pageSize=200");
     const seen = new Set(); return (j.files || []).filter(f => !seen.has(f.name) && seen.add(f.name)).map(f => ({ ...f, nightly: !(f.parents || []).includes(folder) }));
   },
-  async readBackup(id){ const r = await gfetch(API + "/drive/v3/files/" + id + "?alt=media"); if(!r.ok) throw new Error("Could not read the backup (" + r.status + ")"); const j = await r.json(); return j.data || j; },
+  async readBackup(id){ if(viaGw()){ const j = (await gw("backupRead", { id })).file; return j.data || j; } const r = await gfetch(API + "/drive/v3/files/" + id + "?alt=media"); if(!r.ok) throw new Error("Could not read the backup (" + r.status + ")"); const j = await r.json(); return j.data || j; },
   async restoreFromDrive(id){
     if(DEMO) throw new Error("demo mode");
     if(!CFG.admins.includes(me.email)) throw new Error("only an admin can restore");
     const data = await this.readBackup(id); if(!data || !data.setup) throw new Error("This backup file is not complete");
     /* safety copy of today's data first, so the restore itself can be undone */
-    await gjson(API + "/drive/v3/files/" + remote.fileId + "/copy?fields=id", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "MYTOOL-DATA before-restore " + nowIso().slice(0, 16).replace(":", "") + ".json", parents: [remote.folderId] }) });
+    if(viaGw()) await gw("snapshot"); else await gjson(API + "/drive/v3/files/" + remote.fileId + "/copy?fields=id", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "MYTOOL-DATA before-restore " + nowIso().slice(0, 16).replace(":", "") + ".json", parents: [remote.folderId] }) });
     for(const c of Object.keys(store)) for(const id2 of Object.keys(store[c])) if(!(data[c] && data[c][id2])){ dirty[c + "/" + id2] = ++editSeq; tomb[c + "/" + id2] = nowIso(); bumpRev(c + "/" + id2); }
     store = clone(data);
     for(const c of Object.keys(store)) for(const id2 of Object.keys(store[c])){ dirty[c + "/" + id2] = ++editSeq; bumpRev(c + "/" + id2); }
@@ -614,7 +669,8 @@ window.MYTOOL = {
   },
   /* activity older than N days → yearly archive file in Drive ("MYTOOL-LOG archive 2026.json"); keeps the main file small and fast */
   async archiveLog(days){
-    if(DEMO || !CFG.admins.includes(me.email) || !remote.folderId) return 0;
+    if(DEMO || !CFG.admins.includes(me.email)) return 0;
+    if(!remote.folderId){ try{ remote.folderId = await findOrCreateFolder(CFG.folderName, null, false); }catch(_){} if(!remote.folderId) return 0; }
     const cut = new Date(Date.now() - (days || 180) * 864e5).toISOString();
     const old = Object.values(store.log || {}).filter(e => e && e.at && e.at < cut); if(!old.length) return 0;
     const byYear = {}; old.forEach(e => (byYear[e.at.slice(0, 4)] = byYear[e.at.slice(0, 4)] || []).push(e));
@@ -660,6 +716,7 @@ window.MYTOOL = {
   async shareWith(email, role){
     if(DEMO) throw new Error("demo mode");
     if(me.email !== CFG.dataOwner && !CFG.admins.includes(me.email)) throw new Error("only an admin can share");
+    if(viaGw()){ await gw("share", { email, role: role || "writer" }); return true; }   /* attachments folder only — the data stays private to the owner */
     const folder = remote.folderId || (await findOrCreateFolder(CFG.folderName, null, false));
     if(!folder) throw new Error("data folder not found");
     await gjson(API + "/drive/v3/files/" + folder + "/permissions?sendNotificationEmail=false", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: role || "writer", type: "user", emailAddress: email }) });

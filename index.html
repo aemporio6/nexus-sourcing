@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="description" content="MY TOOL — sourcing, orders, payments, shipments and stock for Vartleaves"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://www.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://api.frankfurter.dev https://open.er-api.com; frame-src https://accounts.google.com https://drive.google.com https://docs.google.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'"><meta name="referrer" content="strict-origin-when-cross-origin"><title>MY TOOL</title><link rel="icon" type="image/png" sizes="16x16" href="assets/icon-16.png?v=2"><link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png?v=2"><link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png?v=2"><link rel="shortcut icon" href="assets/icon-32.png?v=2"><link rel="apple-touch-icon" href="assets/icon-180.png?v=2"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0f8f96"></head><body>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="description" content="MY TOOL — sourcing, orders, payments, shipments and stock for Vartleaves"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://www.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://api.frankfurter.dev https://open.er-api.com https://script.google.com https://script.googleusercontent.com; frame-src https://accounts.google.com https://drive.google.com https://docs.google.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'"><meta name="referrer" content="strict-origin-when-cross-origin"><title>MY TOOL</title><link rel="icon" type="image/png" sizes="16x16" href="assets/icon-16.png?v=2"><link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png?v=2"><link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png?v=2"><link rel="shortcut icon" href="assets/icon-32.png?v=2"><link rel="apple-touch-icon" href="assets/icon-180.png?v=2"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0f8f96"></head><body>
 <script>/* MY TOOL — runtime: Google sign-in + data in the owner's Google Drive (aemporio6), with an on-device cache.
    Provides window.claude.use("db"|"user"|"assets"|"downloads") with the same API the app modules expect.
    Demo mode (?demo): no Google, data only in this browser (used for tests and trying things safely). */
@@ -12,11 +12,28 @@ const CFG = {
   folderName: "MY TOOL – DATA",
   fileName: "MYTOOL-DATA.json",
   filesFolder: "MY TOOL – FILES",
-  pollMs: 45000
+  pollMs: 45000,
+  gateway: ""                                   // Apps Script data gateway URL (tools/gateway.gs). Empty = direct Drive. Admins can set one per device with MYTOOL.setGateway(url)
 };
 window.MYTOOL_CFG = CFG;
 const DEMO = /[?&]demo\b/.test(location.search) || location.protocol === "file:";
 const API = "https://www.googleapis.com";
+/* ---------------- data gateway (roles enforced at the data boundary; tools/gateway.gs) ---------------- */
+let GW = ""; try{ GW = localStorage.getItem("mt_gw") || CFG.gateway || ""; }catch(_){ GW = CFG.gateway || ""; }
+const viaGw = () => !DEMO && !!GW;
+async function gw(op, extra){
+  for(let attempt = 0; attempt < 2; attempt++){
+    const t = await getToken();
+    let r;
+    try{ r = await fetch(GW, { method: "POST", redirect: "follow", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ op, token: t, ...(extra || {}) }) }); }
+    catch(e){ throw new Error("Gateway not reachable (" + e.message + ")"); }
+    const j = await r.json().catch(() => ({ error: "gateway answered with something that is not JSON", status: 502 }));
+    if(j.status === 401 && attempt === 0){ token = null; continue; }
+    if(j.error){ const e = new Error(j.error); e.status = j.status || 500; throw e; }
+    return j;
+  }
+  throw new Error("Signed out — sign in again");
+}
 const clone = o => o === undefined ? undefined : JSON.parse(JSON.stringify(o));
 const nowIso = () => new Date().toISOString();
 const lc = s => String(s || "").trim().toLowerCase();
@@ -137,27 +154,45 @@ async function findOrCreateFolder(name, parent, create){
   return f.id;
 }
 async function findDataFile(){
+  if(viaGw()){ const m = await gw("meta"); if(!m.exists) return null; remote.gw = true; return { id: "gateway", version: m.version, parents: ["gateway"], role: m.role }; }
   const q = "name='" + CFG.fileName + "' and trashed=false";
   const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent(q) + "&fields=files(id,version,modifiedTime,owners(emailAddress),parents)&pageSize=20&orderBy=modifiedTime desc");
   const files = j.files || [];
   return files.find(f => (f.owners || []).some(o => lc(o.emailAddress) === CFG.dataOwner)) || null;
 }
-async function readRemote(){
-  const r = await gfetch(API + "/drive/v3/files/" + remote.fileId + "?alt=media");
-  if(!r.ok) throw new Error("Could not read the data file (" + r.status + ")");
-  const j = await r.json();
+function checkFile(j){
   if(j && typeof j === "object" && j.schema && j.schema > SCHEMA){ status("The data file was saved by a newer MY TOOL — reload the app", "bad"); throw new Error("newer data schema " + j.schema); }
   if(j && typeof j !== "object" || Array.isArray(j)) throw new Error("data file is not readable");
   return j;
 }
+async function readRemote(){
+  if(viaGw()){ const m = await gw("read"); remote.version = m.version; return checkFile(m.file); }
+  const r = await gfetch(API + "/drive/v3/files/" + remote.fileId + "?alt=media");
+  if(!r.ok) throw new Error("Could not read the data file (" + r.status + ")");
+  const j = await r.json();
+  return checkFile(j);
+}
 async function metaVersion(){
+  if(viaGw()){ const m = await gw("meta"); return { version: m.version, lastModifyingUser: { emailAddress: m.savedBy, displayName: m.savedBy } }; }
   const j = await gjson(API + "/drive/v3/files/" + remote.fileId + "?fields=version,modifiedTime,lastModifyingUser(emailAddress,displayName)");
   return j;
 }
 const SCHEMA = 1;   /* data-file schema; raise only with a tested migration, older apps refuse newer files */
 function packFile(){ return JSON.stringify({ format: "mytool-1", schema: SCHEMA, savedAt: nowIso(), savedBy: me ? me.email : "", data: store, tomb, revs, conflicts: conflicts.slice(-300) }); }
 async function writeRemote(){
-  const body = packFile(); lastPacked = body;
+  let body = packFile(); lastPacked = body;
+  if(viaGw()){
+    /* compare-and-swap: a save from an old version comes back with the newer file → merge it in and save again (at most 3 rounds) */
+    for(let round = 0; round < 3; round++){
+      let m;
+      try{ m = await gw("write", { base: remote.version, body }); }
+      catch(e){ if(e.status === 403){ const err = new Error("Not allowed: " + e.message); err.noRetry = true; throw err; } throw e; }
+      if(m.ok){ remote.version = m.version; return; }
+      if(m.conflict){ mergeRemote(checkFile(m.file)); remote.version = m.version; const again = packFile(); lastPacked = again; if(again === body) return; body = again; continue; }
+      throw new Error("Save failed");
+    }
+    throw new Error("The file keeps changing under us — will retry");
+  }
   const r = await gfetch("https://www.googleapis.com/upload/drive/v3/files/" + remote.fileId + "?uploadType=media&fields=version", { method: "PATCH", headers: { "Content-Type": "application/json" }, body });
   const j = await r.json().catch(() => ({}));
   if(!r.ok) throw new Error((j.error && j.error.message) || ("Save failed " + r.status));
@@ -403,6 +438,7 @@ async function push(){
     clearTimeout(pollT); pollT = setTimeout(poll, 6000);           // look again soon: catches a save that crossed with ours
   }catch(e){
     console.warn(e);
+    if(e.noRetry){ status(e.message + " — your changes stay on this device", "bad"); pushing = false; return false; }
     retryN = Math.min(retryN + 1, 5); const wait = 15000 * Math.pow(2, retryN - 1);   /* 15 s, 30 s, 1, 2, 4 min — then stays at 4 min */
     status("Not saved yet — will retry in " + Math.round(wait / 1000) + " s (" + e.message + ")", "warn");
     clearTimeout(retryT); retryT = setTimeout(push, wait);
@@ -438,6 +474,7 @@ async function dailyBackup(){
   if(DEMO || !CFG.admins.includes(me.email) || !remote.fileId) return;
   const day = new Date().toISOString().slice(0, 10);
   if(localStorage.getItem("mt_bk") === day) return;
+  if(viaGw()){ await gw("backupNow"); localStorage.setItem("mt_bk", day); return; }
   const folder = remote.folderId || null; if(!folder) return;
   const bkName = "MYTOOL-DATA backup " + day + ".json";
   const ex = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent("name contains 'MYTOOL-DATA backup' and trashed=false and '" + folder + "' in parents") + "&fields=files(id,name)&orderBy=name desc&pageSize=50");
@@ -475,7 +512,7 @@ async function start(){
     try{ f = await findDataFile(); }
     catch(e){ if(!c) throw e; }
     if(f){
-      remote.fileId = f.id; remote.folderId = (f.parents || [])[0] || null;
+      remote.fileId = f.id; remote.folderId = viaGw() ? null : ((f.parents || [])[0] || null);
       const rj = await readRemote(); mergeRemote(rj); remote.version = f.version;
       if(Object.keys(dirty).length) schedulePush();
     }else if(!c){
@@ -551,6 +588,12 @@ const assets = {
       const url = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(file); });
       const id = "a" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); assetMem[id] = url; await kvSet("asset:" + id, url); return { id, url };
     }
+    if(file.size > 20 * 1024 * 1024) throw new Error("This file is bigger than 20 MB — attach a smaller copy or a link");
+    if(viaGw()){
+      const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1] || ""); r.onerror = () => rej(r.error); r.readAsDataURL(file); });
+      const j = await gw("upload", { name: file.name || "file", mime: file.type || "application/octet-stream", b64 });
+      return { id: "drive:" + j.id, url: j.url };
+    }
     if(!remote.filesFolderId){
       const parent = remote.folderId || (await findOrCreateFolder(CFG.folderName, null, me.email === CFG.dataOwner));
       remote.filesFolderId = await findOrCreateFolder(CFG.filesFolder, parent, true);
@@ -581,6 +624,17 @@ window.MYTOOL = {
   get me(){ return me; }, get st(){ return lastSt; },
   async reauth(){ await requestToken(""); await push(); }, demo: DEMO, signOut, cfg: CFG,
   async syncNow(){ await push(); await poll(); },
+  get gateway(){ return viaGw() ? GW : ""; },
+  /* admin: point this device at the data gateway (tools/gateway.gs). Checks it answers for this account before switching; "" goes back to direct Drive */
+  async setGateway(url){
+    url = String(url || "").trim();
+    if(!CFG.admins.includes(me.email)) throw new Error("only an admin can change the gateway");
+    if(url){ if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url)) throw new Error("That is not an Apps Script web-app URL (…/macros/s/…/exec)");
+      const keep = GW; GW = url; try{ const m = await gw("meta"); if(!m.exists) throw new Error("the gateway sees no data file"); }catch(e){ GW = keep; throw new Error("Gateway check failed: " + e.message); } }
+    try{ if(url) localStorage.setItem("mt_gw", url); else localStorage.removeItem("mt_gw"); }catch(_){}
+    location.reload();
+  },
+  async lockDataFolder(){ if(!viaGw()) throw new Error("switch to the gateway first"); return (await gw("revoke")).removed || []; },
   async pullNow(){ if(!pushing && !polling){ remote.version = remote.version; await poll(); } },
   pending(){ return Object.keys(dirty).length; },
   /* two people changed the same thing at the same time — listed in Alerts until someone checks and dismisses it */
@@ -589,6 +643,7 @@ window.MYTOOL = {
   /* version history: the daily backup copies in the data folder (newest first) */
   async listBackups(){
     if(DEMO) return [];
+    if(viaGw()) return (await gw("backups")).list || [];
     const folder = remote.folderId; if(!folder) return [];
     /* copies made by the app (in the data folder) and by the nightly Apps Script (in its "backups" subfolder) */
     const sub = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent("name = 'backups' and mimeType = 'application/vnd.google-apps.folder' and trashed=false and '" + folder + "' in parents") + "&fields=files(id)");
@@ -597,13 +652,13 @@ window.MYTOOL = {
     const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent(q) + "&fields=files(id,name,modifiedTime,size,parents)&orderBy=name desc&pageSize=200");
     const seen = new Set(); return (j.files || []).filter(f => !seen.has(f.name) && seen.add(f.name)).map(f => ({ ...f, nightly: !(f.parents || []).includes(folder) }));
   },
-  async readBackup(id){ const r = await gfetch(API + "/drive/v3/files/" + id + "?alt=media"); if(!r.ok) throw new Error("Could not read the backup (" + r.status + ")"); const j = await r.json(); return j.data || j; },
+  async readBackup(id){ if(viaGw()){ const j = (await gw("backupRead", { id })).file; return j.data || j; } const r = await gfetch(API + "/drive/v3/files/" + id + "?alt=media"); if(!r.ok) throw new Error("Could not read the backup (" + r.status + ")"); const j = await r.json(); return j.data || j; },
   async restoreFromDrive(id){
     if(DEMO) throw new Error("demo mode");
     if(!CFG.admins.includes(me.email)) throw new Error("only an admin can restore");
     const data = await this.readBackup(id); if(!data || !data.setup) throw new Error("This backup file is not complete");
     /* safety copy of today's data first, so the restore itself can be undone */
-    await gjson(API + "/drive/v3/files/" + remote.fileId + "/copy?fields=id", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "MYTOOL-DATA before-restore " + nowIso().slice(0, 16).replace(":", "") + ".json", parents: [remote.folderId] }) });
+    if(viaGw()) await gw("snapshot"); else await gjson(API + "/drive/v3/files/" + remote.fileId + "/copy?fields=id", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "MYTOOL-DATA before-restore " + nowIso().slice(0, 16).replace(":", "") + ".json", parents: [remote.folderId] }) });
     for(const c of Object.keys(store)) for(const id2 of Object.keys(store[c])) if(!(data[c] && data[c][id2])){ dirty[c + "/" + id2] = ++editSeq; tomb[c + "/" + id2] = nowIso(); bumpRev(c + "/" + id2); }
     store = clone(data);
     for(const c of Object.keys(store)) for(const id2 of Object.keys(store[c])){ dirty[c + "/" + id2] = ++editSeq; bumpRev(c + "/" + id2); }
@@ -615,7 +670,8 @@ window.MYTOOL = {
   },
   /* activity older than N days → yearly archive file in Drive ("MYTOOL-LOG archive 2026.json"); keeps the main file small and fast */
   async archiveLog(days){
-    if(DEMO || !CFG.admins.includes(me.email) || !remote.folderId) return 0;
+    if(DEMO || !CFG.admins.includes(me.email)) return 0;
+    if(!remote.folderId){ try{ remote.folderId = await findOrCreateFolder(CFG.folderName, null, false); }catch(_){} if(!remote.folderId) return 0; }
     const cut = new Date(Date.now() - (days || 180) * 864e5).toISOString();
     const old = Object.values(store.log || {}).filter(e => e && e.at && e.at < cut); if(!old.length) return 0;
     const byYear = {}; old.forEach(e => (byYear[e.at.slice(0, 4)] = byYear[e.at.slice(0, 4)] || []).push(e));
@@ -661,6 +717,7 @@ window.MYTOOL = {
   async shareWith(email, role){
     if(DEMO) throw new Error("demo mode");
     if(me.email !== CFG.dataOwner && !CFG.admins.includes(me.email)) throw new Error("only an admin can share");
+    if(viaGw()){ await gw("share", { email, role: role || "writer" }); return true; }   /* attachments folder only — the data stays private to the owner */
     const folder = remote.folderId || (await findOrCreateFolder(CFG.folderName, null, false));
     if(!folder) throw new Error("data folder not found");
     await gjson(API + "/drive/v3/files/" + folder + "/permissions?sendNotificationEmail=false", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: role || "writer", type: "user", emailAddress: email }) });
@@ -3162,7 +3219,13 @@ function sUsers(){const us=SET().users||[];const roles=items("role").map(r=>[r.i
  const PERMS=[["setup","Setup"],["approve","Approve payments"],["bank","See bank details"],["deleteAny","Trash any record"],["edit","Edit records"],["create","Create records"],["export","Export"]];const RR=SET().roles||{};const roleIds=[...new Set([...items("role",{all:true}).map(r=>r.id),...Object.keys(RR)])];
  const mrows=roleIds.map(r=>`<tr><td><b>${esc(L("role",r)||r)}</b> <span class="status num">${esc(r)}</span></td>${PERMS.map(([k])=>`<td style="text-align:center"><input type="checkbox" data-sp="roles.${esc(r)}.${k}" ${RR[r]?.[k]?"checked":""} aria-label="${esc(L("role",r)||r)} can ${k}"></td>`).join("")}</tr>`).join("");
  return fsec("Users",`<div class="tbl"><table><tr><th>Name</th><th>Role</th><th>Department</th><th>Default company</th><th>Default bank</th><th>Active</th><th>Google email (login)</th></tr>${urows||'<tr><td colspan="7" class="empty">No users yet</td></tr>'}</table></div><p class="note" style="padding:10px 14px">Only people listed here (with their Google email) can open MY TOOL. Also share the Drive folder <b>MY TOOL – DATA</b> with the same email (Google enforces this). aemporio6 and maashiq123 are always Admin and can never be locked out. Untick Active to stop someone — their history stays.</p>`,`<button class="btn sm" data-sadd="user">+ User</button>`)+
+ (S.isOwner?gatewayCard():"")+
  fsec("What each role can do",`<div class="tbl"><table><tr><th>Role</th>${PERMS.map(([,l])=>`<th style="text-align:center">${esc(l)}</th>`).join("")}</tr>${mrows}</table></div><p class="note" style="padding:10px 14px">Roles come from the Role list (add one there). A user without "approve" has payments above the approval amount held as pending. Changing your own role takes effect after the next refresh.</p>`,`<button class="btn sm" data-setup="lists" data-listkey="role">Edit roles list</button>`)}
+/* ---- data gateway (admin): roles enforced at the data boundary, see tools/gateway.gs ---- */
+function gatewayCard(){const on=!!(window.MYTOOL&&MYTOOL.gateway);const demo=!window.MYTOOL||MYTOOL.demo;
+ return fsec("Data gateway (security)",`<div style="padding:10px 14px"><p class="note" style="padding:0 0 8px">${on?`<b style="color:var(--ok,#0b7a80)">ON</b> — every read and save goes through the gateway in ${esc(MYTOOL.cfg.dataOwner)}'s account. Roles are checked there, not only on this screen; nobody else needs Drive access to the data file.`:`<b>OFF</b> — people with access edit the data file in Google Drive directly. An editor could change it outside MY TOOL. Turn the gateway on to enforce roles at the data itself (set-up steps are in <code>tools/gateway.gs</code>).`}</p>
+ <div class="fx" style="gap:8px;flex-wrap:wrap;align-items:center"><input id="gw_url" class="in" style="flex:1;min-width:260px" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(on?MYTOOL.gateway:"")}" ${demo?"disabled":""} aria-label="Gateway URL"><button type="button" class="btn sm pri" data-act="gwuse" ${demo?"disabled":""}>${on?"Change":"Use gateway"}</button>${on?`<button type="button" class="btn sm" data-act="gwoff">Back to direct Drive</button><button type="button" class="btn sm" data-act="gwlock" title="Remove everyone else's Drive access to the data folder (admins stay)">Lock data folder</button>`:""}</div>
+ <p class="note" style="padding:8px 0 0">The gateway setting is per device (this browser). After turning it on, press <b>Lock data folder</b> once so old Drive sharing is removed; "Share data" then shares only the attachments folder.</p></div>`,"")}
 /* ---- aliases ---- */
 function sAliases(){const A=SET().aliases||{},SA=SET().skuAliases||{};
  const arows=Object.entries(A).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,v])=>`<div class="litem"><div class="n fx"><input data-aliaskey="${esc(k)}" value="${esc(k)}" aria-label="Short word" placeholder="short" style="max-width:140px;font-family:var(--f-data)"><span class="status">→</span><input data-aliasval="${esc(k)}" value="${esc(v)}" aria-label="Expands to" placeholder="expands to"></div><button class="btn sm danger" data-act="delalias" data-k="${esc(k)}">Delete</button></div>`).join("");
@@ -5661,6 +5724,9 @@ document.addEventListener("click",async e=>{if(e.target.matches("input[data-sel]
   case"syncnow":if(window.MYTOOL){if(MYTOOL.st?.k==="bad")await MYTOOL.reauth().catch(e=>toast(e.message));else await MYTOOL.syncNow().catch(()=>{})}render();break;
   case"signout":if(window.MYTOOL){if(MYTOOL.pending()&&!confirm("Some changes are still being saved. Sign out anyway?"))return;MYTOOL.signOut()}break;
   case"recnav":{const id=t.dataset.id;if(id&&S.drawer)openDoc(S.drawer.col,id);break}
+  case"gwuse":{const u=$("#gw_url")?.value||"";if(!u){toast("Paste the web-app URL first");break}try{toast("Checking the gateway…");await MYTOOL.setGateway(u)}catch(err){toast(err.message,{ms:8000})}break}
+  case"gwoff":{if(!confirm("Go back to direct Drive on this device? Roles will again be checked only in the app."))break;try{await MYTOOL.setGateway("")}catch(err){toast(err.message)}break}
+  case"gwlock":{if(!confirm("Remove every non-admin's Google Drive access to the data folder? They keep using MY TOOL through the gateway."))break;try{const r=await MYTOOL.lockDataFolder();toast(r.length?`Drive access removed for ${r.length}: ${r.join(", ")}`:"Nobody else had Drive access",{ms:8000})}catch(err){toast(err.message,{ms:8000})}break}
   case"shareuser":{if(!window.MYTOOL||MYTOOL.demo){toast("Sharing works in the live app");break}const em=String(ds.email||"").trim().toLowerCase();if(!/^[^@\s]+@[^@\s]+\.[a-z]+$/.test(em)){toast("Type a valid Google email first");break}try{await MYTOOL.shareWith(em,ds.ro==="viewer"?"reader":"writer");toast("Data folder shared with "+em)}catch(err){toast("Could not share: "+err.message)}break}
   case"recent":{const p=$("#recentp");if(!p)break;if(p.innerHTML){p.innerHTML="";break}const r=recentList();p.innerHTML=`<div class="recentp" role="menu"><h6>Recently opened</h6>${r.length?r.map(x=>{const d=(D[x.col]||[]).find(v=>(v.no||v.id)===x.id);return`<button type="button" data-open="${esc(x.col)}" data-id="${esc(x.id)}"><span class="ref">${esc(x.id)}</span><span class="lab">${esc(label(x.col,d))}</span></button>`}).join(""):`<p class="note" style="padding:8px 12px">Nothing yet — records you open show here.</p>`}</div>`;break}
   case"back":back();break;case"fwd":fwd();break;case"undo":await undo();break;case"redo":await redo();break;
@@ -5886,5 +5952,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='c60b98d326';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='770b2387d8';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
 </body></html>
