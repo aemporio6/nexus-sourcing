@@ -14,13 +14,14 @@ function mkRoute(ctx){
     const files = drive.files;
     const visible = f => f.owner === who || drive.perms.some(p => p.file === f.parent && p.email === who) || drive.perms.some(p => p.file === f.id && p.email === who);
     if (url.pathname === "/drive/v3/files" && req.method() === "GET") {
-      const q = url.searchParams.get("q") || ""; const name = (q.match(/name='([^']+)'/) || [])[1]; const folder = q.includes("folder");
-      const list = Object.values(files).filter(f => f.name === name && (folder ? f.folder : !f.folder) && visible(f));
-      return json({ files: list.map(f => ({ id: f.id, version: String(f.version), owners: [{ emailAddress: f.owner }], parents: [f.parent] })) });
+      const q = url.searchParams.get("q") || ""; drive.lastQ = q; const name = (q.match(/name\s*=\s*'([^']+)'/) || [])[1]; const contains = (q.match(/name contains '([^']+)'/) || [])[1]; const folder = q.includes("folder");
+      const list = Object.values(files).filter(f => (contains ? String(f.name).includes(contains) : f.name === name) && (folder ? f.folder : !f.folder) && visible(f));
+      return json({ files: list.map(f => ({ id: f.id, name: f.name, version: String(f.version), modifiedTime: new Date().toISOString(), size: String((f.content || "").length), owners: [{ emailAddress: f.owner }], parents: [f.parent] })) });
     }
     if (url.pathname === "/drive/v3/files" && req.method() === "POST") { const b = JSON.parse(req.postData()); const id = "F" + (++drive.n); files[id] = { id, name: b.name, folder: true, owner: who, parent: (b.parents || [])[0], version: 1 }; return json({ id }); }
     let m;
     if ((m = url.pathname.match(/^\/drive\/v3\/files\/([^/]+)\/permissions$/))) { const b = JSON.parse(req.postData()); drive.perms.push({ file: m[1], email: b.emailAddress, role: b.role }); return json({ id: "p" + drive.perms.length }); }
+    if ((m = url.pathname.match(/^\/drive\/v3\/files\/([^/]+)\/copy$/))) { const f = files[m[1]]; if (!f || !visible(f)) return json({ error: { message: "not found" } }, 404); const b = JSON.parse(req.postData()); const id = "F" + (++drive.n); files[id] = { id, name: b.name, owner: f.owner, parent: (b.parents || [f.parent])[0], version: 1, content: f.content, by: who }; return json({ id }); }
     if ((m = url.pathname.match(/^\/drive\/v3\/files\/([^/]+)$/))) {
       const f = files[m[1]]; if (!f || !visible(f)) return json({ error: { message: "not found" } }, 404);
       if (url.searchParams.get("alt") === "media") return route.fulfill({ status: 200, contentType: "application/json", body: f.content });
@@ -81,6 +82,17 @@ function mkRoute(ctx){
   let M = await open("maashiq123@gmail.com"); await M.p.waitForSelector("#mt_signin"); await M.p.click("#mt_signin");
   await M.p.waitForFunction(() => { try { return S.ready } catch (e) { return false } }, null, { timeout: 20000 });
   ok(await M.p.evaluate(() => S.realRole) === "owner", "maashiq123 always Owner (never locked out)");
+  // backup + restore, proven on the (fake) Drive: a daily copy exists, restoring it brings the old data back and makes a before-restore copy first
+  await A.p.evaluate(() => { localStorage.removeItem("mt_bk"); return MYTOOL.syncNow(); }); await A.p.waitForTimeout(1500);
+  const bk = Object.values(drive.files).filter(f => /MYTOOL-DATA backup/.test(f.name)); ok(bk.length === 1, "exactly one daily backup copy made in Drive, by whichever admin came first (" + bk.map(f => f.name).join(", ") + ")");
+  const snapNote = JSON.parse(bk[0].content).data.parties[Object.keys(JSON.parse(bk[0].content).data.parties)[0]].note;
+  await A.p.evaluate(() => updateDoc("parties", D.parties[0].code, { note: "after-backup-edit" }, "t")); await A.p.waitForTimeout(2500);
+  ok(drive.files[dataFile.id].content.includes("after-backup-edit"), "a later edit is in the live file");
+  const list = await A.p.evaluate(() => MYTOOL.listBackups()); ok(list.length >= 1 && list[0].name === bk[0].name, "Version history lists the backup");
+  await A.p.evaluate(id => MYTOOL.restoreFromDrive(id).catch(e => e.message), list[0].id); await A.p.waitForTimeout(3000);
+  const live2 = JSON.parse(drive.files[dataFile.id].content);
+  ok(live2.data.parties[Object.keys(live2.data.parties)[0]].note === snapNote && !drive.files[dataFile.id].content.includes("after-backup-edit"), "restore put the backup's data back into the live file");
+  ok(Object.values(drive.files).some(f => /before-restore/.test(f.name) && f.content.includes("after-backup-edit")), "a before-restore copy holds the pre-restore data (restore itself can be undone)");
   ok(A.errs.length === 0 && T.errs.length === 0 && M.errs.length === 0, "no page errors " + JSON.stringify([...A.errs, ...T.errs, ...M.errs]).slice(0, 300));
   await b.close(); console.log(fails ? fails + " FAILED" : "ALL PASS"); process.exit(fails ? 1 : 0);
 })();
