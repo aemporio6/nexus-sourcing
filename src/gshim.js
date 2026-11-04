@@ -12,13 +12,13 @@ const CFG = {
   fileName: "MYTOOL-DATA.json",
   filesFolder: "MY TOOL – FILES",
   pollMs: 45000,
-  gateway: ""                                   // Apps Script data gateway URL (tools/gateway.gs). Empty = direct Drive. Admins can set one per device with MYTOOL.setGateway(url)
+  gateway: "https://script.google.com/macros/s/AKfycby2Gxcqs4YbxJTLmthkCjVToVWbmAaXyiea4lRp-wMhJsuDfmQnIFZzaIroQh8l4bZFUA/exec",   // Apps Script data gateway URL (tools/gateway.gs). Empty = direct Drive. Admins can set one per device with MYTOOL.setGateway(url)
 };
 window.MYTOOL_CFG = CFG;
 const DEMO = /[?&]demo\b/.test(location.search) || location.protocol === "file:";
 const API = "https://www.googleapis.com";
 /* ---------------- data gateway (roles enforced at the data boundary; tools/gateway.gs) ---------------- */
-let GW = ""; try{ GW = localStorage.getItem("mt_gw") || CFG.gateway || ""; }catch(_){ GW = CFG.gateway || ""; }
+let GW = "", gwFallback = ""; try{ const g = localStorage.getItem("mt_gw"); GW = g === "off" ? "" : (g || CFG.gateway || ""); }catch(_){ GW = CFG.gateway || ""; }   /* "off" = this device uses Drive directly */
 const viaGw = () => !DEMO && !!GW;
 async function gw(op, extra){
   for(let attempt = 0; attempt < 2; attempt++){
@@ -156,7 +156,15 @@ async function findOrCreateFolder(name, parent, create){
   return f.id;
 }
 async function findDataFile(){
-  if(viaGw()){ const m = await gw("meta"); if(!m.exists) return null; remote.gw = true; return { id: "gateway", version: m.version, parents: ["gateway"], role: m.role }; }
+  if(viaGw()){
+    let m;
+    try{ m = await gw("meta"); }
+    catch(e){ /* gateway down or mis-deployed: admins (who have Drive access anyway) carry on directly so nobody is stuck; others see the reason */
+      if(CFG.admins.includes(me.email) && e.status !== 401 && e.status !== 403){ GW = ""; gwFallback = e.message; console.warn("gateway fallback:", e.message); }
+      else throw new Error("Gateway: " + e.message);
+    }
+    if(GW){ if(!m.exists) return null; remote.gw = true; return { id: "gateway", version: m.version, parents: ["gateway"], role: m.role }; }
+  }
   const q = "name='" + CFG.fileName + "' and trashed=false";
   const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent(q) + "&fields=files(id,version,modifiedTime,owners(emailAddress),parents)&pageSize=20&orderBy=modifiedTime desc");
   const files = j.files || [];
@@ -531,7 +539,7 @@ async function start(){
     }
     await saveCache();
     ungate(); readyRes(); poll();
-    status("Synced", "ok");
+    status(gwFallback ? "Gateway not reachable (" + gwFallback + ") — using Drive directly on this device" : "Synced", gwFallback ? "warn" : "ok");
   }catch(e){
     console.error(e);
     gate('<p class="mt_bad">' + esc(e.message || e) + '</p><button type="button" class="mt_btn" id="mt_retry">Try again</button> <button type="button" class="mt_btn ghost" id="mt_out">Use another account</button>');
@@ -633,7 +641,7 @@ window.MYTOOL = {
     if(!CFG.admins.includes(me.email)) throw new Error("only an admin can change the gateway");
     if(url){ if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url)) throw new Error("That is not an Apps Script web-app URL (…/macros/s/…/exec)");
       const keep = GW; GW = url; try{ const m = await gw("meta"); if(!m.exists) throw new Error("the gateway sees no data file"); }catch(e){ GW = keep; throw new Error("Gateway check failed: " + e.message); } }
-    try{ if(url) localStorage.setItem("mt_gw", url); else localStorage.removeItem("mt_gw"); }catch(_){}
+    try{ localStorage.setItem("mt_gw", url || "off"); }catch(_){}
     location.reload();
   },
   async lockDataFolder(){ if(!viaGw()) throw new Error("switch to the gateway first"); return (await gw("revoke")).removed || []; },

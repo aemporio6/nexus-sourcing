@@ -39,7 +39,7 @@ function mkRoute(ctx){
 (async () => {
   const b = await chromium.launch(); let fails = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if (!c) fails++; };
   const open = async (who) => {
-    const ctx = await b.newContext({ viewport: { width: 1280, height: 800 } }); await ctx.addInitScript(w => { window.__who = w; }, who);
+    const ctx = await b.newContext({ viewport: { width: 1280, height: 800 } }); await ctx.addInitScript(w => { window.__who = w; try{ localStorage.setItem("mt_gw", "off"); }catch(_){} }, who);
     await ctx.route(/fonts\.(googleapis|gstatic)/, r => r.abort()); await ctx.route(/accounts\.google\.com|googleapis\.com/, mkRoute());
     const p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
     await p.goto("http://localhost:8098/index.html"); return { ctx, p, errs };
