@@ -941,6 +941,8 @@ th{text-align:left;background:var(--soft);padding:7px 9px;font-weight:600;white-
 .mlogo{display:none;border-radius:50%;flex:none}@media (max-width:860px){.brand img{width:32px;height:32px}.mlogo{display:block}}
 .cfbox{margin:6px 0 2px;overflow-x:auto}.cft{border-collapse:collapse;font-size:12.5px;min-width:320px}.cft th,.cft td{padding:3px 8px;border-bottom:1px solid var(--line,#e3e8ea);text-align:left}.cft th{font-weight:600;color:var(--muted,#5b6b70)}
 .recon tr.bad td{background:#fff4f2}.recon tr.bad td:first-child{border-left:3px solid var(--brand-red,#d7262e)}
+/* phones and tablets: every tap target at least 40px, inputs 44px, no accidental zoom (16px inputs) */
+@media (pointer:coarse){.btn,.ib,.chipb,.rb,.row,.related button,.tabbar button,.mi,[role="menuitem"]{min-height:40px}.btn.sm{min-height:36px;padding-top:6px;padding-bottom:6px}.in,input:not([type=checkbox]):not([type=radio]),select,textarea{min-height:44px;font-size:16px}input[type=checkbox],input[type=radio]{width:22px;height:22px}.lhead{display:none}}
 </style>
 <div class="app">
   <aside class="rail" id="rail"></aside>
@@ -5738,6 +5740,18 @@ openPO=(function(orig){return function(p){const r=orig(p);try{const x=docOf("pur
 ["openShip","openPay","openInsp","openReceipt","openProduct","openParty","openCredit","openMove"].forEach(fn=>{if(typeof window[fn]!=="function")return;const col={openShip:"shipments",openPay:"payments",openInsp:"inspections",openReceipt:"receipts",openProduct:"products",openParty:"parties",openCredit:"credits",openMove:"moves"}[fn];
  window[fn]=(function(orig){return function(x){const r=orig(x);try{const d=docOf(col,x);if(r&&d){const h=overridesBlock(d);if(h){const i=r.body.indexOf('<div class="kv');r.body=i>0?r.body.slice(0,i)+h+r.body.slice(i):r.body+h}}}catch(e){console.warn(e)}return r}})(window[fn])});
 
+/* ---------- Daily entry: Save & add another, bigger touch targets on phones, clear save result ----------
+   "Save & add another" saves the record and opens a fresh form of the same kind with the same party / kind / company / currency,
+   so a batch of entries needs no re-typing. Works for every form in CREATE_REG. */
+formShell=(function(orig){return function(form){let h=orig(form);try{const d=S.drawer;if(d&&!d.ctx.edit&&form!=="count"){h=h.replace(`<button class="btn pri" data-act="save" data-k="${form}">`,`<button class="btn" data-act="saveadd" data-k="${form}" title="Save, then start another ${form} with the same party / kind">Save &amp; add another</button><button class="btn pri" data-act="save" data-k="${form}">`)}}catch(e){console.warn(e)}return h}})(formShell);
+const KEEP_FOR_NEXT={purchase:["party","kind","account","cur","date","incoterm","terms"],payment:["party","account","bank","cur","date","direction"],shipment:["party","mode","date","cur"],inspection:["party","date"],receive:["loc","date"],move:["type","from","to","date"],credit:["party","cur","date"],product:["brand","category","supplierCode"],party:["type","country","cur"]};
+document.addEventListener("click",async e=>{const b=e.target.closest('[data-act="saveadd"]');if(!b||!S.drawer?.form)return;e.preventDefault();e.stopImmediatePropagation();
+ const k=S.drawer.form;const keep={};(KEEP_FOR_NEXT[k]||[]).forEach(f=>{try{const v=val(f);if(v!=null&&v!=="")keep[f]=v}catch(_){}});
+ b.disabled=true;const sb=$('.df [data-act="save"]');if(sb)sb.disabled=true;
+ try{await freshNumberBeforeSave(k);await SAVE[k]();if(S.drawer&&S.drawer.form===k){b.disabled=false;if(sb)sb.disabled=false;return}/* not saved (validation shown) */
+  openForm(k,{...keep,force:true});setTimeout(()=>{Object.entries(keep).forEach(([f,v])=>{try{if(document.getElementById("f_"+f)&&(val(f)==null||val(f)===""))setv(f,v)}catch(_){}});toast("Saved — next one ready")},60)}
+ catch(err){console.error(err);toast("Could not save: "+(err.message||err));b.disabled=false;if(sb)sb.disabled=false}},true);
+
 /* ===================== events & boot v3 ===================== */
 const FORM_FOR_COL={purchases:"purchase",shipments:"shipment",payments:"payment",inspections:"inspection",receipts:"receive",moves:"move",credits:"credit",products:"product",parties:"party"};
 function createMenu(date){const items_=CREATE_REG.map(c=>[c.k,c.l,c.hint]);/* one list: the same entries appear in + Create and in each module's menu */
@@ -6001,5 +6015,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='f028321977';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='80349c355e';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
 </body></html>

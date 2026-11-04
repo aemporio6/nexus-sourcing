@@ -1,0 +1,11 @@
+/* ---------- Daily entry: Save & add another, bigger touch targets on phones, clear save result ----------
+   "Save & add another" saves the record and opens a fresh form of the same kind with the same party / kind / company / currency,
+   so a batch of entries needs no re-typing. Works for every form in CREATE_REG. */
+formShell=(function(orig){return function(form){let h=orig(form);try{const d=S.drawer;if(d&&!d.ctx.edit&&form!=="count"){h=h.replace(`<button class="btn pri" data-act="save" data-k="${form}">`,`<button class="btn" data-act="saveadd" data-k="${form}" title="Save, then start another ${form} with the same party / kind">Save &amp; add another</button><button class="btn pri" data-act="save" data-k="${form}">`)}}catch(e){console.warn(e)}return h}})(formShell);
+const KEEP_FOR_NEXT={purchase:["party","kind","account","cur","date","incoterm","terms"],payment:["party","account","bank","cur","date","direction"],shipment:["party","mode","date","cur"],inspection:["party","date"],receive:["loc","date"],move:["type","from","to","date"],credit:["party","cur","date"],product:["brand","category","supplierCode"],party:["type","country","cur"]};
+document.addEventListener("click",async e=>{const b=e.target.closest('[data-act="saveadd"]');if(!b||!S.drawer?.form)return;e.preventDefault();e.stopImmediatePropagation();
+ const k=S.drawer.form;const keep={};(KEEP_FOR_NEXT[k]||[]).forEach(f=>{try{const v=val(f);if(v!=null&&v!=="")keep[f]=v}catch(_){}});
+ b.disabled=true;const sb=$('.df [data-act="save"]');if(sb)sb.disabled=true;
+ try{await freshNumberBeforeSave(k);await SAVE[k]();if(S.drawer&&S.drawer.form===k){b.disabled=false;if(sb)sb.disabled=false;return}/* not saved (validation shown) */
+  openForm(k,{...keep,force:true});setTimeout(()=>{Object.entries(keep).forEach(([f,v])=>{try{if(document.getElementById("f_"+f)&&(val(f)==null||val(f)===""))setv(f,v)}catch(_){}});toast("Saved — next one ready")},60)}
+ catch(err){console.error(err);toast("Could not save: "+(err.message||err));b.disabled=false;if(sb)sb.disabled=false}},true);
