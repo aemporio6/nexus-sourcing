@@ -4,7 +4,7 @@
    2. Run `setup` once (menu ▶ Run → setup). Allow the Drive permission when asked.
    3. Done: every day at ~03:00 a copy "MYTOOL-DATA backup YYYY-MM-DD.json" is made in "MY TOOL – DATA/backups",
       the copy is read back and checked (valid JSON, same size), old copies are thinned (30 daily, 12 weekly, all monthly),
-      and if anything fails an email goes to the owner.
+      and if anything fails an email goes to the owner. Every Monday a short Data health summary email is sent too.
    Nothing else is changed. The app's own same-day copy (made while an admin uses the app) stays as a second line. */
 var FOLDER = "MY TOOL – DATA", FILE = "MYTOOL-DATA.json", ALERT_TO = "aemporio6@gmail.com";
 
@@ -14,7 +14,22 @@ function setup(){
   dailyBackup();
 }
 
+/* Monday morning: a short Data health email (score, serious issues, top problems) from the summary MY TOOL saves each day */
+function weeklyHealthMail(force){
+  try{
+    var d = new Date(); if(!force && d.getDay() !== 1) return;          // 1 = Monday
+    var folder = DriveApp.getFoldersByName(FOLDER); if(!folder.hasNext()) return; folder = folder.next();
+    var src = folder.getFilesByName(FILE); if(!src.hasNext()) return;
+    var j = JSON.parse(src.next().getBlob().getDataAsString()); var main = j.data && j.data.setup && (j.data.setup.main || j.data.setup) || {}; var h = main.healthSummary;
+    if(!h){ MailApp.sendEmail(ALERT_TO, "MY TOOL weekly: no health summary yet", "Open MY TOOL as an admin once so Data health can run; the summary is then saved daily."); return; }
+    var lines = ["MY TOOL — weekly Data health (" + h.day + ")", "", "Score: " + h.score + "%", "Issues: " + h.issues + " (serious: " + h.serious + ") · Alerts: " + h.alerts, "", "Top problems:"];
+    (h.top || []).forEach(function(t){ lines.push(" - " + t.l + ": " + t.n); });
+    lines.push("", "Records: " + Object.keys(h.records || {}).map(function(k){ return k + " " + h.records[k]; }).join(" · "), "", "Open: https://aemporio6.github.io/nexus-sourcing/#/health");
+    MailApp.sendEmail(ALERT_TO, "MY TOOL weekly health: " + h.score + "% · " + h.serious + " serious", lines.join("\n"));
+  }catch(e){ MailApp.sendEmail(ALERT_TO, "MY TOOL weekly health mail FAILED", String(e && e.message || e)); }
+}
 function dailyBackup(){
+  weeklyHealthMail(false);
   try{
     var folder = DriveApp.getFoldersByName(FOLDER); if(!folder.hasNext()) throw new Error("folder not found: " + FOLDER);
     folder = folder.next();

@@ -8,7 +8,7 @@ const HEALTH_RULES=[
  ["pototal","Order total = its lines + extra lines"],["pomoney","Order money adds up (paid + credits + written off + balance = total)"],["poclosed","Closed orders owe nothing"],["dupi","A supplier PI number is used on one order (or on linked parts)"],
  ["shpo","Shipments point to real orders"],["shqty","Not more shipped than ordered"],["rcqty","Not more received than shipped / ordered"],["shcur","Freight cost has a currency"],
  ["stockneg","No product below 0 in stock"],["movesku","Stock moves point to real products"],["prodsup","Active products have a supplier and price"],["partydup","No party entered twice"],
- ["cur","Currencies are in Setup"],["rates","An exchange rate exists for every currency in use"],["sync","No unchecked changes made by two people at the same time"]];
+ ["cur","Currencies are in Setup"],["rates","An exchange rate exists for every currency in use"],["sync","No unchecked changes made by two people at the same time"],["bankstmt","A bank / Wise statement was matched in the last 35 days"]];
 let _health=null,_healthAt=0;
 function healthRun(force){if(!force&&_health&&Date.now()-_healthAt<4000)return _health;const iss=[];const add=(rule,sev,text,col,id,fix)=>iss.push({rule,sev,text,col,id,fix});const T=today();const tol=0.5;
  const cols=["purchases","shipments","payments","receipts","credits","inspections","moves"];
@@ -43,6 +43,7 @@ function healthRun(force){if(!force&&_health&&Date.now()-_healthAt<4000)return _
  const pn={};live(D.parties).forEach(x=>{const k=norm(x.name||"")+"|"+norm(x.company||"")+"|"+x.type;if(pn[k])add("partydup",1,`${x.code} and ${pn[k]} · same name and company`,"parties",x.code);else pn[k]=x.code});
  const recent=addDays(T,-60);const used=new Set([...pays.filter(x=>(x.date||"")>=recent).map(x=>x.cur),...live(D.purchases).filter(p=>(p.date||"")>=recent).map(p=>p.cur)].filter(c=>c&&c!=="GBP"));used.forEach(c=>{if(rateOn(T,c)==null)add("rates",2,`No ${c}→£ exchange rate`,null,null,{k:"rates"})});
  if(window.MYTOOL&&MYTOOL.conflicts)MYTOOL.conflicts().forEach(x=>{const[c,id]=String(x.key||"").split("/");add("sync",2,x.kind==="field"?`${id} · ${x.other||"someone"} changed ${x.fields.join(", ")} at the same time as ${x.by||"you"} — the later value was kept: ${x.fields.map(f=>`${f}: ${short(x.theirs[f])} → ${short(x.mine[f])}`).join("; ")}`:(x.note||`${id} · changed by two people`),c,id,{k:"sync",at:x.at,key:x.key})});
+ {const lastBank=live(D.imports).filter(i=>i.kind==="bank").map(i=>(i.at||i.createdAt||"").slice(0,10)).sort().pop();const anyPay=pays.some(x=>(x.date||"")>=addDays(T,-35));if(anyPay&&(!lastBank||lastBank<addDays(T,-35)))add("bankstmt",1,lastBank?`Last bank statement matched ${fmtD(lastBank)} — import this month's Wise / WorldFirst / bank statement so every payment is confirmed against the bank`:"No bank statement has been matched yet — Import › a Wise / WorldFirst / bank CSV confirms payments against the bank",null,null,{k:"import"})}
  const failed=new Set(iss.map(i=>i.rule));_health={issues:iss,rules:HEALTH_RULES.map(([k,l])=>({k,l,ok:!failed.has(k),n:iss.filter(i=>i.rule===k).length})),at:nowIso()};_healthAt=Date.now();return _health}
 const short=v=>{const s=v==null?"(empty)":typeof v==="object"?JSON.stringify(v):String(v);return s.length>40?s.slice(0,40)+"…":s};
 /* Alerts: the serious ones (data that is wrong), not the reminders */
@@ -89,3 +90,9 @@ document.addEventListener("click",async e=>{const b=e.target.closest('[data-act=
  if(a==="errclear"){const db=await claude.use("db");for(const x of await appErrors())await db.collection("errors").doc(x.id).set({...x,cleared:nowIso()});render()}},true);
 /* owner device: archive activity older than 6 months once a day */
 setTimeout(function tick(){try{if(S.ready){if(can("setup")&&window.MYTOOL&&MYTOOL.archiveLog&&!MYTOOL.demo){let d="";try{d=localStorage.getItem("mt_arch")}catch(_){}if(d!==today())MYTOOL.archiveLog(180).then(n=>{try{localStorage.setItem("mt_arch",today())}catch(_){}if(n)logEv("setup","log","archive",`${n} activity entries older than 6 months moved to the yearly archive file in Drive`)}).catch(()=>{})}return}}catch(_){}setTimeout(tick,3000)},20000);
+
+/* a small daily summary of Data health goes into Setup (admins only, once a day, no undo) so the nightly script can email it every Monday */
+healthRun=(function(orig){return function(force){const h=orig(force);try{if(S.ready&&can("setup")&&!MYTOOL.demo&&h){const day=today();const cur=(D.setup&&D.setup.healthSummary)||{};if(cur.day!==day&&!S._hsBusy){S._hsBusy=true;const sev=iss=>iss.filter(i=>i.sev===2).length;const rulesOk=h.rules.filter(r=>r.ok).length;const score=Math.round(100*rulesOk/Math.max(1,h.rules.length));
+  const top=h.rules.filter(r=>!r.ok).sort((a,b)=>b.n-a.n).slice(0,8).map(r=>({l:r.l,n:r.n}));let alerts=0;try{alerts=attention().length}catch(_){}
+  const sum={day,at:nowIso(),score,issues:h.issues.length,serious:sev(h.issues),alerts,top,records:{purchases:live(D.purchases).length,payments:live(D.payments).length,shipments:live(D.shipments).length,products:live(D.products).length},by:uid||""};
+  setupPatchMany([[["healthSummary"],sum]],null,{noUndo:true,quiet:true,derived:true}).catch(()=>{}).finally(()=>{S._hsBusy=false})}}}catch(e){console.warn(e)}return h}})(healthRun);
