@@ -60,7 +60,7 @@ window.addEventListener("hashchange",()=>{try{if(Date.now()-(S._popAt||0)<400)re
 const NAV_INIT_HASH=location.hash;   /* the address the app was opened with (a bookmark / new tab), before anything changes it */
 setTimeout(function tick(){try{if(S.ready){const p=parseHash(NAV_INIT_HASH);if(p&&p.doc){if(!(S.drawer&&S.drawer.id===p.doc[1]))openDoc(p.doc[0],p.doc[1])}else if(p&&p.page&&PAGES.includes(p.page)&&(p.page!==S.view.k||Object.keys(p.f).length)){S.f[p.page]={...p.f};go(p.page,{},{force:true})}return}}catch(_){}setTimeout(tick,300)},300);
 /* other tabs of MY TOOL on this computer: when one saves, the others look for changes at once */
-try{const bc=new BroadcastChannel("mytool");bc.onmessage=ev=>{if(ev.data==="saved"&&window.MYTOOL&&MYTOOL.syncNow&&!MYTOOL.demo)MYTOOL.syncNow().catch(()=>{})};window.__mtBC=bc}catch(_){}
+try{const bc=new BroadcastChannel("mytool");bc.onmessage=ev=>{if(ev.data==="saved"&&window.MYTOOL&&MYTOOL.syncNow&&!MYTOOL.demo)MYTOOL.syncNow().catch(()=>{});if(ev.data==="arch"&&window.MYTOOL&&MYTOOL.reloadArchives)MYTOOL.reloadArchives().catch(()=>{})};window.__mtBC=bc}catch(_){}
 
 /* a new record's number is chosen when its form opens; someone else may have used it meanwhile. Just before saving: get the latest data
    (a second or two) and, if the number is now taken, move to the next free one — so two people rarely end up with the same number */

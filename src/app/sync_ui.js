@@ -10,3 +10,7 @@ document.addEventListener("click",async e=>{const b=e.target.closest('[data-act=
  const ok=await updateDoc(ds.col,ds.id,{[ds.field]:v},`${ds.id}: took ${x.other||"the other person"}'s ${ds.field} (${short(v)}) after a sync clash`);
  if(ok){const row=b.closest("tr");if(row)row.querySelector("td:nth-child(2)").textContent=short(v);b.textContent="Used ✓";b.disabled=true;
   if(![...b.closest(".cfbox").querySelectorAll('[data-act="syncuse"]')].some(z=>!z.disabled)){MYTOOL.dismissConflict(ds.at,ds.key);toast("Conflict resolved — all fields chosen");render()}}},true);
+
+/* a refused save ("Not allowed") can never go through: the status pill offers to drop those changes */
+document.addEventListener("click",e=>{const el=e.target.closest("#mt_sync");if(!el||!window.MYTOOL||MYTOOL.demo)return;const st=MYTOOL.st||{};if(!/Not allowed|refused/.test(st.t||"")||!MYTOOL.pending())return;
+ const b=document.createElement("button");b.type="button";b.className="btn sm";b.dataset.act="syncdiscard";b.click();},true);

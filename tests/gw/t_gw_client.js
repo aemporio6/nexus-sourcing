@@ -51,6 +51,7 @@ let calls = [];
   ok(!JSON.stringify(dataFile()).includes("va-hack"), "VA edit of an existing order refused by the gateway (file unchanged)");
   const st = await V.p.evaluate(() => MYTOOL.st.t); ok(/Not allowed: your role cannot change/.test(st), "VA sees 'Not allowed' status: " + st);
 
+  const dropped = await V.p.evaluate(() => MYTOOL.discardLocal()); ok(dropped > 0 && await V.p.evaluate(() => MYTOOL.pending()) === 0 && /Synced/.test(await V.p.evaluate(() => MYTOOL.st.t)), "refused changes can be dropped: " + dropped + " dropped, nothing pending, Synced");
   /* 3. compare-and-swap: admin and finance edit different records at the same time → both land */
   let F = await open("finance@x.com"); await F.p.waitForSelector("#mt_signin"); await F.p.click("#mt_signin"); await ready(F.p);
   const vBefore = +G.drive.props.v;
@@ -68,6 +69,12 @@ let calls = [];
   ok(opened[0] && /^(popup:blob:|download:proof)/.test(opened[0]), "clicking the attachment link opened it via the gateway (" + opened[0] + " · " + await V.p.evaluate(() => MYTOOL.st.t) + ")");
   ok(calls.some(c => c === "file:va@x.com") && calls.some(c => c === "upload:va@x.com"), "upload + file ops went through the gateway");
   const sh = await A.p.evaluate(() => MYTOOL.shareWith("va@x.com", "writer")); ok(sh === true && !calls.some(c => c.startsWith("share:")), "Share data is a no-op with the gateway (nothing to share)");
+  /* 3c. yearly archive through the gateway */
+  const can24 = await A.p.evaluate(() => MYTOOL.archivable(2024)); const n24 = Object.values(can24).reduce((t, v) => t + v, 0);
+  const ar = await A.p.evaluate(() => MYTOOL.archiveYear(2024).catch(e => ({ err: e.message }))); await A.p.waitForTimeout(2500);
+  ok(ar.moved === n24 && Object.values(G.drive.files).some(f => f.name === "MYTOOL-ARCHIVE-2024.json"), "admin archived 2024 through the gateway (" + ar.moved + " records) " + (ar.err || ""));
+  await V.p.evaluate(() => MYTOOL.syncNow()); await V.p.waitForTimeout(800); await V.p.evaluate(() => MYTOOL.reloadArchives()); await V.p.waitForTimeout(800);
+  ok(await V.p.evaluate(() => D.purchases.filter(p => p._arch === "2024").length) === can24.purchases, "VA sees the archived orders (read-only) through the gateway");
   /* 4. stranger */
   let N = await open("nobody@x.com"); await N.p.waitForSelector("#mt_signin"); await N.p.click("#mt_signin"); await N.p.waitForTimeout(2500);
   ok(await N.p.evaluate(() => /not allowed|Setup › Users/.test(document.body.textContent)), "stranger blocked by the gateway");

@@ -57,6 +57,9 @@ function handle(req){
     case "share":   needAdmin(who); return { ok: true, shared: shareFiles(req.email, req.role), email: email };
     case "revoke":  needAdmin(who); return { ok: true, removed: lockDataFolder(), email: email };
     case "file":    return fileOut(req.id, email);
+    case "archives": return { ok: true, list: listArchivesGw(), email: email };
+    case "archiveRead": { var af = DriveApp.getFileById(req.id); var okA = false, pit = af.getParents(); while(pit.hasNext()){ if(pit.next().getName() === FOLDER) okA = true; } if(!okA || af.getName().indexOf("MYTOOL-ARCHIVE-") !== 0) fail(403, "not an archive"); return { ok: true, file: JSON.parse(af.getBlob().getDataAsString()), email: email }; }
+    case "archiveWrite": { needAdmin(who); var yr = String(req.year || ""); if(!/^\d{4}$/.test(yr)) fail(400, "year?"); var nm = "MYTOOL-ARCHIVE-" + yr + ".json"; var fo = dataFolder(), fit = fo.getFilesByName(nm), af2 = fit.hasNext() ? fit.next() : null; var txt = typeof req.body === "string" ? req.body : JSON.stringify(req.body); JSON.parse(txt); if(af2) af2.setContent(txt); else af2 = fo.createFile(nm, txt, "application/json"); return { ok: true, id: af2.getId(), version: String(af2.getLastUpdated().getTime()), email: email }; }
     case "upload":  if(!(who.admin || who.perms.create || who.perms.edit)) fail(403, "your role cannot add files"); return upload(req, email);
     default: fail(400, "unknown op " + req.op);
   }
@@ -95,6 +98,7 @@ function bump(){ var v = version() + 1; PropertiesService.getScriptProperties().
 function stamp(){ return Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd HH-mm"); }
 function backupsFolder(){ var f = dataFolder(); var it = f.getFoldersByName("backups"); return it.hasNext() ? it.next() : f.createFolder("backups"); }
 function snapshot(cur, name, folder){ if(!cur) fail(404, "no data file"); return (folder || dataFolder()).createFile(name, cur.text, "application/json"); }
+function listArchivesGw(){ var out = [], it = dataFolder().getFiles(); while(it.hasNext()){ var f = it.next(); if(/^MYTOOL-ARCHIVE-\d{4}\.json$/.test(f.getName())) out.push({ id: f.getId(), name: f.getName(), version: String(f.getLastUpdated().getTime()) }); } return out; }
 function listBackups(){
   var out = [], seen = {}, folders = [dataFolder(), backupsFolder()];
   folders.forEach(function(fo, i){ var it = fo.getFiles(); while(it.hasNext()){ var f = it.next(); var n = f.getName(); if(n.indexOf("MYTOOL-DATA backup") !== 0 && n.indexOf("MYTOOL-DATA before-restore") !== 0) continue; if(seen[n]) continue; seen[n] = 1; out.push({ id: f.getId(), name: n, modifiedTime: f.getLastUpdated().toISOString(), size: String(f.getSize()), nightly: i === 1 }); } });

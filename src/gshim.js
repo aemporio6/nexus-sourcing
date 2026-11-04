@@ -472,6 +472,7 @@ async function poll(){
       if(who && lc(m.lastModifyingUser.emailAddress) !== (me && me.email)) status("Updated by " + who, "ok");
     }
     dailyBackup().catch(() => {}); /* once a day, even on days nothing is edited */
+    if(!window.__archAt || Date.now() - window.__archAt > 15 * 60000){ window.__archAt = Date.now(); loadArchives(); }
   }catch(e){ /* quiet; next poll */ }
   finally{
     polling = false;
@@ -493,7 +494,62 @@ async function dailyBackup(){
   localStorage.setItem("mt_bk", day);
 }
 
-/* ---------------- access check ---------------- */
+/* ---------------- yearly archives: closed records of past years live in their own read-only file ----------------
+   MYTOOL-ARCHIVE-YYYY.json in the data folder. The live file stays small; archived records are still loaded (read-only) so stock,
+   history and reports stay complete. Admin: MYTOOL.archiveYear(y) moves closed records out, MYTOOL.unarchiveYear(y) brings them back. */
+let arch = {};                 // year → { col: { id: doc } }
+let archMeta = {};             // year → { id, version }
+const ARCH_COLS = ["purchases", "shipments", "payments", "inspections", "receipts", "credits", "moves", "imports"];
+const archName = y => "MYTOOL-ARCHIVE-" + y + ".json";
+function archivedDoc(c, id){ for(const y of Object.keys(arch)){ const d = arch[y][c] && arch[y][c][id]; if(d) return d; } return null; }
+async function listArchives(){
+  if(DEMO) return [];
+  if(viaGw()) return (await gw("archives")).list || [];
+  const folder = remote.folderId || (await findOrCreateFolder(CFG.folderName, null, false)); if(!folder) return [];
+  const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent("name contains 'MYTOOL-ARCHIVE-' and trashed=false and '" + folder + "' in parents") + "&fields=files(id,name,version,modifiedTime)&pageSize=100");
+  return (j.files || []).filter(f => /^MYTOOL-ARCHIVE-\d{4}\.json$/.test(f.name)).map(f => ({ id: f.id, name: f.name, version: String(f.version || f.modifiedTime) }));
+}
+async function readArchive(f){
+  if(viaGw()) return (await gw("archiveRead", { id: f.id })).file;
+  const r = await gfetch(API + "/drive/v3/files/" + f.id + "?alt=media"); if(!r.ok) throw new Error("Could not read " + f.name); return await r.json();
+}
+async function writeArchive(y, body, existing){
+  const text = JSON.stringify(body);
+  if(viaGw()){ const j = await gw("archiveWrite", { year: y, body: text }); return { id: j.id, version: String(j.version) }; }
+  if(existing){ const r = await gfetch("https://www.googleapis.com/upload/drive/v3/files/" + existing.id + "?uploadType=media&fields=id,version", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: text }); const j = await r.json(); if(!r.ok) throw new Error("archive save failed"); return { id: j.id, version: String(j.version) }; }
+  const folder = remote.folderId || (await findOrCreateFolder(CFG.folderName, null, true));
+  const boundary = "mt" + Math.random().toString(36).slice(2);
+  const meta = { name: archName(y), mimeType: "application/json", parents: [folder], description: "MY TOOL archive " + y + " — read-only records of a closed year" };
+  const b = "--" + boundary + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" + JSON.stringify(meta) + "\r\n--" + boundary + "\r\nContent-Type: application/json\r\n\r\n" + text + "\r\n--" + boundary + "--";
+  const j = await gjson("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,version", { method: "POST", headers: { "Content-Type": "multipart/related; boundary=" + boundary }, body: b });
+  return { id: j.id, version: String(j.version) };
+}
+/* load every archive file (from the cache when its version is unchanged); runs after the live data so the app is usable at once */
+async function loadArchives(){
+  try{
+    const list = await listArchives(); const seen = new Set(); let changed = false;
+    for(const f of list){
+      const y = f.name.slice(15, 19); seen.add(y);
+      const c = await kvGet("arch:" + y);
+      if(c && c.version === f.version && c.data){ if(!arch[y]){ arch[y] = c.data; changed = true; } archMeta[y] = { id: f.id, version: f.version }; continue; }
+      const j = await readArchive(f); if(!j || typeof j !== "object") continue;
+      arch[y] = j.data || {}; archMeta[y] = { id: f.id, version: f.version }; await kvSet("arch:" + y, { version: f.version, data: arch[y] }); changed = true;
+    }
+    for(const y of Object.keys(arch)) if(!seen.has(y)){ delete arch[y]; delete archMeta[y]; await kvDel("arch:" + y); changed = true; }
+    if(changed) notifyAll();
+  }catch(e){ console.warn("archives:", e); }
+}
+const yearEnd = y => y + "-12-31";
+const docDate = (c, d) => d[{ purchases: "date", payments: "date", shipments: "dispatch", receipts: "date", credits: "date", moves: "date", inspections: "date", imports: "at" }[c]] || d.date || d.createdAt || "";
+/* which live records can leave for year y: closed/cancelled/historic orders dated ≤ y, and the money / shipments / receipts that belong only to such orders */
+function archivable(y){
+  const end = yearEnd(y), st = store, pick = {};
+  const po = st.purchases || {}; const keep = new Set();
+  Object.values(po).forEach(p => { const gone = String(docDate("purchases", p)).slice(0, 10) <= end && (["closed", "cancelled"].includes(p.status) || p.historic); if(!gone) keep.add(p.no || p.id); });
+  const refsKept = d => { const refs = []; (d.allocations || []).forEach(a => refs.push(a.ref)); (d.lines || []).forEach(l => { if(l.po) refs.push(l.po); }); (d.purchases || []).forEach(r => refs.push(r)); (d.pos || []).forEach(r => refs.push(r)); if(d.po) refs.push(d.po); return refs.some(r => keep.has(r)); };
+  for(const c of ARCH_COLS){ pick[c] = []; Object.values(st[c] || {}).forEach(d => { if(d.deletedAt) return; const dt = String(docDate(c, d)).slice(0, 10); if(!dt || dt > end) return; if(c === "purchases"){ if(!keep.has(d.no || d.id)) pick[c].push(d.id); } else if(!refsKept(d)) pick[c].push(d.id); }); }
+  return pick;
+}
 function allowedUser(){
   if(DEMO) return { role: "owner" };
   if(CFG.admins.includes(me.email)) return { role: "owner" };
@@ -538,7 +594,7 @@ async function start(){
       document.getElementById("mt_out").onclick = signOut; return;
     }
     await saveCache();
-    ungate(); readyRes(); poll();
+    ungate(); readyRes(); poll(); loadArchives();
     status(gwFallback ? "Gateway not reachable (" + gwFallback + ") — using Drive directly on this device" : "Synced", gwFallback ? "warn" : "ok");
   }catch(e){
     console.error(e);
@@ -572,14 +628,16 @@ function docRef(c, id){
   return {
     id,
     async get(){ await ready; const d = store[c] && store[c][id]; return { id, exists: !!d, data: () => d && clone(d) }; },
-    async set(d){ await ready; store[c] = store[c] || {}; store[c][id] = clone(d); touch(c, id); notify(c); },
-    async update(p){ await ready; store[c] = store[c] || {}; store[c][id] = { ...(store[c][id] || {}), ...clone(p) }; touch(c, id); notify(c); },
-    async delete(){ await ready; if(store[c]) delete store[c][id]; touch(c, id, true); notify(c); },
+    async set(d){ await ready; if(!(store[c] && store[c][id]) && archivedDoc(c, id)) throw new Error(id + " is archived (read-only) — Setup › Backup › Unarchive that year to change it"); store[c] = store[c] || {}; store[c][id] = clone(d); touch(c, id); notify(c); },
+    async update(p){ await ready; if(!(store[c] && store[c][id]) && archivedDoc(c, id)) throw new Error(id + " is archived (read-only) — Setup › Backup › Unarchive that year to change it"); store[c] = store[c] || {}; store[c][id] = { ...(store[c][id] || {}), ...clone(p) }; touch(c, id); notify(c); },
+    async delete(){ await ready; if(!(store[c] && store[c][id]) && archivedDoc(c, id)) throw new Error(id + " is archived (read-only)"); if(store[c]) delete store[c][id]; touch(c, id, true); notify(c); },
     onSnapshot(fn){ const run = () => { const d = store && store[c] && store[c][id]; fn({ id, exists: !!d, data: () => d && clone(d) }); }; (subs[c] = subs[c] || []).push(run); ready.then(() => setTimeout(run, 0)); return () => { subs[c] = (subs[c] || []).filter(x => x !== run); }; }
   };
 }
 function colRef(c){
-  const snap = () => { const docs = Object.values((store && store[c]) || {}).map(d => ({ id: d.id, exists: true, data: () => clone(d) })); return { docs, size: docs.length, empty: !docs.length }; };
+  const snap = () => { const live = (store && store[c]) || {}; const docs = Object.values(live).map(d => ({ id: d.id, exists: true, data: () => clone(d) }));
+    for(const y of Object.keys(arch)) for(const d of Object.values((arch[y] && arch[y][c]) || {})) if(!live[d.id]) docs.push({ id: d.id, exists: true, data: () => ({ ...clone(d), _arch: y }) });
+    return { docs, size: docs.length, empty: !docs.length }; };
   return {
     doc(id){ return docRef(c, id || Math.random().toString(36).slice(2)); },
     async add(d){ await ready; const id = Math.random().toString(36).slice(2); store[c] = store[c] || {}; store[c][id] = { ...clone(d), id }; touch(c, id); notify(c); return docRef(c, id); },
@@ -658,6 +716,48 @@ window.MYTOOL = {
       const keep = GW; GW = url; try{ const m = await gw("meta"); if(!m.exists) throw new Error("the gateway sees no data file"); }catch(e){ GW = keep; throw new Error("Gateway check failed: " + e.message); } }
     try{ localStorage.setItem("mt_gw", url || "off"); }catch(_){}
     location.reload();
+  },
+  /* archives */
+  async reloadArchives(){ await loadArchives(); },
+  archives(){ return Object.keys(arch).sort().map(y => ({ year: y, n: ARCH_COLS.reduce((t, c) => t + Object.keys((arch[y] && arch[y][c]) || {}).length, 0) })); },
+  archivable(y){ const p = archivable(String(y)); return Object.fromEntries(Object.entries(p).map(([c, ids]) => [c, ids.length])); },
+  async archiveYear(y){
+    y = String(y); if(DEMO) throw new Error("demo mode"); if(!CFG.admins.includes(me.email)) throw new Error("only an admin can archive");
+    if(+y >= new Date().getFullYear()) throw new Error("only past years can be archived");
+    if(Object.keys(dirty).length){ await push(); if(Object.keys(dirty).length) throw new Error("save the pending changes first"); }
+    const pick = archivable(y); const n = Object.values(pick).reduce((t, a) => t + a.length, 0); if(!n) throw new Error("nothing to archive for " + y);
+    /* 1. the archive file first (existing + new), verified by reading it back */
+    const list = await listArchives(); const ex = list.find(f => f.name === archName(y)); const prev = ex ? (await readArchive(ex)).data || {} : {};
+    const data = clone(prev); for(const c of ARCH_COLS){ data[c] = data[c] || {}; pick[c].forEach(id => { data[c][id] = clone(store[c][id]); }); }
+    const body = { format: "mytool-archive-1", schema: SCHEMA, year: y, savedAt: nowIso(), savedBy: me.email, data };
+    const w = await writeArchive(y, body, ex);
+    const back = await readArchive({ id: w.id, name: archName(y) }); for(const c of ARCH_COLS) for(const id of pick[c]) if(!(back.data && back.data[c] && back.data[c][id])) throw new Error("archive check failed for " + id + " — nothing was removed");
+    /* 2. only now leave the live file */
+    for(const c of ARCH_COLS) for(const id of pick[c]){ delete store[c][id]; const k = c + "/" + id; dirty[k] = ++editSeq; tomb[k] = nowIso(); bumpRev(k); }
+    arch[y] = back.data; archMeta[y] = { id: w.id, version: w.version }; await kvSet("arch:" + y, { version: w.version, data: arch[y] });
+    await saveCache(); notifyAll();
+    for(let i = 0; i < 4 && Object.keys(dirty).length; i++){ if(await push()) break; await new Promise(z => setTimeout(z, 2500)); }
+    try{ window.__mtBC && window.__mtBC.postMessage("arch"); }catch(_){}
+    return { year: y, moved: n, by: Object.fromEntries(Object.entries(pick).map(([c, a]) => [c, a.length])) };
+  },
+  async unarchiveYear(y){
+    y = String(y); if(DEMO) throw new Error("demo mode"); if(!CFG.admins.includes(me.email)) throw new Error("only an admin can unarchive");
+    const list = await listArchives(); const ex = list.find(f => f.name === archName(y)); if(!ex) throw new Error("no archive for " + y);
+    const j = await readArchive(ex); const data = (j && j.data) || {}; let n = 0;
+    for(const c of Object.keys(data)) for(const [id, d] of Object.entries(data[c])){ store[c] = store[c] || {}; store[c][id] = clone(d); const k = c + "/" + id; delete tomb[k]; dirty[k] = ++editSeq; bumpRev(k); forceMine.add(k); n++; }
+    await saveCache(); for(let i = 0; i < 4 && Object.keys(dirty).length; i++){ if(await push()) break; await new Promise(z => setTimeout(z, 2500)); }
+    if(Object.keys(dirty).length) throw new Error("brought back on this device but not yet saved — it will keep trying; the archive file is untouched until then");
+    await writeArchive(y, { format: "mytool-archive-1", schema: SCHEMA, year: y, savedAt: nowIso(), savedBy: me.email, emptied: true, data: {} }, ex);
+    delete arch[y]; delete archMeta[y]; await kvDel("arch:" + y); notifyAll();
+    try{ window.__mtBC && window.__mtBC.postMessage("arch"); }catch(_){}
+    return n;
+  },
+  /* throw away this device's unsaved changes that the gateway refused (or any unsent edits) and take Drive's version */
+  async discardLocal(){
+    if(DEMO) return 0; const n = Object.keys(dirty).length;
+    dirty = {}; metaDirty = false; held = {}; forceMine = new Set(); for(const k of Object.keys(tomb)) if(!(shadow && shadow[k.split("/")[0]] && !shadow[k.split("/")[0]][k.split("/")[1]])) delete tomb[k];
+    const rj = await readRemote(); store = clone(rj.data || {}); tomb = clone(rj.tomb || {}); revs = clone(rj.revs || {}); shadow = clone(store); shadowRevs = clone(revs);
+    const m = await metaVersion(); remote.version = m.version; await saveCache(); notifyAll(); status("Synced", "ok"); return n;
   },
   async lockDataFolder(){ if(!viaGw()) throw new Error("switch to the gateway first"); return (await gw("revoke")).removed || []; },
   async pullNow(){ if(!pushing && !polling){ remote.version = remote.version; await poll(); } },

@@ -93,6 +93,23 @@ function mkRoute(ctx){
   const live2 = JSON.parse(drive.files[dataFile.id].content);
   ok(live2.data.parties[Object.keys(live2.data.parties)[0]].note === snapNote && !drive.files[dataFile.id].content.includes("after-backup-edit"), "restore put the backup's data back into the live file");
   ok(Object.values(drive.files).some(f => /before-restore/.test(f.name) && f.content.includes("after-backup-edit")), "a before-restore copy holds the pre-restore data (restore itself can be undone)");
+  // yearly archive: closed 2024 records move to MYTOOL-ARCHIVE-2024.json, still visible read-only, live file smaller; bring back restores
+  const can24 = await A.p.evaluate(() => MYTOOL.archivable(2024)); const n24 = Object.values(can24).reduce((t, v) => t + v, 0);
+  ok(n24 > 0, "2024 has closed records to archive: " + JSON.stringify(can24));
+  const liveBefore = drive.files[dataFile.id].content.length; const poBefore = await A.p.evaluate(() => D.purchases.length);
+  const ar = await A.p.evaluate(() => MYTOOL.archiveYear(2024).catch(e => ({ err: e.message }))); await A.p.waitForTimeout(3000);
+  ok(ar.moved === n24 && !ar.err, "archiveYear moved " + ar.moved + " records " + (ar.err || ""));
+  const af = Object.values(drive.files).find(f => f.name === "MYTOOL-ARCHIVE-2024.json"); ok(!!af && Object.keys(JSON.parse(af.content).data.purchases || {}).length === can24.purchases, "archive file written with the orders");
+  ok(drive.files[dataFile.id].content.length < liveBefore, "live file is smaller (" + liveBefore + " → " + drive.files[dataFile.id].content.length + ")");
+  ok(await A.p.evaluate(() => D.purchases.length) === poBefore && await A.p.evaluate(() => D.purchases.filter(p => p._arch === "2024").length) === can24.purchases, "archived orders still visible in the app, marked _arch");
+  const arId = await A.p.evaluate(() => D.purchases.find(p => p._arch === "2024").no);
+  const g = await A.p.evaluate(no => updateDoc("purchases", no, { note: "x" }, "t").then(r => "ok:" + r).catch(e => "err:" + e.message), arId);
+  ok(!/ok:true/.test(g), "editing an archived record is refused (" + String(g).slice(0, 60) + ")");
+  // a second device sees the archive too
+  const M2 = await open("maashiq123@gmail.com"); await M2.p.waitForSelector("#mt_signin"); await M2.p.click("#mt_signin"); await M2.p.waitForFunction(() => { try { return S.ready } catch (e) { return false } }, null, { timeout: 20000 }); await M2.p.waitForTimeout(2500);
+  ok(await M2.p.evaluate(() => D.purchases.filter(p => p._arch === "2024").length) === can24.purchases && await M2.p.evaluate(() => D.purchases.length) === poBefore, "another device loads live + archive, nothing missing");
+  const back = await A.p.evaluate(() => MYTOOL.unarchiveYear(2024).catch(e => ({ err: e.message }))); await A.p.waitForTimeout(3000);
+  ok(back === n24 && await A.p.evaluate(() => D.purchases.filter(p => p._arch).length) === 0 && JSON.parse(drive.files[dataFile.id].content).data.purchases[arId], "bring back: records editable again and in the live file");
   ok(A.errs.length === 0 && T.errs.length === 0 && M.errs.length === 0, "no page errors " + JSON.stringify([...A.errs, ...T.errs, ...M.errs]).slice(0, 300));
   await b.close(); console.log(fails ? fails + " FAILED" : "ALL PASS"); process.exit(fails ? 1 : 0);
 })();

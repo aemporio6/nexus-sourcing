@@ -396,7 +396,7 @@ function pushUndo(entry){if(S.batch){if(!S.batch.noUndo)S.batch.entries.push(ent
 const GUARD_QUIET=new Set(["updatedAt","updatedBy","createdAt","createdBy","statusWhy","refText","folderName","landedAt","_k","fa"]);
 const DOC_DATE={purchases:"date",payments:"date",shipments:"dispatch",receipts:"date",credits:"date",moves:"date",inspections:"date"};
 function docDate(col,d){return d?(d[DOC_DATE[col]]||d.date||""):""}
-function guardWrite(col,before,d,opts={}){try{if(!DOC_DATE[col]&&col!=="products"&&col!=="parties")return null;const who=d.no||d.sku||d.code||d.id;
+function guardWrite(col,before,d,opts={}){try{if(before&&before._arch)return`${before.no||before.sku||before.id} is archived (${before._arch}) — read only. Setup › Backup › "Bring back ${before._arch}" to change it.`;if(!DOC_DATE[col]&&col!=="products"&&col!=="parties")return null;const who=d.no||d.sku||d.code||d.id;
  const badNum=(v,path)=>{if(typeof v==="number"&&!isFinite(v))return path;if(v&&typeof v==="object"){for(const[k,x]of Object.entries(v)){const r=badNum(x,path+"."+k);if(r)return r}}return null};
  const bn=badNum(d,"");if(bn)return`${who}: not saved — "${bn.slice(1)}" is not a number`;
  for(const k of ["date","dispatch","eta","readyDate","expectedDelivery","arrival","dueDate"]){const v=d[k];if(v!=null&&v!==""&&(!/^\d{4}-\d\d-\d\d$/.test(String(v))||isNaN(Date.parse(v))))return`${who}: not saved — ${k} "${v}" is not a real date`}
