@@ -553,7 +553,7 @@ function searchText(col,x){const key=col+"/"+x.id+"/"+(x.updatedAt||"");if(_st.h
  case"parties":t=[x.code,old,x.name,x.company,L("partyType",x.type),L("country",x.country),x.cur,x.wechat,x.email,x.phone,x.contact,x.notes].join(" | ");break;
  default:t=JSON.stringify(x)}
  t=(t+" "+tags).replace(/\s+/g," ");_st.set(key,t);if(_st.size>5000)_st.clear();return t}
-function searchAll(q){const out=[];const add=(col,x,ref,extra)=>{const sc=score(searchText(col,x),q);if(sc>0)out.push({col,x,sc,ref,extra})};
+function searchAll(q){const out=[];const nq=norm(q);const add=(col,x,ref,extra)=>{const sc=score(searchText(col,x),q);if(sc>0)out.push({col,x,sc,ref,extra,close:!norm(searchText(col,x)).includes(nq)})};
  live(D.purchases).forEach(p=>add("purchases",p,p.no,`${pname(p.party)} · ${poDesc(p).slice(0,40)} · ${fmtD(p.date)}`));live(D.shipments).forEach(s=>add("shipments",s,s.no,`${pname(s.party)} · ${L("mode",s.mode)} · ${fmtD(s.dispatch||s.date)}`));live(D.payments).forEach(p=>add("payments",p,p.no,`${pname(p.party)} · ${fmt(p.amount,p.cur)} · ${fmtD(p.date)}`));
  live(D.inspections).forEach(i=>add("inspections",i,i.no,`${i.po} · ${L("inspResult",i.result)}`));live(D.receipts).forEach(r=>add("receipts",r,r.no,`${r.src} · ${fmtD(r.date)}`));live(D.moves).forEach(m=>add("moves",m,m.no,`${L("moveType",m.type)} · ${m.sku} · ${m.qty}`));live(D.credits).forEach(c=>add("credits",c,c.no,`${pname(c.party)} · ${fmt(c.amount,c.cur)}`));
  D.products.forEach(p=>add("products",p,p.sku,`${p.name} · ${L("brand",p.brand)}`));D.parties.filter(p=>p.status!=="archived").forEach(p=>add("parties",p,p.code,`${p.name} · ${p.company||L("partyType",p.type)}`));
