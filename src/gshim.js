@@ -833,6 +833,12 @@ window.MYTOOL = {
       }while(pt && out.length < 2000);
       return out;
     },
+    async meta(id){
+      if(DEMO) return (window.__DEMO_DRIVE && window.__DEMO_DRIVE.meta && window.__DEMO_DRIVE.meta(id)) || { id, name: "demo", mimeType: "application/vnd.google-apps.folder" };
+      const r = await gfetch(API + "/drive/v3/files/" + encodeURIComponent(id) + "?fields=id,name,mimeType,modifiedTime,size,parents,driveId,shortcutDetails&supportsAllDrives=true");
+      if(!r.ok){ const e = new Error(r.status === 404 ? "404 not found" : r.status === 403 ? "403 forbidden" : "Drive error " + r.status); e.status = r.status; throw e; }
+      return await r.json();
+    },
     async download(id, mime){
       if(DEMO) return window.__DEMO_DRIVE ? window.__DEMO_DRIVE.download(id) : null;
       const exp = { "application/vnd.google-apps.spreadsheet": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.google-apps.document": "text/plain" }[mime];
