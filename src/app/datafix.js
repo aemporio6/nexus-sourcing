@@ -12,7 +12,7 @@ async function dataFix20261103(){try{if(!S.ready||!can("setup")||!D.setup||D.set
  const p54=docOf("payments","PAY-24-0054");if(p54&&!(p54.tags||[]).includes("not_duplicate"))await up("payments","PAY-24-0054",{tags:[...new Set([...(p54.tags||[]),"not_duplicate"])],notes:note(p54,"Kept as in the sheet (two lines P4 and P5 of £1,884.75 on 8 Nov 2024)")},"2024: kept as in the sheet");
  const p15=docOf("purchases","PO-24-0015");if(p15&&!p15.samePiAs)await up("purchases","PO-24-0015",{samePiAs:"PO-24-0013",notes:note(p15,"Same PI VCL-202407-10 as PO-24-0013 — kept as in the sheet")},"2024: kept as in the sheet");
  await setupPatchMany([[["fix20261103"],nowIso()]],null,{noUndo:true});if(done.length)logEv("setup","setup","main","Data check 3 Nov 2026 applied to "+done.join(", "));S._att=null}catch(e){console.warn(e)}}
-setTimeout(function tick(){try{if(S.ready){setTimeout(async()=>{await dataFix20261103();await dataFix20261103b();await dataFix20261111()},2500);return}}catch(_){}setTimeout(tick,1000)},1500);
+setTimeout(function tick(){try{if(S.ready){setTimeout(async()=>{await dataFix20261103();await dataFix20261103b();await dataFix20261111();await dataFix20261111b()},2500);return}}catch(_){}setTimeout(tick,1000)},1500);
 
 /* 3 Nov 2026 (b): orders split from VAL-104 kept the £ total of the whole 546-carton PI — recompute £ at order from their own total × rate on the order date */
 async function dataFix20261103b(){try{if(!S.ready||!can("setup")||!D.setup||D.setup.fix20261103b)return;const done=[];
@@ -80,3 +80,20 @@ async function dataFix20261111(){try{if(!S.ready||!can("setup")||!D.setup||D.set
   const p68=docOf("purchases","PO-26-0068");if(p68&&/^101-/.test(p68.desc||""))await updateDoc("purchases","PO-26-0068",{desc:"105 (VAL-105) — 8 Sep white P4 20 ctn for AGL, inspection ¥800 (paid by Joyce with Colin)",notes:"Inspection for order 105 (VAL-105, PO-26-0067; AGL 20 cartons P4 white); paid by Joyce, repaid 2 Nov"},null,o);
  }
  await setupPatchMany([[["fix20261111"],nowIso()]],null,{noUndo:true});if(done.length)logEv("setup","setup","main","Data entry 11 Nov 2026 (Joyce CIs 98 + 78 ctn, payment ¥50,603.52, PSI inspections): "+done.join(", "));S._att=null}catch(e){console.warn(e)}}
+
+/* 11 Nov 2026 (b), owner: "the old 78 ctn (107) were already 50% paid on 2 Nov; the 98-ctn CI IS those 78, and on 10 Nov I paid the 98 + the new 78 again.
+   So the 2 Nov ¥19,317 is left over: put it on the 99-ctn road order's 20% (106, due now), and show what is still left." Also: 247 cartons remain on VAL-104, not 244. */
+async function dataFix20261111b(){try{if(!S.ready||!can("setup")||!D.setup||D.setup.fix20261111b||!D.setup.fix20261111)return;const o={noUndo:true,quiet:true,derived:true};const done=[];
+ const p176=docOf("payments","PAY-26-0176"),p66=docOf("purchases","PO-26-0066"),p69=docOf("purchases","PO-26-0069"),p65=docOf("purchases","PO-26-0065");
+ const a=p176&&(p176.allocations||[]).find(x=>x.ref==="PO-26-0069"&&Math.abs(+x.amount-19317)<0.01);
+ if(a&&p66&&p69&&+p69.ctn===98){
+  const due66=r2(Math.max(0,poState(p66).outstandingCur));const to66=Math.min(due66,19317),left=r2(19317-to66);
+  const al=[];(p176.allocations||[]).forEach(x=>{if(x===a){al.push({ref:"PO-26-0066",amount:to66,note:"106 (99 ctn road) 20% — paid from the old 78-ctn 50% left over"});if(left>0)al.push({ref:"PO-26-0069",amount:left,note:"LEFT OVER with Joyce from the old 78-ctn 50% — counts towards 107's 20%"})}else al.push(x)});
+  await updateDoc("payments","PAY-26-0176",{allocations:al,notes:((p176.notes||"")+" | 11 Nov (owner): the old 78-ctn order became the 98-ctn CI and its 50% was paid again on 10 Nov, so this ¥19,317 is left over → ¥"+to66.toLocaleString("en-GB")+" used for 106's 20%, ¥"+left.toLocaleString("en-GB")+" still with Joyce (shown on 107).").replace(/^ \| /,"")},null,o);done.push("PAY-26-0176 ¥19,317 → 106 20% ¥"+to66+" + left ¥"+left);
+  const sch=(p69.schedule||[]).map((m,i)=>i===2?{...m,label:"On arrival at UK port — ¥"+left.toLocaleString("en-GB")+" already with Joyce (old 78-ctn left over), to pay ¥"+r2(m.amount-left).toLocaleString("en-GB")}:m);
+  await updateDoc("purchases","PO-26-0069",{schedule:sch,notes:"Part of VAL-104 (PI WAP-UK-JW20260805001). This is the OLD 78-ctn order (for FBA/AWD), re-issued by Joyce on 3 Nov as 98 ctn — CI WAP-UK-JW20261103002 ¥48,222.72 (goods ¥46,368 + 4% ¥1,854.72). Paid: 30% ¥14,466.82 (8 Aug deposit), 50% ¥24,111.36 (10 Nov). The 2 Nov ¥19,317 (50% of the old 78-ctn CI) became extra: ¥"+to66.toLocaleString("en-GB")+" went to 106's 20%, ¥"+left.toLocaleString("en-GB")+" is LEFT OVER with Joyce and counts towards this order's 20% (¥9,644.54) → still to pay ¥"+r2(9644.54-left).toLocaleString("en-GB")+"."},null,o);
+  const s66=(p66.schedule||[]);if(s66.length)await updateDoc("purchases","PO-26-0066",{schedule:s66.map((m,i)=>i===s66.length-1?{...m,paid:"PAY-26-0176"}:m)},null,o);
+  await updateDoc("purchases","PO-26-0066",{notes:((p66.notes||"")+" | 11 Nov: 20% ¥"+to66.toLocaleString("en-GB")+" paid from the old 78-ctn 50% left over (PAY-26-0176, 2 Nov).").replace(/^ \| /,"")},null,o);done.push("106 20% settled");
+ }
+ if(p65&&+p65.ctn===244){await updateDoc("purchases","PO-26-0065",{ctn:247,notes:(p65.notes||"").replace("remaining 244 ctn","remaining 247 ctn (owner's count; the line quantities add up to 244 — 3 ctn to check)")},null,o);done.push("PO-26-0065 247 ctn")}
+ await setupPatchMany([[["fix20261111b"],nowIso()]],null,{noUndo:true});if(done.length)logEv("setup","setup","main","Data entry 11 Nov 2026 (b): "+done.join(", "));S._att=null}catch(e){console.warn(e)}}
