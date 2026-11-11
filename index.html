@@ -1327,12 +1327,12 @@ function poState(p){const total=poTotal(p);const cur=p.cur||"RMB";const rows=poP
  const crs=creditsFor(p.no);const cr=r2(crs.reduce((s,c)=>s+creditInCur(c,cur),0));/* written off (by hand with a reason, or at migration): positive = unpaid rest forgiven, negative = overpayment the supplier will not return */const wo=p.writtenOff&&+p.writtenOff.amount?r2(+p.writtenOff.amount):0;
  /* within 50p (or 0.50 in the PI currency) an order counts as settled — the same tolerance everywhere *//* billed on another order's invoice for this order: settles what is still owed; anything beyond that is an extra cost of this order billed elsewhere (never an overpayment) */
  const via=poViaRows(p);const viaCur=r2(via.reduce((s,v)=>s+v.inCur,0));const bal0=r2(total-paidCur-cr-wo);const viaUsed=r2(Math.max(0,Math.min(viaCur,bal0)));const viaExtra=r2(viaCur-viaUsed);
- const balance=r2(bal0-viaUsed);/* a CLOSED order paid in another currency: what is left is only exchange-rate difference, not money owed either way */const fxDiff=p.status==="closed"&&rows.some(r=>r.cur!==cur)?balance:0;const outstandingCur=total>0&&balance-fxDiff>0.5?balance:0;const owedToUs=total>0&&balance-fxDiff<-0.5?-balance:0;
+ const balance=r2(bal0-viaUsed);/* a CLOSED order paid in another currency: what is left is only exchange-rate difference, not money owed either way */const fxDiff=p.status==="closed"&&rows.some(r=>r.cur!==cur)?balance:0;const outstandingCur=total>0&&balance-fxDiff>0.5?balance:0;/* a split-up parent order (all goods moved to its parts, total 0) that still holds money: that money is owed to us */const splitDone=total===0&&D.purchases.some(x=>x.partOf===p.no&&!x.deletedAt);const owedToUs=(total>0||splitDone)&&balance-fxDiff<-0.5?-balance:0;
  const pct=total?Math.min(1.5,(paidCur+cr+wo+viaUsed)/total):0;const over=total?(paidCur+cr+viaUsed)/total:0;const rc=rateOn(today(),cur);
  const st=item("poStatus",p.status);const steps=items("poStatus").filter(i=>i.step>=0).sort((a,b)=>a.step-b.step);const stepIndex=Math.max(0,steps.findIndex(s=>s.id===p.status));
  const ship=poShipments(p.no);const rec=poReceipts(p.no);
  const ordered=(p.lines||[]).reduce((s,l)=>s+(+l.q||0),0);const shipped=ship.reduce((s,sh)=>s+shipLinesExpanded(sh).filter(l=>l.po===p.no).reduce((a,l)=>a+(+l.q||0),0),0);const recL=rec.flatMap(r=>(r.lines||[]).filter(l=>l.po===p.no));const received=recL.reduce((a,l)=>a+(+l.q||0),0);const damaged=recL.reduce((a,l)=>a+(+l.damaged||0),0);
- const payLabel=total===0?(rows.length?"Paid (no PI)":"No PI"):outstandingCur<=0.5?(owedToUs>0.5?"Overpaid":wo?"Written off":"Paid"):paidCur>0||viaUsed>0?"Part paid":"Unpaid";
+ const payLabel=total===0&&!(splitDone&&owedToUs>0.5)?(rows.length?"Paid (no PI)":"No PI"):outstandingCur<=0.5?(owedToUs>0.5?"Overpaid":wo?"Written off":"Paid"):paidCur>0||viaUsed>0?"Part paid":"Unpaid";
  return{fxDiff,total,cur,rows,pays:[...new Set(rows.map(r=>r.x))],paidCur,paidGbp,credits:cr,creditDocs:crs,writtenOff:wo,balance,outstandingCur,outstandingGbp:rc==null?0:r2(outstandingCur*rc),owedToUs,owedToUsGbp:rc==null?0:r2(owedToUs*rc),via,viaCur,viaUsed,viaExtra,noRate:rc==null,pct,over,status:st,stepIndex,steps,ship,rec,ordered,shipped,received,damaged,payLabel}}
 /* orders that can owe money: every live order except cancelled. A closed order owes nothing only when it is settled or its rest is written off (reason shown everywhere) */
 /* products whose stock counts (Home tile, Stock page, Reports): live and not merged away */
@@ -5547,7 +5547,7 @@ async function dataFix20261103(){try{if(!S.ready||!can("setup")||!D.setup||D.set
  const p54=docOf("payments","PAY-24-0054");if(p54&&!(p54.tags||[]).includes("not_duplicate"))await up("payments","PAY-24-0054",{tags:[...new Set([...(p54.tags||[]),"not_duplicate"])],notes:note(p54,"Kept as in the sheet (two lines P4 and P5 of £1,884.75 on 8 Nov 2024)")},"2024: kept as in the sheet");
  const p15=docOf("purchases","PO-24-0015");if(p15&&!p15.samePiAs)await up("purchases","PO-24-0015",{samePiAs:"PO-24-0013",notes:note(p15,"Same PI VCL-202407-10 as PO-24-0013 — kept as in the sheet")},"2024: kept as in the sheet");
  await setupPatchMany([[["fix20261103"],nowIso()]],null,{noUndo:true});if(done.length)logEv("setup","setup","main","Data check 3 Nov 2026 applied to "+done.join(", "));S._att=null}catch(e){console.warn(e)}}
-setTimeout(function tick(){try{if(S.ready){setTimeout(async()=>{await dataFix20261103();await dataFix20261103b();await dataFix20261111();await dataFix20261111b();await dataFix20261111c()},2500);return}}catch(_){}setTimeout(tick,1000)},1500);
+setTimeout(function tick(){try{if(S.ready){setTimeout(async()=>{await dataFix20261103();await dataFix20261103b();await dataFix20261111();await dataFix20261111b();await dataFix20261111c();await dataFix20261111d()},2500);return}}catch(_){}setTimeout(tick,1000)},1500);
 
 /* 3 Nov 2026 (b): orders split from VAL-104 kept the £ total of the whole 546-carton PI — recompute £ at order from their own total × rate on the order date */
 async function dataFix20261103b(){try{if(!S.ready||!can("setup")||!D.setup||D.setup.fix20261103b)return;const done=[];
@@ -5647,6 +5647,34 @@ async function dataFix20261111c(){try{if(!S.ready||!can("setup")||!D.setup||D.se
  const p70=live(D.purchases).find(x=>[].concat(x.oldRef||[]).includes("VAL-108"));const CI108="https://drive.google.com/file/d/1NdU5uTZInTffWSa2roXZlZ8pc98vW8xw/view";
  if(p70&&!(p70.docs&&p70.docs.pi)){await updateDoc("purchases",p70.no,{docs:{...(p70.docs||{}),pi:{url:CI108}},links:[{label:"CI 78 ctn",url:CI108},...(p70.links||[])],notes:(p70.notes||"").replace(" CI file: upload to the Drive 108 folder (too big for the connector).","")},null,o);done+=(done?", ":"")+p70.no+" CI linked"}
  await setupPatchMany([[["fix20261111c"],nowIso()]],null,{noUndo:true});if(done)logEv("setup","setup","main","Data entry 11 Nov 2026 (c): "+done);S._att=null}catch(e){console.warn(e)}}
+
+/* 11 Nov 2026 (d): Joyce's 247-ctn CI WAP-UK-JW20261103001 = the rest of VAL-104 → own order 109 (to Amazon). VAL-104 is now fully split (99 + 98 + 78 + 247 = 522 ctn).
+   Joyce's CIs only use ¥56,300.41 of the ¥94,054 8 Aug deposit (106 14,649.90 · 107 14,466.82 · 108 6,149.52 · 109 21,034.17) → ¥37,753.59 stays on PO-26-0065 and shows as "Joyce owes us".
+   Also: product-information sheets + CI + inspection links on 107 / 108 / 109. */
+async function dataFix20261111d(){try{if(!S.ready||!can("setup")||!D.setup||D.setup.fix20261111d||!D.setup.fix20261111c)return;const o={noUndo:true,quiet:true,derived:true};const done=[];
+ const parent=docOf("purchases","PO-26-0065");const PI_F="https://drive.google.com/drive/folders/1AR43hH5G9LXkigbIy5URCjZpdbM7r2Is",F109="https://drive.google.com/drive/folders/1FeOO0KvJC-vg1a436hhLArA8Hnkl7t-p";
+ const addLinks=async(no,ls)=>{const x=docOf("purchases",no);if(!x)return;const have=new Set((x.links||[]).map(l=>l.url));const nl=[...(x.links||[]),...ls.filter(l=>!have.has(l.url))];if(nl.length!==(x.links||[]).length)await updateDoc("purchases",no,{links:nl},null,o)};
+ if(parent&&+parent.ctn===247&&!live(D.purchases).some(x=>[].concat(x.oldRef||[]).includes("VAL-109"))){
+  const pn=sku=>product(sku)?.name||sku;
+  const R=[["WAL-TB-FBA-01",120,7.5],["WAL-TB-GRY-01",180,7.5],["WAL-TB-BLK-01",180,7.5],["WAL-TB-FBM-01",1116,13.6],["WAL-TB-GRY-02",576,13.6],["WAL-TB-BLK-02",576,13.6],["WAL-TB-FBA-04",810,25.8],["WAL-TB-GRY-03",234,25.8],["WAL-TB-BLK-04",234,25.8],
+   ["WAL-TB-WHT-P3",416,21],["WAL-TB-BLK-P3",224,21],["WAL-TB-GRY-P3",224,21],["WAL-TB-WHT-P6",156,39.5],["WAL-TB-BLK-P6",108,39.5],["WAL-TB-GRY-P6",108,39.5],["WAL-TB-WHT-P8",104,51.5],["WAL-TB-BLK-P8",64,51.5],["WAL-TB-GRY-P8",64,51.5],["WAL-TB-BEI-02",216,13.6],["WAL-TB-BLU-02",216,13.6],["WAL-TB-GRN-02",216,13.6]];
+  const lines=R.map(([sku,q,u])=>({sku,p:pn(sku),q,u,a:r2(q*u),n:"CI WAP-UK-JW20261103001 (247 ctn)",skuAuto:false}));
+  const no=nextNo("purchases","2026-11-03");
+  await writeDoc("purchases",no,{no,id:no,oldRef:"VAL-109",date:"2026-11-03",party:"SUP-001",account:parent.account||"c1",kind:"china",cur:"RMB",total:125856.64,lines,extras:[{kind:"fee",a:4840.64,n:"JOYCE 4% COST"}],
+   piNo:"WAP-UK-JW20261103001",yourRef:"WAP-UK-JW20261103001",refType:"REP",partOf:"PO-26-0065",ctn:247,piBilledTo:"VARTLEAVES LIMITED",terms:"30_50_20_port",incoterm:"EXW",depositPct:30,status:"deposit",historic:false,folder:F109,
+   links:[{label:"Drive folder 109",url:F109},{label:"Product info sheets",url:PI_F}],docs:{},totalGbpAtOrder:r2(toGbp(125856.64,"RMB","2026-11-03")),
+   schedule:[{pct:17,label:"Deposit (30% of the old designs, from 8 Aug)",dueEvent:"order",due:null,amount:21034.17,paid:"PAY-26-0171"},{pct:63,label:"Before shipping (50% + 30% of the new packs)",dueEvent:"ship",due:null,amount:79651.15,paid:null},{pct:20,label:"On arrival at UK port",dueEvent:"arrive",due:null,amount:25171.32,paid:null}],
+   notes:"Part of VAL-104 — the last 247 ctn, to Amazon. CI WAP-UK-JW20261103001 ¥125,856.64 (goods ¥121,016 + 4% ¥4,840.64), 6,142 packs. Old designs ¥67,417.20 (deposit 30% ¥21,034.17 from 8 Aug); NEW packs 3/6/8 and Beige/Blue/Green ¥53,598.80 (no deposit — 30% added to the 50% line). Before shipping ¥79,651.15; 20% ¥25,171.33 at UK port."},null,o);done.push(no+" (109, 247 ctn) created");
+  const p171=docOf("payments","PAY-26-0171");if(p171){const al=[];(p171.allocations||[]).forEach(a=>{if(a.ref==="PO-26-0065"&&Math.abs(+a.amount-58787.76)<0.01){al.push({ref:no,amount:21034.17});al.push({ref:"PO-26-0065",amount:37753.59,note:"Not on any Joyce CI (106/107/108/109 use ¥56,300.41 of ¥94,054) — ask Joyce"})}else al.push(a)});
+   await updateDoc("payments","PAY-26-0171",{allocations:al,notes:((p171.notes||"")+" | 11 Nov: 109 ¥21,034.17; ¥37,753.59 left on VAL-104 (not shown on any Joyce CI).").replace(/^ \| /,"")},null,o);done.push("PAY-26-0171: 109 ¥21,034.17, ¥37,753.59 left")}
+  await updateDoc("purchases","PO-26-0065",{lines:[],extras:[],ctn:0,total:0,schedule:[],totalGbpAtOrder:0,
+   notes:"VAL-104 = PI WAP-UK-JW20260805001 (546 ctn, ¥313,513.82, 30% ¥94,054 paid 8 Aug). Fully split by Joyce's CIs: 106 (99 ctn road), 107 (98 ctn), 108 (78 ctn, our warehouse), 109 (247 ctn) = 522 ctn. Joyce's four CIs use only ¥56,300.41 of the deposit → ¥37,753.59 is still with Joyce (shown as owed to us). Plus ¥9,550.41 old-78 left over on 107. Ask Joyce for a statement. 24 ctn of the PI (546 − 522) not invoiced."},null,o);done.push("PO-26-0065 → split done, ¥37,753.59 with Joyce");
+  await addLinks(no,[]);
+ }
+ const D107="https://drive.google.com/file/d/1s-9HXy7TfjaClHPGnKGLyJ6k8eW1xqto/view",IQ107="https://drive.google.com/file/d/1vIAHwaLU5rT5eNS5ShwNuph3y6nD71-v/view";
+ await addLinks("PO-26-0069",[{label:"Product info 98 ctn",url:D107},{label:"Inspection quote (78 ctn)",url:IQ107},{label:"Drive folder 107",url:"https://drive.google.com/drive/folders/178i-OdJs9nwRUE6GY98UBtiQNNqhovea"}]);
+ const p70=live(D.purchases).find(x=>[].concat(x.oldRef||[]).includes("VAL-108"));if(p70)await addLinks(p70.no,[{label:"Product info sheets",url:PI_F}]);
+ await setupPatchMany([[["fix20261111d"],nowIso()]],null,{noUndo:true});if(done.length)logEv("setup","setup","main","Data entry 11 Nov 2026 (d): "+done.join(", "));S._att=null}catch(e){console.warn(e)}}
 
 /* ---------- Payment: pay several orders / shipments at once, with an amount per item ----------
    "+ Several orders / shipments…" lists everything still owed to this party; tick several → one line each,
@@ -6473,5 +6501,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='c5d9cacdf1';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='246d079036';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
 </body></html>
