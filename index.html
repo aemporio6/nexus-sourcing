@@ -5547,7 +5547,7 @@ async function dataFix20261103(){try{if(!S.ready||!can("setup")||!D.setup||D.set
  const p54=docOf("payments","PAY-24-0054");if(p54&&!(p54.tags||[]).includes("not_duplicate"))await up("payments","PAY-24-0054",{tags:[...new Set([...(p54.tags||[]),"not_duplicate"])],notes:note(p54,"Kept as in the sheet (two lines P4 and P5 of £1,884.75 on 8 Nov 2024)")},"2024: kept as in the sheet");
  const p15=docOf("purchases","PO-24-0015");if(p15&&!p15.samePiAs)await up("purchases","PO-24-0015",{samePiAs:"PO-24-0013",notes:note(p15,"Same PI VCL-202407-10 as PO-24-0013 — kept as in the sheet")},"2024: kept as in the sheet");
  await setupPatchMany([[["fix20261103"],nowIso()]],null,{noUndo:true});if(done.length)logEv("setup","setup","main","Data check 3 Nov 2026 applied to "+done.join(", "));S._att=null}catch(e){console.warn(e)}}
-setTimeout(function tick(){try{if(S.ready){setTimeout(async()=>{await dataFix20261103();await dataFix20261103b();await dataFix20261111();await dataFix20261111b();await dataFix20261111c();await dataFix20261111d()},2500);return}}catch(_){}setTimeout(tick,1000)},1500);
+setTimeout(function tick(){try{if(S.ready){setTimeout(async()=>{await dataFix20261103();await dataFix20261103b();await dataFix20261111();await dataFix20261111b();await dataFix20261111c();await dataFix20261111d();await dataFix20261111e()},2500);return}}catch(_){}setTimeout(tick,1000)},1500);
 
 /* 3 Nov 2026 (b): orders split from VAL-104 kept the £ total of the whole 546-carton PI — recompute £ at order from their own total × rate on the order date */
 async function dataFix20261103b(){try{if(!S.ready||!can("setup")||!D.setup||D.setup.fix20261103b)return;const done=[];
@@ -5675,6 +5675,15 @@ async function dataFix20261111d(){try{if(!S.ready||!can("setup")||!D.setup||D.se
  await addLinks("PO-26-0069",[{label:"Product info 98 ctn",url:D107},{label:"Inspection quote (78 ctn)",url:IQ107},{label:"Drive folder 107",url:"https://drive.google.com/drive/folders/178i-OdJs9nwRUE6GY98UBtiQNNqhovea"}]);
  const p70=live(D.purchases).find(x=>[].concat(x.oldRef||[]).includes("VAL-108"));if(p70)await addLinks(p70.no,[{label:"Product info sheets",url:PI_F}]);
  await setupPatchMany([[["fix20261111d"],nowIso()]],null,{noUndo:true});if(done.length)logEv("setup","setup","main","Data entry 11 Nov 2026 (d): "+done.join(", "));S._att=null}catch(e){console.warn(e)}}
+
+/* 11 Nov 2026 (e): owner uploaded the big files → direct links: 108 product info, 109 CI + product info. */
+async function dataFix20261111e(){try{if(!S.ready||!can("setup")||!D.setup||D.setup.fix20261111e||!D.setup.fix20261111d)return;const o={noUndo:true,quiet:true,derived:true};const done=[];
+ const U=id=>"https://drive.google.com/file/d/"+id+"/view";
+ const set=async(oldRef,ls,pi)=>{const x=live(D.purchases).find(q=>[].concat(q.oldRef||[]).includes(oldRef));if(!x)return;const have=new Set((x.links||[]).map(l=>l.url));
+  const ch={links:[...ls.filter(l=>!have.has(l.url)),...(x.links||[])]};if(pi&&!(x.docs&&x.docs.pi))ch.docs={...(x.docs||{}),pi:{url:pi}};await updateDoc("purchases",x.no,ch,null,o);done.push(x.no)};
+ await set("VAL-108",[{label:"Product info 78 ctn",url:U("1qKNeU_GCr48V56jgOhpq3144VPtQo4iK")}]);
+ await set("VAL-109",[{label:"CI 247 ctn",url:U("1dkjbY41R0ryIOhbJ2E99XihS2XjHWOau")},{label:"Product info 247 ctn",url:U("1nZCdvKDfDxcbAh6KrllM2-YQwBDM5Iuj")}],U("1dkjbY41R0ryIOhbJ2E99XihS2XjHWOau"));
+ await setupPatchMany([[["fix20261111e"],nowIso()]],null,{noUndo:true});if(done.length)logEv("setup","setup","main","Data entry 11 Nov 2026 (e): file links on "+done.join(", "));S._att=null}catch(e){console.warn(e)}}
 
 /* ---------- Payment: pay several orders / shipments at once, with an amount per item ----------
    "+ Several orders / shipments…" lists everything still owed to this party; tick several → one line each,
@@ -6501,5 +6510,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='246d079036';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='dc97a7c595';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
 </body></html>
