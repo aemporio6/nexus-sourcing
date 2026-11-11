@@ -12,7 +12,7 @@ async function dataFix20261103(){try{if(!S.ready||!can("setup")||!D.setup||D.set
  const p54=docOf("payments","PAY-24-0054");if(p54&&!(p54.tags||[]).includes("not_duplicate"))await up("payments","PAY-24-0054",{tags:[...new Set([...(p54.tags||[]),"not_duplicate"])],notes:note(p54,"Kept as in the sheet (two lines P4 and P5 of £1,884.75 on 8 Nov 2024)")},"2024: kept as in the sheet");
  const p15=docOf("purchases","PO-24-0015");if(p15&&!p15.samePiAs)await up("purchases","PO-24-0015",{samePiAs:"PO-24-0013",notes:note(p15,"Same PI VCL-202407-10 as PO-24-0013 — kept as in the sheet")},"2024: kept as in the sheet");
  await setupPatchMany([[["fix20261103"],nowIso()]],null,{noUndo:true});if(done.length)logEv("setup","setup","main","Data check 3 Nov 2026 applied to "+done.join(", "));S._att=null}catch(e){console.warn(e)}}
-setTimeout(function tick(){try{if(S.ready){setTimeout(async()=>{await dataFix20261103();await dataFix20261103b();await dataFix20261111();await dataFix20261111b()},2500);return}}catch(_){}setTimeout(tick,1000)},1500);
+setTimeout(function tick(){try{if(S.ready){setTimeout(async()=>{await dataFix20261103();await dataFix20261103b();await dataFix20261111();await dataFix20261111b();await dataFix20261111c()},2500);return}}catch(_){}setTimeout(tick,1000)},1500);
 
 /* 3 Nov 2026 (b): orders split from VAL-104 kept the £ total of the whole 546-carton PI — recompute £ at order from their own total × rate on the order date */
 async function dataFix20261103b(){try{if(!S.ready||!can("setup")||!D.setup||D.setup.fix20261103b)return;const done=[];
@@ -97,3 +97,18 @@ async function dataFix20261111b(){try{if(!S.ready||!can("setup")||!D.setup||D.se
  }
  if(p65&&+p65.ctn===244){await updateDoc("purchases","PO-26-0065",{ctn:247,notes:(p65.notes||"").replace("remaining 244 ctn","remaining 247 ctn (owner's count; the line quantities add up to 244 — 3 ctn to check)")},null,o);done.push("PO-26-0065 247 ctn")}
  await setupPatchMany([[["fix20261111b"],nowIso()]],null,{noUndo:true});if(done.length)logEv("setup","setup","main","Data entry 11 Nov 2026 (b): "+done.join(", "));S._att=null}catch(e){console.warn(e)}}
+
+/* 11 Nov 2026 (c), owner: "order 069 shows 49 cartons, it is 98". The AGL sea shipment SH-26-0056 (booked 3 Nov) still carried the OLD 78-ctn lines of 107
+   (GRY-01 240, FBM-01 1404, FBA-04 630), so only the overlapping 49 ctn counted as shipped. The 98-ctn CI is those same goods → the shipment carries the 9 CI lines, 98 ctn. */
+async function dataFix20261111c(){try{if(!S.ready||!can("setup")||!D.setup||D.setup.fix20261111c||!D.setup.fix20261111)return;const o={noUndo:true,quiet:true,derived:true};let done="";
+ const sh=docOf("shipments","SH-26-0056"),po=docOf("purchases","PO-26-0069");
+ const old=sh&&JSON.stringify((sh.lines||[]).map(l=>[l.po,l.sku,+l.q]))===JSON.stringify([["PO-26-0069","WAL-TB-GRY-01",240],["PO-26-0069","WAL-TB-FBM-01",1404],["PO-26-0069","WAL-TB-FBA-04",630]]);
+ if(old&&po&&+po.ctn===98){
+  const lines=(po.lines||[]).filter(l=>l.sku&&+l.q>0).map(l=>{const pr=product(l.sku);return{po:"PO-26-0069",sku:l.sku,q:+l.q,ctn:pr?.perCtn?Math.ceil(+l.q/pr.perCtn):null}});
+  const ctn=lines.reduce((a,l)=>a+(+l.ctn||0),0);let kg=0,cbm=0,all=true;lines.forEach(l=>{const c=product(l.sku)?.ctn;if(c&&c.kg&&c.L&&c.W&&c.H){kg+=l.ctn*c.kg;cbm+=l.ctn*c.L*c.W*c.H/1e6}else all=false});
+  const ch={lines,ctn,goods:lines.map(l=>(product(l.sku)?.name||l.sku)+" ×"+l.q).join(", "),notes:((sh.notes||"").trim()+" | 11 Nov: lines changed to Joyce's 98-ctn CI WAP-UK-JW20261103002 (the old 78-ctn goods re-issued as 98 ctn). Was 78 ctn / "+sh.kg+" kg / "+sh.cbm+" cbm. CHECK with AGL: freight £"+sh.cost+" was quoted for 78 ctn.").replace(/^ \| /,"")};
+  if(all){ch.kg=r2(kg);ch.cbm=Math.round(cbm*1000)/1000}
+  await updateDoc("shipments","SH-26-0056",ch,null,o);done="SH-26-0056 → 98 ctn ("+lines.length+" lines"+(all?", "+ch.kg+" kg, "+ch.cbm+" cbm":"")+")"}
+ const p70=live(D.purchases).find(x=>[].concat(x.oldRef||[]).includes("VAL-108"));const CI108="https://drive.google.com/file/d/1NdU5uTZInTffWSa2roXZlZ8pc98vW8xw/view";
+ if(p70&&!(p70.docs&&p70.docs.pi)){await updateDoc("purchases",p70.no,{docs:{...(p70.docs||{}),pi:{url:CI108}},links:[{label:"CI 78 ctn",url:CI108},...(p70.links||[])],notes:(p70.notes||"").replace(" CI file: upload to the Drive 108 folder (too big for the connector).","")},null,o);done+=(done?", ":"")+p70.no+" CI linked"}
+ await setupPatchMany([[["fix20261111c"],nowIso()]],null,{noUndo:true});if(done)logEv("setup","setup","main","Data entry 11 Nov 2026 (c): "+done);S._att=null}catch(e){console.warn(e)}}
