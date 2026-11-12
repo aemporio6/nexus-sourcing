@@ -65,11 +65,11 @@ let pushT = null, pushing = false, pushAgain = false, pollT = null;
 const cacheKey = () => "db:" + (DEMO ? "demo" : lc(me && me.email));
 
 /* ---------------- small UI helpers (login / status) ---------------- */
-const LOGO = '<div style="filter:drop-shadow(0 10px 26px rgba(10,37,64,.35))">' + (window.MT_LOGO ? window.MT_LOGO(120) : '<img src="assets/icon-192.png" alt="MY TOOL" width="120" height="120">') + '</div>';
+const LOGO = '<div style="filter:drop-shadow(0 8px 20px rgba(35,54,72,.14))">' + (window.MT_LOGO_FULL ? window.MT_LOGO_FULL(180) : '<img src="assets/logo.svg" alt="MY TOOL" width="150" height="150">') + '</div>';
 function gate(html){
   let g = document.getElementById("mt_gate");
   if(!g){ g = document.createElement("div"); g.id = "mt_gate"; document.body.appendChild(g); }
-  g.innerHTML = '<div class="mt_card">' + LOGO + '<h1>MY <span style="color:#d7262e">TOOL</span></h1><p class="mt_small" style="margin-top:-6px;letter-spacing:.14em;text-transform:uppercase">Vartleaves · Engineered Sourcing</p>' + html + '<p class="mt_small" style="margin-top:18px;opacity:.7">Your data stays in your own Google Drive.</p></div>';
+  g.innerHTML = '<div class="mt_card">' + LOGO + html + '<p class="mt_small" style="margin-top:18px;opacity:.7">Your data stays in your own Google Drive.</p></div>';
   g.hidden = false;
   return g;
 }

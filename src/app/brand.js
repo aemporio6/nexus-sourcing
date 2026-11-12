@@ -1,5 +1,5 @@
 /* ---------- MY TOOL branding everywhere: tab titles, Excel files (properties + "About" sheet), PDFs (logo + footer on every page), print ---------- */
-let BRAND_LOGO=null;(async()=>{try{const r=await fetch("assets/icon-192.png");const b=await r.blob();BRAND_LOGO=await new Promise(ok=>{const f=new FileReader();f.onload=()=>ok(f.result);f.readAsDataURL(b)})}catch(_){}})();
+let BRAND_LOGO=null;(async()=>{try{const r=await fetch("assets/logo-full-512.png");const b=await r.blob();BRAND_LOGO=await new Promise(ok=>{const f=new FileReader();f.onload=()=>ok(f.result);f.readAsDataURL(b)})}catch(_){}})();
 const brandWho=()=>(window.MYTOOL&&MYTOOL.me&&MYTOOL.me.email)||"";
 /* browser tab: "Purchases · MY TOOL", "PO-26-0065 · MY TOOL" */
 const PAGE_TITLE={home:"Today",purchases:"Purchases",shipments:"Shipments",payments:"Payments",stock:"Stock",products:"Products",parties:"Suppliers & partners",calendar:"Calendar",planner:"Planner (ICC)",tools:"Tools",refs:"References",reports:"Reports",import:"Import",attention:"Alerts",log:"Activity",trash:"Trash",setup:"Setup",more:"All menus",health:"Data health",help:"Help"};
