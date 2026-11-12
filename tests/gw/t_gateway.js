@@ -59,5 +59,13 @@ r = G.call({ op: "backupNow", token: "T_ADMIN" }); r = G.call({ op: "backups", t
 r = G.call({ op: "backupRead", token: "T_VA", id: r.list[0].id }); ok(r.status === 403, "backup read by VA → 403");
 r = G.call({ op: "upload", token: "T_VIEW", name: "a.pdf", b64: Buffer.from("hi").toString("base64") }); ok(r.status === 403, "viewer upload → 403");
 r = G.call({ op: "upload", token: "T_VA", name: "a/b:c.pdf", mime: "application/pdf", b64: Buffer.from("hi").toString("base64") }); ok(r.ok && r.id && G.drive.files[r.id].name === "a_b_c.pdf", "VA upload ok, name sanitised");
+/* tasks: a VA may tick a task given to them, but change nothing else, and not someone else's */
+{ let cur = G.call({ op: "read", token: "T_ADMIN" }); let b0 = clone(cur.file); b0.data.tasks = { "TA-26-0001": { no: "TA-26-0001", id: "TA-26-0001", title: "For VA", who: "va@x.com", by: "aemporio6@gmail.com", status: "todo" }, "TA-26-0002": { no: "TA-26-0002", id: "TA-26-0002", title: "For Fin", who: "finance@x.com", by: "aemporio6@gmail.com", status: "todo" } };
+  r = G.call({ op: "write", token: "T_ADMIN", base: cur.version, body: b0 }); ok(r.ok, "admin adds two tasks");
+  const step = (tok, id, fn) => { const c = G.call({ op: "read", token: tok }); const nb = clone(c.file); fn(nb.data.tasks[id]); return G.call({ op: "write", token: tok, base: c.version, body: nb }); };
+  r = step("T_VA", "TA-26-0001", t => { t.status = "done"; t.doneAt = "2026-11-12T01:00:00Z"; }); ok(r.ok, "VA ticks their own task Done → allowed");
+  r = step("T_VA", "TA-26-0001", t => { t.title = "changed"; }); ok(r.status === 403, "VA changes the task title → 403");
+  r = step("T_VA", "TA-26-0002", t => { t.status = "done"; }); ok(r.status === 403, "VA ticks someone else's task → 403");
+  r = step("T_VA", "TA-26-0001", t => { t.status = "deleted"; }); ok(r.status === 403, "VA sets an unknown status → 403"); }
 ok(G.drive.files && Object.values(G.drive.files).some(f => f.name.startsWith("MYTOOL-GATEWAY-LOG") && /REFUSED/.test(f.content) && /ok write va@x.com/.test(f.content)), "gateway log has writes and refusals");
 console.log(fails ? fails + " FAILED" : "ALL PASS"); process.exit(fails ? 1 : 0);

@@ -81,10 +81,10 @@ function verifyToken(token){
   return email;
 }
 function whoIs(email, json){
-  if(ADMINS.indexOf(email) >= 0) return { admin: true, perms: { setup: true, approve: true, bank: true, deleteAny: true, edit: true, create: true, export: true }, user: { role: "owner" } };
+  if(ADMINS.indexOf(email) >= 0) return { admin: true, email: email, perms: { setup: true, approve: true, bank: true, deleteAny: true, edit: true, create: true, export: true }, user: { role: "owner" } };
   var main = json && json.data && json.data.setup && (json.data.setup.main || json.data.setup) || {};
   var users = main.users || [], roles = main.roles || {};
-  for(var i = 0; i < users.length; i++){ var u = users[i]; if(u && u.active !== false && String(u.uid || u.email || "").trim().toLowerCase() === email) return { admin: false, perms: roles[u.role] || (u.role === "owner" ? { setup: true, approve: true, bank: true, deleteAny: true, edit: true, create: true, export: true } : {}), user: u }; }
+  for(var i = 0; i < users.length; i++){ var u = users[i]; if(u && u.active !== false && String(u.uid || u.email || "").trim().toLowerCase() === email) return { admin: false, email: email, perms: roles[u.role] || (u.role === "owner" ? { setup: true, approve: true, bank: true, deleteAny: true, edit: true, create: true, export: true } : {}), user: u }; }
   return null;
 }
 function needAdmin(who){ if(!who || !who.admin) fail(403, "only an admin can do this"); }
@@ -143,10 +143,20 @@ function enforce(curJ, next, who){
       if(!b[id]){ if(!who.perms.deleteAny) fail(403, "your role cannot delete " + c + "/" + id); continue; }
       var wasDel = !!a[id].deletedAt, isDel = !!b[id].deletedAt;
       if(!wasDel && isDel && !who.perms.deleteAny) fail(403, "your role cannot trash " + id);
-      if(!who.perms.edit && canon(a[id]) !== canon(b[id])) fail(403, "your role cannot change " + id);
+      if(!who.perms.edit && canon(a[id]) !== canon(b[id]) && !ownTaskStep(c, a[id], b[id], who)) fail(403, "your role cannot change " + id);
     }
     if(!who.perms.create){ var nids = Object.keys(b); for(var m = 0; m < nids.length; m++) if(!a[nids[m]]) fail(403, "your role cannot create " + c + "/" + nids[m]); }
   }
+}
+/* tasks: anyone may move a task given to them (or made by them) along To do → Doing → Done; nothing else in it may change */
+function ownTaskStep(c, before, after, who){
+  if(c !== "tasks" || !who || !who.email) return false;
+  var me = who.email, mine = !before.who || String(before.who).toLowerCase() === me || String(before.by || "").toLowerCase() === me;
+  if(!mine) return false;
+  var allowed = { status: 1, doneAt: 1, updatedAt: 1, updatedBy: 1 }, keys = {}, k;
+  for(k in before) keys[k] = 1; for(k in after) keys[k] = 1;
+  for(k in keys){ if(allowed[k]) continue; if(canon(before[k] === undefined ? null : before[k]) !== canon(after[k] === undefined ? null : after[k])) return false; }
+  return ["todo", "doing", "done"].indexOf(after.status) >= 0;
 }
 /* roles without "bank" never receive bank details; on their saves the current values are put back */
 function redact(json, who){
