@@ -68,6 +68,10 @@ let calls = [];
   const opened = await Promise.all([Promise.race([V.ctx.waitForEvent("page", { timeout: 8000 }).then(pg => "popup:" + pg.url().slice(0, 5)).catch(() => null), V.p.waitForEvent("download", { timeout: 8000 }).then(d => "download:" + d.suggestedFilename()).catch(() => null)]), V.p.evaluate(id => { const a = document.createElement("a"); a.href = "https://drive.google.com/file/d/" + id.slice(6) + "/view"; a.textContent = "Open file"; document.body.appendChild(a); a.click(); }, up)]);
   ok(opened[0] && /^(popup:blob:|download:proof)/.test(opened[0]), "clicking the attachment link opened it via the gateway (" + opened[0] + " · " + await V.p.evaluate(() => MYTOOL.st.t) + ")");
   ok(calls.some(c => c === "file:va@x.com") && calls.some(c => c === "upload:va@x.com"), "upload + file ops went through the gateway");
+  const nFile = calls.filter(c => c.startsWith("file:")).length;
+  const ext = [await V.p.evaluate(() => { const seen = []; const o = window.open; window.open = (u) => { seen.push(String(u)); return {}; }; const a = document.createElement("a"); a.href = "https://drive.google.com/file/d/1SupplierCI_not_mytool/view"; a.textContent = "CI"; document.body.appendChild(a); a.click(); window.open = o; return seen[0] || "none"; })];
+  await V.p.waitForTimeout(800);
+  ok(calls.filter(c => c.startsWith("file:")).length === nFile && /drive\.google\.com\/file\/d\/1SupplierCI_not_mytool/.test(ext[0] || ""), "a Drive link MY TOOL did not upload (supplier CI) opens straight in Drive, not via the gateway (" + ext[0] + ")");
   const sh = await A.p.evaluate(() => MYTOOL.shareWith("va@x.com", "writer")); ok(sh === true && !calls.some(c => c.startsWith("share:")), "Share data is a no-op with the gateway (nothing to share)");
   /* 3c. yearly archive through the gateway */
   const can24 = await A.p.evaluate(() => MYTOOL.archivable(2024)); const n24 = Object.values(can24).reduce((t, v) => t + v, 0);

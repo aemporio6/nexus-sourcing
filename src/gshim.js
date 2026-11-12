@@ -662,6 +662,7 @@ const assets = {
     if(viaGw()){
       const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1] || ""); r.onerror = () => rej(r.error); r.readAsDataURL(file); });
       const j = await gw("upload", { name: file.name || "file", mime: file.type || "application/octet-stream", b64 });
+      upSeen.add(String(j.id));
       return { id: "drive:" + j.id, url: j.url };
     }
     if(!remote.filesFolderId){
@@ -675,6 +676,7 @@ const assets = {
     const tail = new TextEncoder().encode("\r\n--" + boundary + "--");
     const body = new Blob([head, buf, tail]);
     const j = await gjson("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", { method: "POST", headers: { "Content-Type": "multipart/related; boundary=" + boundary }, body });
+    upSeen.add(String(j.id));
     return { id: "drive:" + j.id, url: j.webViewLink || ("https://drive.google.com/file/d/" + j.id + "/view") };
   }
 };
@@ -689,9 +691,14 @@ async function gwOpen(fileId){
   status(lastSt.k === "busy" ? "Synced" : lastSt.t, lastSt.k === "busy" ? "ok" : lastSt.k);
   const w = window.open(url, "_blank", "noopener"); if(!w){ const a = document.createElement("a"); a.href = url; a.download = j.name || "file"; a.click(); }
 }
+const upSeen = new Set();
 document.addEventListener("click", e => {
   if(!viaGw()) return; const a = e.target.closest('a[href^="https://drive.google.com/file/d/"]'); if(!a) return;
-  const m = a.href.match(/\/file\/d\/([^/]+)/); if(!m) return; e.preventDefault(); gwOpen(m[1]).catch(err => { status("Could not open the file: " + err.message, "bad"); });
+  const m = a.href.match(/\/file\/d\/([^/]+)/); if(!m) return;
+  /* only files MY TOOL itself uploaded go through the gateway; any other Drive link (supplier folders, CIs, sheets) opens normally in Drive */
+  let mine = upSeen.has(m[1]); if(!mine) try{ const d = (typeof D !== "undefined" && D) || {}; mine = Object.keys(d).some(k => Array.isArray(d[k]) && JSON.stringify(d[k]).indexOf("drive:" + m[1]) >= 0); }catch(_){}
+  if(!mine){ if(!a.target){ e.preventDefault(); window.open(a.href, "_blank", "noopener"); } return; }
+  e.preventDefault(); gwOpen(m[1]).catch(err => { if(/not a MY TOOL attachment/.test(err.message)) window.open(a.href, "_blank", "noopener"); else status("Could not open the file: " + err.message, "bad"); });
 }, true);
 window.__blobUrl = id => { id = String(id || ""); if(id.startsWith("drive:")) return "https://drive.google.com/file/d/" + id.slice(6) + "/view"; if(/^https?:/.test(id)) return id; return assetMem[id] || ""; };
 (async () => { try{ const d = await idb(); const keys = await new Promise(res => { const t = d.transaction(ST).objectStore(ST).getAllKeys(); t.onsuccess = () => res(t.result || []); t.onerror = () => res([]); }); for(const k of keys) if(String(k).startsWith("asset:")) assetMem[k.slice(6)] = await kvGet(k); }catch(_){} })();
