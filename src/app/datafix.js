@@ -12,7 +12,7 @@ async function dataFix20261103(){try{if(!S.ready||!can("setup")||!D.setup||D.set
  const p54=docOf("payments","PAY-24-0054");if(p54&&!(p54.tags||[]).includes("not_duplicate"))await up("payments","PAY-24-0054",{tags:[...new Set([...(p54.tags||[]),"not_duplicate"])],notes:note(p54,"Kept as in the sheet (two lines P4 and P5 of £1,884.75 on 8 Nov 2024)")},"2024: kept as in the sheet");
  const p15=docOf("purchases","PO-24-0015");if(p15&&!p15.samePiAs)await up("purchases","PO-24-0015",{samePiAs:"PO-24-0013",notes:note(p15,"Same PI VCL-202407-10 as PO-24-0013 — kept as in the sheet")},"2024: kept as in the sheet");
  await setupPatchMany([[["fix20261103"],nowIso()]],null,{noUndo:true});if(done.length)logEv("setup","setup","main","Data check 3 Nov 2026 applied to "+done.join(", "));S._att=null}catch(e){console.warn(e)}}
-setTimeout(function tick(){try{if(S.ready){setTimeout(async()=>{await dataFix20261103();await dataFix20261103b();await dataFix20261111();await dataFix20261111b();await dataFix20261111c();await dataFix20261111d();await dataFix20261111e()},2500);return}}catch(_){}setTimeout(tick,1000)},1500);
+setTimeout(function tick(){try{if(S.ready){setTimeout(async()=>{await dataFix20261103();await dataFix20261103b();await dataFix20261111();await dataFix20261111b();await dataFix20261111c();await dataFix20261111d();await dataFix20261111e();await dataFix20261112()},2500);return}}catch(_){}setTimeout(tick,1000)},1500);
 
 /* 3 Nov 2026 (b): orders split from VAL-104 kept the £ total of the whole 546-carton PI — recompute £ at order from their own total × rate on the order date */
 async function dataFix20261103b(){try{if(!S.ready||!can("setup")||!D.setup||D.setup.fix20261103b)return;const done=[];
@@ -149,3 +149,15 @@ async function dataFix20261111e(){try{if(!S.ready||!can("setup")||!D.setup||D.se
  await set("VAL-108",[{label:"Product info 78 ctn",url:U("1qKNeU_GCr48V56jgOhpq3144VPtQo4iK")}]);
  await set("VAL-109",[{label:"CI 247 ctn",url:U("1dkjbY41R0ryIOhbJ2E99XihS2XjHWOau")},{label:"Product info 247 ctn",url:U("1nZCdvKDfDxcbAh6KrllM2-YQwBDM5Iuj")}],U("1dkjbY41R0ryIOhbJ2E99XihS2XjHWOau"));
  await setupPatchMany([[["fix20261111e"],nowIso()]],null,{noUndo:true});if(done.length)logEv("setup","setup","main","Data entry 11 Nov 2026 (e): file links on "+done.join(", "));S._att=null}catch(e){console.warn(e)}}
+
+/* 12 Nov 2026: Joyce re-issued the 546-ctn invoice WAP-UK-JW20260805001 to VARTLEAVES LIMITED (was SAFE BUY STORES LIMITED). Same goods and prices (¥313,513.82).
+   The old Safe Buy PI is kept in Drive › 104 › _OLD. */
+async function dataFix20261112(){try{if(!S.ready||!can("setup")||!D.setup||D.setup.fix20261112)return;const o={noUndo:true,quiet:true,derived:true};const done=[];
+ const NEW="https://drive.google.com/file/d/1UyfagyNkKU3CKP0bC6abdvjEVhDbLbpm/view",OLD="https://drive.google.com/file/d/1fci3VYvFjlMLqx1rM8kkSF4CWAUhP8co/view";
+ const p=docOf("purchases","PO-26-0065");
+ if(p&&p.piBilledTo!=="VARTLEAVES LIMITED"){const links=(p.links||[]).filter(l=>!/1fci3VYvFjlMLqx1rM8kkSF4CWAUhP8co/.test(l.url||""));
+  await updateDoc("purchases","PO-26-0065",{piBilledTo:"VARTLEAVES LIMITED",piLink:NEW,docs:{...(p.docs||{}),pi:{url:NEW}},links:[{label:"CI 546 ctn (Vartleaves)",url:NEW},...links,{label:"Old PI (Safe Buy) – replaced",url:OLD}],
+   notes:(p.notes||"")+" | 12 Nov: Joyce re-issued WAP-UK-JW20260805001 to VARTLEAVES LIMITED (was SAFE BUY STORES LIMITED); same 546 ctn / 19,986 pcs / ¥313,513.82."},null,o);done.push("PO-26-0065 billed to Vartleaves")}
+ const pay=docOf("payments","PAY-26-0171");
+ if(pay&&/1fci3VYvFjlMLqx1rM8kkSF4CWAUhP8co/.test(JSON.stringify(pay))){await updateDoc("payments","PAY-26-0171",{invoice:NEW,links:(pay.links||[]).map(l=>/1fci3VYvFjlMLqx1rM8kkSF4CWAUhP8co/.test(l.url||"")?{label:"Invoice / CI 546 ctn (Vartleaves)",url:NEW}:l)},null,o);done.push("PAY-26-0171 invoice link")}
+ await setupPatchMany([[["fix20261112"],nowIso()]],null,{noUndo:true});if(done.length)logEv("setup","setup","main","Data entry 12 Nov 2026: "+done.join(", "));S._att=null}catch(e){console.warn(e)}}
