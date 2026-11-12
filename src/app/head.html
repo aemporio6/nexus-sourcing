@@ -1,6 +1,6 @@
 <title>MY TOOL</title>
 <meta name="application-name" content="MY TOOL"><meta name="apple-mobile-web-app-title" content="MY TOOL"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="theme-color" content="#0f8f96">
-<link rel="manifest" href="manifest.webmanifest"><link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png"><link rel="apple-touch-icon" href="assets/icon-180.png">
+<link rel="manifest" href="manifest.webmanifest"><link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png?v=3"><link rel="apple-touch-icon" href="assets/icon-180.png">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
@@ -176,8 +176,8 @@ th{text-align:left;background:var(--soft);padding:7px 9px;font-weight:600;white-
 @media (prefers-reduced-motion:no-preference){.drawer{animation:slide .18s ease-out}.drawer.noanim{animation:none}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
 
 /* ---- MY TOOL additions ---- */
-.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:20px;letter-spacing:.01em;padding:4px 8px 12px}.brand img{width:40px;height:40px;border-radius:50%;flex:none}.brand b{display:block;line-height:1}.brand b i{font-style:normal;color:var(--accent)}.brand small{display:block;font-weight:600;font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin-top:3px}
-#mt_gate{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:radial-gradient(circle at 30% 20%,#2a0a0c,#0d0d0f 60%);padding:16px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:20px;letter-spacing:.01em;padding:4px 8px 12px}.brand .mt-logo{width:40px;height:40px;flex:none}.brand b{display:block;line-height:1}.brand b i{font-style:normal;color:var(--accent)}.brand small{display:block;font-weight:600;font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin-top:3px}
+#mt_gate{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:radial-gradient(circle at 30% 20%,#0F8F96,#0B4F63 35%,#0A2540 75%);padding:16px}
 #mt_gate .mt_card{background:#fff;color:#111;border-radius:16px;max-width:420px;width:100%;padding:28px 22px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:12px;align-items:center}
 #mt_gate h1{font:900 34px var(--f-ui);letter-spacing:.02em;margin:0}
 #mt_gate p{margin:0;color:#444;line-height:1.5}.mt_small{font-size:12.5px;color:#b3261e!important}.mt_bad{color:#b3261e!important;font-weight:600}
@@ -186,7 +186,7 @@ th{text-align:left;background:var(--soft);padding:7px 9px;font-weight:600;white-
 .recentp{position:absolute;right:0;top:42px;width:min(360px,92vw);background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.16);z-index:31;max-height:70vh;overflow:auto}
 .recentp h6{margin:0;padding:10px 12px 4px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.recentp button{display:flex;gap:10px;width:100%;border:0;background:transparent;text-align:left;padding:9px 12px;align-items:center}.recentp button:hover{background:var(--soft)}.recentp .ref{font:600 12px var(--f-data);min-width:96px}
 .who{display:flex;align-items:center;gap:8px;margin-top:6px}.who img{width:22px;height:22px;border-radius:50%}
-.mlogo{display:none;border-radius:50%;flex:none}@media (max-width:860px){.brand img{width:32px;height:32px}.mlogo{display:block}}
+.mlogo{display:none;flex:none;width:34px;height:34px}@media (max-width:860px){.brand .mt-logo{width:32px;height:32px}.mlogo{display:block}}
 .cfbox{margin:6px 0 2px;overflow-x:auto}.cft{border-collapse:collapse;font-size:12.5px;min-width:320px}.cft th,.cft td{padding:3px 8px;border-bottom:1px solid var(--line,#e3e8ea);text-align:left}.cft th{font-weight:600;color:var(--muted,#5b6b70)}
 .recon tr.bad td{background:#fff4f2}.recon tr.bad td:first-child{border-left:3px solid var(--brand-red,#d7262e)}
 /* phones and tablets: every tap target at least 40px, inputs 44px, no accidental zoom (16px inputs) */
@@ -199,7 +199,7 @@ th{text-align:left;background:var(--soft);padding:7px 9px;font-weight:600;white-
   <aside class="rail" id="rail"></aside>
   <div class="main">
     <div class="top">
-      <img class="mlogo" src="assets/icon-192.png" alt="MY TOOL" width="34" height="34"><button class="ib" data-act="home" aria-label="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11 12 4l9 7v9H5v-9"/></svg></button>
+      <span class="mlogo" id="mlogo" aria-label="MY TOOL"></span><button class="ib" data-act="home" aria-label="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11 12 4l9 7v9H5v-9"/></svg></button>
       <button class="ib" id="backb" data-act="back" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5l-7 7 7 7"/></svg></button>
       <button class="ib" id="fwdb" data-act="fwd" aria-label="Forward"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg></button>
       <div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>

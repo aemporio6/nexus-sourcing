@@ -65,7 +65,7 @@ let pushT = null, pushing = false, pushAgain = false, pollT = null;
 const cacheKey = () => "db:" + (DEMO ? "demo" : lc(me && me.email));
 
 /* ---------------- small UI helpers (login / status) ---------------- */
-const LOGO = '<img src="assets/icon-192.png" alt="MY TOOL" width="120" height="120" style="border-radius:50%;box-shadow:0 8px 28px rgba(15,143,150,.25)">';
+const LOGO = '<div style="filter:drop-shadow(0 10px 26px rgba(10,37,64,.35))">' + (window.MT_LOGO ? window.MT_LOGO(120) : '<img src="assets/icon-192.png" alt="MY TOOL" width="120" height="120">') + '</div>';
 function gate(html){
   let g = document.getElementById("mt_gate");
   if(!g){ g = document.createElement("div"); g.id = "mt_gate"; document.body.appendChild(g); }

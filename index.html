@@ -1,4 +1,40 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="description" content="MY TOOL — sourcing, orders, payments, shipments and stock for Vartleaves"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://www.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://api.frankfurter.dev https://open.er-api.com https://script.google.com https://script.googleusercontent.com; frame-src https://accounts.google.com https://drive.google.com https://docs.google.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'"><meta name="referrer" content="strict-origin-when-cross-origin"><title>MY TOOL</title><link rel="icon" type="image/png" sizes="16x16" href="assets/icon-16.png?v=2"><link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png?v=2"><link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png?v=2"><link rel="shortcut icon" href="assets/icon-32.png?v=2"><link rel="apple-touch-icon" href="assets/icon-180.png?v=2"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0f8f96"></head><body>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="description" content="MY TOOL — sourcing, orders, payments, shipments and stock for Vartleaves"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://www.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://api.frankfurter.dev https://open.er-api.com https://script.google.com https://script.googleusercontent.com; frame-src https://accounts.google.com https://drive.google.com https://docs.google.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'"><meta name="referrer" content="strict-origin-when-cross-origin"><title>MY TOOL</title><link rel="icon" type="image/png" sizes="16x16" href="assets/icon-16.png?v=3"><link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png?v=3"><link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png?v=3"><link rel="shortcut icon" href="assets/icon-32.png?v=3"><link rel="apple-touch-icon" href="assets/icon-180.png?v=3"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0f8f96"></head><body>
+<script>/* MY TOOL logo (box = products, bars = tracking, 3-colour loop = order → ship → stock, automated).
+   MT_LOGO(size, extra class) gives the inline logo; its loop spins whenever MY TOOL is working (loading, saving, syncing, searching). */
+(function(){
+var DEFS='<defs><linearGradient id="mtbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0A2540"/><stop offset=".55" stop-color="#0B4F63"/><stop offset="1" stop-color="#0F8F96"/></linearGradient><radialGradient id="mtgl" cx=".3" cy=".2" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".18"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient></defs>';
+var BODY='<rect width="512" height="512" rx="116" fill="url(#mtbg)"/><rect width="512" height="512" rx="116" fill="url(#mtgl)"/><g class="mt-ring"><path d="M178.0 96.0A178 178 0 0 1 428.7 212.9" stroke="#5EEAD4" stroke-width="30" stroke-linecap="round" fill="none"/><path d="M433.6 243.6L453.1 199.5L401.2 214.4Z" fill="#5EEAD4"/><path d="M433.6 268.4A178 178 0 0 1 206.9 427.1" stroke="#38BDF8" stroke-width="30" stroke-linecap="round" fill="none"/><path d="M178.0 416.0L206.4 454.9L219.5 402.5Z" fill="#38BDF8"/><path d="M156.5 403.6A178 178 0 0 1 132.4 128.0" stroke="#FF4D57" stroke-width="30" stroke-linecap="round" fill="none"/><path d="M156.5 108.4L108.5 113.6L147.4 151.1Z" fill="#FF4D57"/></g><g class="mt-box"><polygon points="256.0,156.0 342.6,206.0 256.0,256.0 169.4,206.0" fill="#FFFFFF"/><polygon points="169.4,206.0 256.0,256.0 256.0,356.0 169.4,306.0" fill="#C9F5F1"/><polygon points="256.0,256.0 342.6,206.0 342.6,306.0 256.0,356.0" fill="#7FD9DC"/><path d="M212.7 181.0L299.3 231.0" stroke="#0F8F96" stroke-width="11" fill="none" stroke-linecap="round"/><polygon points="270.7,333.5 285.4,325.0 285.4,299.0 270.7,307.5" fill="#0A2540" opacity=".82"/><polygon points="292.4,321.0 307.1,312.5 307.1,268.5 292.4,277.0" fill="#0A2540" opacity=".82"/><polygon points="314.0,308.5 328.7,300.0 328.7,238.0 314.0,246.5" fill="#0A2540" opacity=".82"/></g>';
+window.MT_LOGO=function(size,cls){size=size||40;return '<svg class="mt-logo '+(cls||"")+'" viewBox="0 0 512 512" width="'+size+'" height="'+size+'" role="img" aria-label="MY TOOL">'+BODY+'</svg>'};
+var css='.mt-logo{display:block;flex:none;overflow:visible}.mt-logo .mt-ring{transform-origin:256px 256px;transform-box:view-box}'+
+ '@keyframes mtspin{to{transform:rotate(360deg)}}@keyframes mtpulse{50%{opacity:.45}}'+
+ 'html.mt-busy .mt-logo .mt-ring,.mt-logo.mt-spin .mt-ring{animation:mtspin .9s linear infinite}'+
+ '@media (prefers-reduced-motion:reduce){html.mt-busy .mt-logo .mt-ring,.mt-logo.mt-spin .mt-ring{animation:mtpulse 1.2s ease-in-out infinite}}'+
+ '.mt-busytag{position:fixed;left:50%;top:8px;transform:translateX(-50%);z-index:200;display:none;align-items:center;gap:8px;background:#0A2540;color:#fff;font:600 12.5px Inter,Arial,sans-serif;padding:5px 12px 5px 6px;border-radius:999px;box-shadow:0 6px 18px rgba(10,37,64,.3);pointer-events:none}'+
+ 'html.mt-busy-long .mt-busytag{display:flex}';
+function boot(){try{if(!document.getElementById("mt_logo_defs")){var d=document.createElement("div");d.innerHTML='<svg id="mt_logo_defs" width="0" height="0" style="position:absolute;width:0;height:0" aria-hidden="true" focusable="false">'+DEFS+'</svg>';document.body.insertBefore(d.firstChild,document.body.firstChild)}
+ if(!document.getElementById("mt_logo_css")){var s=document.createElement("style");s.id="mt_logo_css";s.textContent=css;document.head.appendChild(s)}
+ if(!document.getElementById("mt_busytag")){var t=document.createElement("div");t.id="mt_busytag";t.className="mt-busytag";t.setAttribute("role","status");t.setAttribute("aria-live","polite");t.innerHTML=MT_LOGO(22)+'<span id="mt_busytxt">Working…</span>';document.body.appendChild(t)}}catch(e){}}
+if(document.body)boot();else document.addEventListener("DOMContentLoaded",boot);
+/* busy = any network call in flight, or a search being typed; the logo keeps turning at least 0.7 s so it is seen */
+var n=0,until=0,offT=null,longT=null,root=document.documentElement;
+function on(txt){root.classList.add("mt-busy");clearTimeout(offT);if(txt){var e=document.getElementById("mt_busytxt");if(e)e.textContent=txt}if(!longT)longT=setTimeout(function(){if(n>0)root.classList.add("mt-busy-long")},1500)}
+function off(){var w=Math.max(0,until-Date.now());clearTimeout(offT);offT=setTimeout(function(){if(n>0)return;root.classList.remove("mt-busy","mt-busy-long");clearTimeout(longT);longT=null},w)}
+window.mtBusy=function(ms,txt){until=Math.max(until,Date.now()+(ms||700));on(txt);off()};
+window.mtWork=function(p,txt){n++;until=Math.max(until,Date.now()+700);on(txt||"Working…");return Promise.resolve(p).finally(function(){n=Math.max(0,n-1);off()})};
+/* the browser-tab icon turns too while MY TOOL is working (like the browser's own loading sign), then goes back to the normal icon */
+var fav={c:null,base:null,ring:null,t:null,a:0,orig:null};
+function favImgs(){if(fav.base)return;var m=BODY.match(/<g class="mt-ring">[\s\S]*?<\/g>/);var ring=m?m[0]:"";var base=BODY.replace(ring,"");
+ var mk=function(inner){var i=new Image();i.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="64" height="64">'+DEFS+inner+'</svg>');return i};fav.base=mk(base);fav.ring=mk(ring)}
+function favLink(){var l=document.querySelector('link[rel="icon"][sizes="32x32"]')||document.querySelector('link[rel~="icon"]');return l}
+function favStart(){if(fav.t)return;try{favImgs();var l=favLink();if(!l)return;if(fav.orig==null)fav.orig=l.href;fav.c=fav.c||document.createElement("canvas");fav.c.width=fav.c.height=64;var x=fav.c.getContext("2d");
+ fav.t=setInterval(function(){try{fav.a=(fav.a+30)%360;x.clearRect(0,0,64,64);x.drawImage(fav.base,0,0,64,64);x.save();x.translate(32,32);x.rotate(fav.a*Math.PI/180);x.drawImage(fav.ring,-32,-32,64,64);x.restore();var u=fav.c.toDataURL("image/png");document.querySelectorAll('link[rel~="icon"]').forEach(function(k){k.href=u})}catch(e){}},90)}catch(e){}}
+function favStop(){if(!fav.t)return;clearInterval(fav.t);fav.t=null;try{document.querySelectorAll('link[rel~="icon"]').forEach(function(k){if(k.dataset.orig)k.href=k.dataset.orig})}catch(e){}}
+document.addEventListener("DOMContentLoaded",function(){document.querySelectorAll('link[rel~="icon"]').forEach(function(k){k.dataset.orig=k.getAttribute("href")})});
+new MutationObserver(function(){if(root.classList.contains("mt-busy"))favStart();else favStop()}).observe(root,{attributes:true,attributeFilter:["class"]});
+if(window.fetch){var f0=window.fetch;window.fetch=function(u){var url=String(u&&u.url||u||"");var txt=/script\.google|googleapis\.com\/(drive|upload)/.test(url)?"Syncing with Drive…":/fonts\.|gstatic/.test(url)?null:"Loading…";if(txt===null)return f0.apply(this,arguments);return window.mtWork(f0.apply(this,arguments),txt)}}
+document.addEventListener("input",function(e){var t=e.target;if(t&&t.tagName==="INPUT"&&(t.type==="search"||/^search/i.test(t.placeholder||"")))window.mtBusy(650,"Searching…")},true);
+})();
+</script>
 <script>/* MY TOOL — runtime: Google sign-in + data in the owner's Google Drive (aemporio6), with an on-device cache.
    Provides window.claude.use("db"|"user"|"assets"|"downloads") with the same API the app modules expect.
    Demo mode (?demo): no Google, data only in this browser (used for tests and trying things safely). */
@@ -66,7 +102,7 @@ let pushT = null, pushing = false, pushAgain = false, pollT = null;
 const cacheKey = () => "db:" + (DEMO ? "demo" : lc(me && me.email));
 
 /* ---------------- small UI helpers (login / status) ---------------- */
-const LOGO = '<img src="assets/icon-192.png" alt="MY TOOL" width="120" height="120" style="border-radius:50%;box-shadow:0 8px 28px rgba(15,143,150,.25)">';
+const LOGO = '<div style="filter:drop-shadow(0 10px 26px rgba(10,37,64,.35))">' + (window.MT_LOGO ? window.MT_LOGO(120) : '<img src="assets/icon-192.png" alt="MY TOOL" width="120" height="120">') + '</div>';
 function gate(html){
   let g = document.getElementById("mt_gate");
   if(!g){ g = document.createElement("div"); g.id = "mt_gate"; document.body.appendChild(g); }
@@ -883,7 +919,7 @@ if(document.readyState === "loading") document.addEventListener("DOMContentLoade
 </script>
 <title>MY TOOL</title>
 <meta name="application-name" content="MY TOOL"><meta name="apple-mobile-web-app-title" content="MY TOOL"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="theme-color" content="#0f8f96">
-<link rel="manifest" href="manifest.webmanifest"><link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png"><link rel="apple-touch-icon" href="assets/icon-180.png">
+<link rel="manifest" href="manifest.webmanifest"><link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png?v=3"><link rel="apple-touch-icon" href="assets/icon-180.png">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
@@ -1059,8 +1095,8 @@ th{text-align:left;background:var(--soft);padding:7px 9px;font-weight:600;white-
 @media (prefers-reduced-motion:no-preference){.drawer{animation:slide .18s ease-out}.drawer.noanim{animation:none}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
 
 /* ---- MY TOOL additions ---- */
-.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:20px;letter-spacing:.01em;padding:4px 8px 12px}.brand img{width:40px;height:40px;border-radius:50%;flex:none}.brand b{display:block;line-height:1}.brand b i{font-style:normal;color:var(--accent)}.brand small{display:block;font-weight:600;font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin-top:3px}
-#mt_gate{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:radial-gradient(circle at 30% 20%,#2a0a0c,#0d0d0f 60%);padding:16px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:20px;letter-spacing:.01em;padding:4px 8px 12px}.brand .mt-logo{width:40px;height:40px;flex:none}.brand b{display:block;line-height:1}.brand b i{font-style:normal;color:var(--accent)}.brand small{display:block;font-weight:600;font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin-top:3px}
+#mt_gate{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:radial-gradient(circle at 30% 20%,#0F8F96,#0B4F63 35%,#0A2540 75%);padding:16px}
 #mt_gate .mt_card{background:#fff;color:#111;border-radius:16px;max-width:420px;width:100%;padding:28px 22px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:12px;align-items:center}
 #mt_gate h1{font:900 34px var(--f-ui);letter-spacing:.02em;margin:0}
 #mt_gate p{margin:0;color:#444;line-height:1.5}.mt_small{font-size:12.5px;color:#b3261e!important}.mt_bad{color:#b3261e!important;font-weight:600}
@@ -1069,7 +1105,7 @@ th{text-align:left;background:var(--soft);padding:7px 9px;font-weight:600;white-
 .recentp{position:absolute;right:0;top:42px;width:min(360px,92vw);background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.16);z-index:31;max-height:70vh;overflow:auto}
 .recentp h6{margin:0;padding:10px 12px 4px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.recentp button{display:flex;gap:10px;width:100%;border:0;background:transparent;text-align:left;padding:9px 12px;align-items:center}.recentp button:hover{background:var(--soft)}.recentp .ref{font:600 12px var(--f-data);min-width:96px}
 .who{display:flex;align-items:center;gap:8px;margin-top:6px}.who img{width:22px;height:22px;border-radius:50%}
-.mlogo{display:none;border-radius:50%;flex:none}@media (max-width:860px){.brand img{width:32px;height:32px}.mlogo{display:block}}
+.mlogo{display:none;flex:none;width:34px;height:34px}@media (max-width:860px){.brand .mt-logo{width:32px;height:32px}.mlogo{display:block}}
 .cfbox{margin:6px 0 2px;overflow-x:auto}.cft{border-collapse:collapse;font-size:12.5px;min-width:320px}.cft th,.cft td{padding:3px 8px;border-bottom:1px solid var(--line,#e3e8ea);text-align:left}.cft th{font-weight:600;color:var(--muted,#5b6b70)}
 .recon tr.bad td{background:#fff4f2}.recon tr.bad td:first-child{border-left:3px solid var(--brand-red,#d7262e)}
 /* phones and tablets: every tap target at least 40px, inputs 44px, no accidental zoom (16px inputs) */
@@ -1082,7 +1118,7 @@ th{text-align:left;background:var(--soft);padding:7px 9px;font-weight:600;white-
   <aside class="rail" id="rail"></aside>
   <div class="main">
     <div class="top">
-      <img class="mlogo" src="assets/icon-192.png" alt="MY TOOL" width="34" height="34"><button class="ib" data-act="home" aria-label="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11 12 4l9 7v9H5v-9"/></svg></button>
+      <span class="mlogo" id="mlogo" aria-label="MY TOOL"></span><button class="ib" data-act="home" aria-label="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11 12 4l9 7v9H5v-9"/></svg></button>
       <button class="ib" id="backb" data-act="back" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5l-7 7 7 7"/></svg></button>
       <button class="ib" id="fwdb" data-act="fwd" aria-label="Forward"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg></button>
       <div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -2645,7 +2681,7 @@ let VIEWS=()=>({help:typeof vHelp==="function"?vHelp:vHome,health:typeof vHealth
 function render(){ensureCss();S._att=null;const v=$("#view");if(!v)return;const ae=document.activeElement;const inside=s=>!!(ae&&ae.closest&&ae.closest(s));
  const hold=S.holdRender||inside("#setupbody")||inside("#view [data-tool]")||(inside(".drawer")&&!!S.drawer?.form);
  if(!hold){try{nav()}catch(e){console.error(e)}
-  if(!S.ready)v.innerHTML=`<div class="card empty">${S.err?esc(S.err):"Loading your NEXUS data…"}</div>`;
+  if(!S.ready)v.innerHTML=`<div class="card empty" style="display:flex;flex-direction:column;align-items:center;gap:12px">${S.err?"":MT_LOGO(72,"mt-spin")}${S.err?esc(S.err):"Loading your MY TOOL data…"}</div>`;
   else{const fn=VIEWS()[S.view.k]||vHome;try{fn(v)}catch(e){console.error(e);v.innerHTML=`<div class="card empty">This page hit an error: ${esc(e.message||e)}<br><br><button class="btn" data-view="home">Go home</button></div>`}foldFilters(v)}}
  renderLayer();
  const en=(id,on)=>{const b=$(id);if(b)b.disabled=!on};en("#backb",S.hi>0);en("#fwdb",S.hi<S.hist.length-1);en("#undob",S.undo.length>0);en("#redob",S.redo.length>0);
@@ -2660,7 +2696,7 @@ function renderLayer(){const layer=$("#layer");if(!layer)return;const d=S.drawer
 function nav(){const b={purchases:0,shipments:0,payments:0,stock:0};attn().forEach(a=>{if((a.sev||0)<1)return;const k=a.col==="products"?"stock":a.col;if(k in b)b[k]++});S.badges=b;const k=S.view.k;
  const btn=(v,l,ic)=>`<button class="nav ${k===v?"on":""}" data-view="${v}" ${k===v?'aria-current="page"':""}>${IC(ic)}<span>${esc(l)}</span>${b[v]?`<span class="cnt" title="Needs action">${b[v]}</span>`:""}</button>`;
  const more=MORE.filter(([v])=>(v!=="setup"||can("setup"))&&(v!=="import"||can("create")));
- const rail=$("#rail");if(rail)rail.innerHTML=`<div class="brand"><img src="assets/icon-192.png" alt=""><div><b><i>MY</i> <span class="r">TOOL</span></b><small>VARTLEAVES · SOURCING</small></div></div>${MAIN.map(([v,l])=>btn(v,l,v)).join("")}<h6>More</h6>${more.map(([v,l,i])=>btn(v,l,i)).join("")}
+ const ml=$("#mlogo");if(ml&&!ml.firstChild)ml.innerHTML=MT_LOGO(34);const rail=$("#rail");if(rail)rail.innerHTML=`<div class="brand">${MT_LOGO(40)}<div><b><i>MY</i> <span class="r">TOOL</span></b><small>VARTLEAVES · SOURCING</small></div></div>${MAIN.map(([v,l])=>btn(v,l,v)).join("")}<h6>More</h6>${more.map(([v,l,i])=>btn(v,l,i)).join("")}
   <div style="margin-top:auto;padding:10px" class="status"><button type="button" id="mt_sync" data-act="syncnow" data-kind="${esc(window.MYTOOL?.st?.k||"ok")}" title="Tap to save / get latest now">${esc(window.MYTOOL?.st?.t||(S.ready?"● Live":"Connecting…"))}</button><div class="who">${window.MYTOOL?.me?.picture?`<img src="${esc(MYTOOL.me.picture)}" alt="">`:""}<span>${esc(user?.name||"")}<br><small>${esc(roleLabel(S.role))}</small></span></div>${window.MYTOOL&&!MYTOOL.demo?`<button type="button" class="btn sm" data-act="signout" style="margin-top:6px">Sign out</button>`:""}${S.realRole==="owner"?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button type="button" class="btn sm" data-act="mtbackup" title="Download all data as a file">⬇ Backup</button><label class="btn sm" title="Replace all data with a MY TOOL starting / backup file">⬆ Load data file<input type="file" class="mt_restore" accept=".json,application/json" hidden></label></div>`:""}${roleSwitch()}</div>`;
  const tabs=[...MAIN.filter(([v])=>v!=="payments"),["more","More"]];const isMain=tabs.some(([v])=>v===k);
  const tb=$("#tabbar");if(tb)tb.innerHTML=tabs.map(([v,l])=>{const on=v==="more"?!isMain:k===v;return`<button class="${on?"on":""}" data-view="${v}" ${on?'aria-current="page"':""}>${IC(v)}<span>${esc(l)}${b[v]?" · "+b[v]:""}</span></button>`}).join("")}
@@ -6570,5 +6606,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='6c95f6ae8e';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='a9799596e5';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
 </body></html>

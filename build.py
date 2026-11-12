@@ -21,7 +21,7 @@ def build(seed_dir=None, out="index.html"):
             if os.path.isdir(p): data[col] = [json.load(open(f)) for f in sorted(glob.glob(p + "/*.json"))]
         s = {c: {d["id"]: d for d in docs} for c, docs in data.items()}
         seed = "<script>window.__SEED=" + json.dumps(s, ensure_ascii=False).replace("</", "<\\/") + ";</script>\n"
-    ver = hashlib.sha1((head + js + read("src/gshim.js")).encode()).hexdigest()[:10]
+    ver = hashlib.sha1((head + js + read("src/logo.js") + read("src/gshim.js")).encode()).hexdigest()[:10]
     pre = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
            '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
            '<meta name="description" content="MY TOOL — sourcing, orders, payments, shipments and stock for Vartleaves">'
@@ -30,11 +30,11 @@ def build(seed_dir=None, out="index.html"):
            'img-src \'self\' data: blob: https:; connect-src \'self\' https://www.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://api.frankfurter.dev https://open.er-api.com https://script.google.com https://script.googleusercontent.com; '
            'frame-src https://accounts.google.com https://drive.google.com https://docs.google.com; worker-src \'self\' blob:; object-src \'none\'; base-uri \'self\'; form-action \'none\'">'
            '<meta name="referrer" content="strict-origin-when-cross-origin">'
-           '<title>MY TOOL</title><link rel="icon" type="image/png" sizes="16x16" href="assets/icon-16.png?v=2"><link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png?v=2"><link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png?v=2">'
-           '<link rel="shortcut icon" href="assets/icon-32.png?v=2"><link rel="apple-touch-icon" href="assets/icon-180.png?v=2"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0f8f96">'
+           '<title>MY TOOL</title><link rel="icon" type="image/png" sizes="16x16" href="assets/icon-16.png?v=3"><link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png?v=3"><link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png?v=3">'
+           '<link rel="shortcut icon" href="assets/icon-32.png?v=3"><link rel="apple-touch-icon" href="assets/icon-180.png?v=3"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0f8f96">'
            '</head><body>\n')
     sw = ("<script>window.MYTOOL_VERSION='" + ver + "';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type=\"button\">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>\n")
-    html = pre + seed + "<script>" + read("src/gshim.js") + "</script>\n" + head + "\n<script>\n" + js + "\n</script>\n" + sw + "</body></html>\n"
+    html = pre + seed + "<script>" + read("src/logo.js") + "</script>\n<script>" + read("src/gshim.js") + "</script>\n" + head + "\n<script>\n" + js + "\n</script>\n" + sw + "</body></html>\n"
     open(os.path.join(R, out) if not os.path.isabs(out) else out, "w", encoding="utf-8").write(html)
     if not seed_dir:
         open(os.path.join(R, "sw.js"), "w").write(read("src/sw.template.js").replace("__VER__", ver))
