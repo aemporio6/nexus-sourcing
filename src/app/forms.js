@@ -85,7 +85,7 @@ function listOpts(k,f={}){let its=items(k);if(f.group)its=its.filter(i=>i.group=
 const SET_KIND={company:["companies","company"],bank:["banks","bank"],email:["emails","email"],loc:["locations","location"]};
 function selectHtml(id,opts,v,extra={}){const addOpt=extra.list&&can("setup")?`<option value="__add">＋ Add to ${esc(listDef(extra.list).label||extra.list)}…</option>`:extra.setAdd&&can("setup")?`<option value="__add">＋ Add ${esc(SET_KIND[extra.setAdd]?.[1]||"item")}…</option>`:"";const newOpt=extra.newOpt||"";
  /* a stored value that is archived / not offered any more stays selectable */const miss=v!=null&&v!==""&&!Array.isArray(v)&&!opts.some(o=>String(Array.isArray(o)?o[0]:o)===String(v))&&extra.f?[[String(v),optLabel(extra.f,v)]]:[];
- return`<select id="${id}" ${extra.attrs||""}><option value="">${esc(extra.empty||"—")}</option>${optsHtml(opts.concat(miss),v)}${newOpt}${addOpt}</select>`}
+ return`<select id="${id}" ${extra.attrs||""}><option value="">${esc(extra.empty||"—")}</option>${newOpt}${addOpt}${optsHtml(opts.concat(miss),v)}${(newOpt||addOpt)&&opts.length>12?newOpt+addOpt:""}</select>`}
 /* label for a stored value that is not among the current options */
 function optLabel(f,v){const sfx=" (archived)";switch(f?.t){case"list":{const it=item(f.list,v);return it?L(f.list,v)+(it.archived?sfx:""):String(v)+sfx}
  case"party":{const p=party(v);return p?plabel(v)+(p.status==="archived"?sfx:""):String(v)+sfx}case"company":return cname(v)+sfx;case"bank":return bname(v)+sfx;case"email":return((SET().emails||[]).find(e=>e.id===v)?.address||v)+sfx;case"person":return(person(v)?.name||v)+sfx;case"loc":return locName(v)+sfx;
