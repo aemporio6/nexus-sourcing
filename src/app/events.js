@@ -145,6 +145,8 @@ async function setupAdd(what,ds){const s=SET();const u=(arr,base)=>{let id=base,
 /* ---------- change ---------- */
 document.addEventListener("change",async e=>{const t=e.target;const ds=t.dataset;
  if(ds.f==="q")return;
+ /* importer cards use data-f too: they belong to the importer, not to the page filters */
+ if(ds.ixc!==undefined){ixChange(t);return}
  if(ds.f!==undefined&&t.value==="__multi"){openMultiPick(S.view.k,ds.f,t);return}
  if(ds.f!==undefined){if(t.type!=="checkbox"&&String(F()[ds.f]??"")===t.value)return;setF(S.view.k,ds.f,t.type==="checkbox"?(t.checked?1:""):t.value);if(ds.f==="date"&&t.value){setF(S.view.k,"year","")}render();return}
  if(ds.sp){let v=t.type==="checkbox"?t.checked:t.type==="number"?(t.value===""?null:+t.value):t.value;if(t.dataset.json||ds.sptype==="json"){try{v=JSON.parse(t.value||"null")}catch(_){toast("Not valid JSON");return}}if(ds.sptype==="csv")v=String(t.value).split(",").map(x=>x.trim()).filter(Boolean);

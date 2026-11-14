@@ -248,6 +248,12 @@ function dueFor(p,m){return dueInfo(p,m).d}
 /* event milestones keep due = null so dueFor() follows the ready date / dispatch live */
 function scheduleFromTerms(termsId,total,p){const t=item("payTerms",termsId);const tpl=t?.template||[{pct:100,label:"Full payment",dueEvent:"order"}];return tpl.map(m=>({pct:m.pct,label:m.label,dueEvent:m.dueEvent,due:null,amount:r2(total*m.pct/100),paid:null}))}
 function shipLinesExpanded(sh){if(sh.lines?.length)return sh.lines;return(sh.purchases||[]).flatMap(no=>{const p=D.purchases.find(x=>x.no===no);return(p?.lines||[]).filter(l=>l.sku).map(l=>({po:no,sku:l.sku,q:+l.q||0,ctn:product(l.sku)?.perCtn?Math.ceil((+l.q||0)/product(l.sku).perCtn):0}))})}
+/* cartons vs units: exact, a part-filled last carton (300 at 27 = 11 full + 1 carton of 3), or loose units packed with other goods (11 cartons + 3 loose) — all three are real, none is an error */
+function ctnFit(ctn,per,q){ctn=+ctn;per=+per;q=+q;if(!(per>0)||!(q>=0)||!Number.isFinite(ctn))return null;const full=Math.floor(q/per),rest=q-full*per;
+ if(ctn*per===q)return{ok:true,kind:"exact",full,rest:0,text:`${ctn} cartons × ${per} = ${q}`};
+ if(rest>0&&ctn===full+1)return{ok:true,kind:"tail",full,rest,text:`${full} full cartons × ${per} + 1 part carton of ${rest} = ${q}`};
+ if(rest>0&&ctn===full)return{ok:true,kind:"loose",full,rest,text:`${full} cartons × ${per} + ${rest} loose (packed with other goods) = ${q}`};
+ return{ok:false,full,rest,need:rest?full+1:full,text:`${ctn} cartons × ${per} = ${ctn*per}, not ${q}`}}
 const lineCtn=l=>{const p=product(l.sku);return +l.ctn||(p?.perCtn?Math.ceil((+l.q||0)/p.perCtn):0)};
 function shipWeights(sh){const lines=shipLinesExpanded(sh);let kg=0,cbm=0,ctn=0;lines.forEach(l=>{const p=product(l.sku);const c=lineCtn(l);ctn+=c;if(p?.ctn?.kg)kg+=c*p.ctn.kg;if(p?.ctn?.L&&p?.ctn?.W&&p?.ctn?.H)cbm+=c*p.ctn.L*p.ctn.W*p.ctn.H/1e6});return{kg:r2(kg),cbm:Math.round(cbm*1000)/1000,ctn}}
 function chargeable(sh){const m0=item("mode",sh.mode)||{basis:"kg",divisor:6000};/* the forwarder's quote decides: "Rate is per" CBM or kg on the shipment overrides the service default */const m=sh.rateBasis==="cbm"?{...m0,basis:"cbm"}:sh.rateBasis==="kg"?{...m0,basis:"kg",divisor:m0.basis==="kg"?m0.divisor:0}:m0;const kg=+sh.kg||0,cbm=+sh.cbm||0;if(m.basis==="cbm")return{basis:"cbm",value:Math.max(cbm,FEES().seaCbmMin||0),vol:cbm,min:cbm<(FEES().seaCbmMin||0)};const vol=m.divisor?cbm*1e6/m.divisor:0;return{basis:"kg",value:Math.max(kg,vol),vol:r2(vol),divisor:m.divisor}}

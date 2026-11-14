@@ -6,14 +6,16 @@
 const CH_DEPT={purchases:"Buying",shipments:"Shipping",payments:"Money",stock:"Stock",products:"Products",parties:"Partners"};
 function chItems(){const forms=CREATE_REG.map(c=>({key:"f:"+c.k,title:c.menu||c.l,hint:c.hint,dept:CH_DEPT[c.mod]||"Other",form:c.k,words:(c.l+" "+(c.menu||"")+" "+(c.hint||"")).toLowerCase()}));
  const more=[
-  {key:"v:import",title:"Import a file",hint:"Bank statement, eBay / Amazon report, PI, packing list…",dept:"Data",page:"import",words:"import upload file csv excel statement report"},
+  {key:"v:import",title:"Import a file",hint:"Bank statement, eBay / Amazon report, PI, packing list…",dept:"Data",page:"import",words:"import importer upload file csv excel statement report invoice ci pi"},
   {key:"v:drive",title:"Import from a Drive link",hint:"Paste a Drive folder or file link",dept:"Data",page:"import",drive:1,words:"drive link google folder"},
   {key:"v:planner",title:"Reorder plan (ICC)",hint:"How much to order and when",dept:"Planning",page:"planner",words:"plan reorder icc forecast"},
   {key:"v:tools",title:"Calculator (CBM, landed cost)",hint:"Carton CBM, chargeable weight, landed cost",dept:"Planning",page:"tools",words:"calculator cbm weight landed cost tools"},
   {key:"v:reports",title:"Report / Payment Summary",hint:"PDF or Excel for a party or month",dept:"Reports",page:"reports",words:"report payment summary pdf excel export statement"},
   {key:"v:calendar",title:"Something on a date",hint:"Open the calendar and pick a day",dept:"Planning",page:"calendar",words:"calendar date day schedule"}];
  return forms.concat(more.filter(m=>m.page!=="import"||can("create")))}
-function chMatch(it,t){if(!t)return true;return t.split(/\s+/).every(w=>it.title.toLowerCase().includes(w)||it.words.includes(w)||it.dept.toLowerCase().includes(w))}
+/* a word matches when it is inside the text, or the text has a word that starts it ("importer" finds "import", "payments" finds "payment") */
+function chHas(text,w){text=String(text).toLowerCase();if(text.includes(w))return true;return w.length>=4&&text.split(/[^a-z0-9]+/).some(tok=>tok.length>=4&&w.startsWith(tok))}
+function chMatch(it,t){if(!t)return true;return t.split(/\s+/).every(w=>chHas(it.title,w)||chHas(it.words,w)||chHas(it.dept,w))}
 function chRun(key,q){const it=chItems().find(x=>x.key===key);if(!it)return;chClose();
  if(it.form){S._chFrom=q||"";try{openNew(it.form)}finally{S._chFrom=null}return}
  go(it.page);if(it.drive)setTimeout(()=>{try{ixDrv().open=true;ixDriveRender();$("#ix_drive_link")?.focus()}catch(_){}},300)}
@@ -37,7 +39,7 @@ document.addEventListener("click",e=>{const t=e.target.closest("[data-act]");if(
  if(a==="snew"){e.preventDefault();e.stopPropagation();hideSugg();$("#q").value="";chRun(t.dataset.key,"");return}},true);
 document.addEventListener("keydown",e=>{if(e.key.toLowerCase()!=="n"||e.ctrlKey||e.metaKey||e.altKey||S.drawer||$("#chub"))return;const el=e.target;if(/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)||el.isContentEditable)return;e.preventDefault();e.stopImmediatePropagation();openCreateHub()},true);
 /* ---- search everything: pages and "create" actions on top of the records ---- */
-function chNavHits(q){const t=norm(q);if(t.length<2)return[];const out=[];NAV_MODULES.forEach(m=>m.items.forEach(([l,page,f,ck])=>{if(ck)return;const s=norm(m.l+" "+l);if(t.split(/\s+/).every(w=>s.includes(w)))out.push({l:(m.l===l?l:m.l+" › "+l),page,f:f||{}})}));return out.slice(0,5)}
+function chNavHits(q){const t=norm(q);if(t.length<2)return[];const out=[];NAV_MODULES.forEach(m=>m.items.forEach(([l,page,f,ck])=>{if(ck)return;const s=norm(m.l+" "+l);if(t.split(/\s+/).every(w=>chHas(s,w)))out.push({l:(m.l===l?l:m.l+" › "+l),page,f:f||{}})}));return out.slice(0,5)}
 const chShowSugg0=showSugg;
 showSugg=function(q){chShowSugg0(q);const s=$("#sugg");if(!s||s.hidden)return;const t=(q||"").trim();if(t.length<2)return;
  const nav=chNavHits(t);const cr=chItems().filter(i=>(!i.form||can("create"))&&chMatch(i,t.toLowerCase())).slice(0,4);if(!nav.length&&!cr.length)return;
