@@ -265,7 +265,7 @@ function merge3(sh, th, mi, path, clash){
     if(eq(t0, s0) || eq(t0, m0)){ if(m0 === undefined) delete out[f]; else out[f] = clone(m0); continue; }
     if(isObj(s0) && isObj(t0) && isObj(m0)){ out[f] = merge3(s0, t0, m0, path.concat(f), clash); continue; }
     if(Array.isArray(t0) && Array.isArray(m0)){ const a = mergeArr(s0, t0, m0, path.concat(f), clash); if(a !== undefined){ out[f] = a; continue; } }
-    if(!(path.length === 0 && QUIET.has(f))) clash.push({ field: path.concat(f).join("."), theirs: t0, mine: m0 });
+    if(!(path.length === 0 && (QUIET.has(f) || /^fix\d{8}[a-z]?$/.test(f)))) clash.push({ field: path.concat(f).join("."), theirs: t0, mine: m0 });
     if(m0 === undefined) delete out[f]; else out[f] = clone(m0);
   }
   return out;

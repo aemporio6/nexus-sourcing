@@ -7,7 +7,7 @@ attAct=(function(orig){return function(a){if(a.act&&a.act.k==="sync"){const x=(w
 document.addEventListener("click",async e=>{const b=e.target.closest('[data-act="syncuse"]');if(!b)return;e.preventDefault();e.stopImmediatePropagation();const ds=b.dataset;
  const x=(MYTOOL.conflicts()||[]).find(y=>y.at===ds.at&&y.key===ds.key);if(!x){toast("This conflict is already closed");return}
  const v=x.theirs?x.theirs[ds.field]:undefined;if(!can("edit")){toast("Your role cannot edit records");return}
- const ok=await updateDoc(ds.col,ds.id,{[ds.field]:v},`${ds.id}: took ${x.other||"the other person"}'s ${ds.field} (${short(v)}) after a sync clash`);
+ const ok=ds.col==="setup"||!Array.isArray(D[ds.col])?(await setupPatch(String(ds.field).split("."),v,`Settings: took ${x.other||"the other person"}'s ${ds.field} after a sync clash`),true):await updateDoc(ds.col,ds.id,{[ds.field]:v},`${ds.id}: took ${x.other||"the other person"}'s ${ds.field} (${short(v)}) after a sync clash`);
  if(ok){const row=b.closest("tr");if(row)row.querySelector("td:nth-child(2)").textContent=short(v);b.textContent="Used ✓";b.disabled=true;
   if(![...b.closest(".cfbox").querySelectorAll('[data-act="syncuse"]')].some(z=>!z.disabled)){MYTOOL.dismissConflict(ds.at,ds.key);toast("Conflict resolved — all fields chosen");render()}}},true);
 

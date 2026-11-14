@@ -304,7 +304,7 @@ function merge3(sh, th, mi, path, clash){
     if(eq(t0, s0) || eq(t0, m0)){ if(m0 === undefined) delete out[f]; else out[f] = clone(m0); continue; }
     if(isObj(s0) && isObj(t0) && isObj(m0)){ out[f] = merge3(s0, t0, m0, path.concat(f), clash); continue; }
     if(Array.isArray(t0) && Array.isArray(m0)){ const a = mergeArr(s0, t0, m0, path.concat(f), clash); if(a !== undefined){ out[f] = a; continue; } }
-    if(!(path.length === 0 && QUIET.has(f))) clash.push({ field: path.concat(f).join("."), theirs: t0, mine: m0 });
+    if(!(path.length === 0 && (QUIET.has(f) || /^fix\d{8}[a-z]?$/.test(f)))) clash.push({ field: path.concat(f).join("."), theirs: t0, mine: m0 });
     if(m0 === undefined) delete out[f]; else out[f] = clone(m0);
   }
   return out;
@@ -6075,7 +6075,7 @@ attAct=(function(orig){return function(a){if(a.act&&a.act.k==="sync"){const x=(w
 document.addEventListener("click",async e=>{const b=e.target.closest('[data-act="syncuse"]');if(!b)return;e.preventDefault();e.stopImmediatePropagation();const ds=b.dataset;
  const x=(MYTOOL.conflicts()||[]).find(y=>y.at===ds.at&&y.key===ds.key);if(!x){toast("This conflict is already closed");return}
  const v=x.theirs?x.theirs[ds.field]:undefined;if(!can("edit")){toast("Your role cannot edit records");return}
- const ok=await updateDoc(ds.col,ds.id,{[ds.field]:v},`${ds.id}: took ${x.other||"the other person"}'s ${ds.field} (${short(v)}) after a sync clash`);
+ const ok=ds.col==="setup"||!Array.isArray(D[ds.col])?(await setupPatch(String(ds.field).split("."),v,`Settings: took ${x.other||"the other person"}'s ${ds.field} after a sync clash`),true):await updateDoc(ds.col,ds.id,{[ds.field]:v},`${ds.id}: took ${x.other||"the other person"}'s ${ds.field} (${short(v)}) after a sync clash`);
  if(ok){const row=b.closest("tr");if(row)row.querySelector("td:nth-child(2)").textContent=short(v);b.textContent="Used ✓";b.disabled=true;
   if(![...b.closest(".cfbox").querySelectorAll('[data-act="syncuse"]')].some(z=>!z.disabled)){MYTOOL.dismissConflict(ds.at,ds.key);toast("Conflict resolved — all fields chosen");render()}}},true);
 
@@ -6907,5 +6907,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='ca84ba71f1';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='9a1525f1a7';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
 </body></html>
