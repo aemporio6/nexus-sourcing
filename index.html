@@ -1787,8 +1787,8 @@ const FORM_DEFAULTS={
   {k:"party",l:"Supplier",t:"party",ptype:"supplier",req:1},{k:"no",l:"Our ref (auto)",t:"ro"},{k:"po",l:"Purchase",t:"poref"},{k:"receipt",l:"Receipt (if short / damaged)",t:"rcref"},{k:"reason",l:"Reason",t:"list",list:"creditReason",req:1},
   {k:"amount",l:"Amount",t:"num",req:1},{k:"cur",l:"Currency",t:"list",list:"currency",req:1},{k:"date",l:"Date",t:"date",req:1},{k:"status",l:"Status",t:"list",list:"creditStatus"},{k:"yourRef",l:"Supplier credit note no.",t:"text"},{k:"tags",l:"Tags",t:"tags"},{k:"notes",l:"Notes",t:"textarea",w:1}],
  product:[
-  {k:"brand",l:"Brand",t:"list",list:"brand",req:1},{k:"category",l:"Category",t:"list",list:"category",req:1,twoLevel:1},{k:"packOf",l:"Pack of",t:"int",req:1},{k:"unit",l:"Unit",t:"list",list:"uom"},
-  {k:"sku",l:"SKU (auto from brand + category)",t:"text",req:1},{k:"name",l:"Name",t:"text",req:1},{k:"status",l:"Status",t:"list",list:"productStatus"},{k:"isNew",l:"New product (5% fee until first receipt)",t:"bool"},
+  {k:"name",l:"Name (type it first — brand, category, pack and SKU fill themselves)",t:"text",req:1,w:1},{k:"brand",l:"Brand",t:"list",list:"brand",req:1},{k:"category",l:"Category",t:"list",list:"category",req:1,twoLevel:1},{k:"packOf",l:"Pack of",t:"int",req:1},{k:"unit",l:"Unit",t:"list",list:"uom"},
+  {k:"sku",l:"SKU (auto from brand + category)",t:"text",req:1},{k:"status",l:"Status",t:"list",list:"productStatus"},{k:"isNew",l:"New product (5% fee until first receipt)",t:"bool"},
   {k:"sellGbp",l:"Sell price £ inc VAT",t:"num"},{k:"ean",l:"Barcodes / EAN (comma separated)",t:"text"},{k:"fnsku",l:"FNSKU",t:"text"},{k:"asin",l:"ASIN",t:"text"},
   {k:"listings",l:"Listings",t:"rows",w:1,rows:"listings"},{k:"suppliers",l:"Suppliers & prices (latest first)",t:"rows",w:1,rows:"suppliers"},
   {k:"item",l:"Product itself L×W×H cm / kg",t:"dims"},{k:"pkType",l:"Packaging type",t:"list",list:"packType"},{k:"pk",l:"Pack / gift box size L×W×H cm / kg",t:"dims"},{k:"ctn",l:"Carton size L×W×H cm / gross kg",t:"dims"},{k:"perCtn",l:"Packs per carton",t:"int"},{k:"ctnPerPallet",l:"Cartons per pallet",t:"int"},
@@ -1976,7 +1976,7 @@ function syncCurrent(){const f=S.drawer?.form;({purchase:()=>syncPurchase(false)
 function rowChanged(k,i,c,v,el){const r=rowsOf(k)[i];if(!r)return;const f=S.drawer.form;const col=(ROWS[fields(f).find(x=>x.k===k)?.rows]?.cols||[]).find(x=>x.k===c);
  /* "＋ Add to list…" / "＋ New product…" inside a row never become stored values */
  if(v==="__add"){if(el)el.value=r[c]??"";if(col?.list)rowInlineAdd(k,i,c,col.list);return}
- if(v==="__new"){if(el)el.value=r[c]??"";const st=stashForm();if(col?.t==="sku")openForm("product",{force:true,returnTo:{stash:st,rows:k,i,c}});else if(col?.t==="party")openForm("party",{force:true,type:col.ptype||"supplier",returnTo:{stash:st,rows:k,i,c}});return}
+ if(v==="__new"){if(el)el.value=r[c]??"";const st=stashForm();if(col?.t==="sku")openForm("product",{force:true,name:String(r.p||r.desc||"").split(/ [—|] /)[0].slice(0,60)||undefined,returnTo:{stash:st,rows:k,i,c}});else if(col?.t==="party")openForm("party",{force:true,type:col.ptype||"supplier",returnTo:{stash:st,rows:k,i,c}});return}
  if(v==="__all"){if(el)el.value=r[c]??"";S.drawer.allParties=true;redrawRows(k);return}
  r[c]=el?.type==="number"?(v===""?null:+v):v;markDirty();S.drawer.changed["rows:"+k]=true;
  if(f==="purchase"&&k==="lines"&&["q","u","sku"].includes(c))delete r._stored;
@@ -6442,7 +6442,7 @@ formShell=function(form){const h=fnFormShell0(form);return h.replace('<div class
 const fnDrawerNav0=drawerNav;
 drawerNav=function(d){const h=fnDrawerNav0(d);return h.replace('<div class="dtop">','<div class="dtop">'+fnBar(false))};
 /* ---- suggestions: what was typed before in the same field ---- */
-const FN_NOSUG=new Set(["notes","note","desc","yourRef","piNo","no","id","oldRef","email","url","password","account","iban","sortCode"]);
+const FN_NOSUG=new Set(["name","spec","material","link","asin","fnsku","ean","sku","notes","note","desc","yourRef","piNo","no","id","oldRef","email","url","password","account","iban","sortCode"]);
 function fnSuggest(form,k){const col=FN_COL[form];if(!col||FN_NOSUG.has(k))return[];const seen=new Map();(D[col]||[]).filter(x=>!x.deletedAt).slice(-400).reverse().forEach(x=>{const v=x[k]??x.custom?.[k];if(typeof v==="string"){const t=v.trim();if(t&&t.length<=80&&!seen.has(t.toLowerCase()))seen.set(t.toLowerCase(),t)}});return[...seen.values()].slice(0,30)}
 const fnInputFor0=inputFor;
 inputFor=function(f,id,v,attrs=""){if(f.t==="text"&&S.drawer?.form&&id==="f_"+f.k){const s=fnSuggest(S.drawer.form,f.k);if(s.length){const dl="dl_"+f.k;return fnInputFor0(f,id,v,attrs+` list="${dl}" autocomplete="off"`)+`<datalist id="${dl}">${s.map(x=>`<option value="${esc(x)}">`).join("")}</datalist>`}}return fnInputFor0(f,id,v,attrs)};
@@ -6700,6 +6700,37 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-act]
 attention=(function(o){return function(){const a=o();try{const c=moCfg();if(c.on){const n=moPrepare().items.filter(i=>i.mode==="ask").length;if(n)a.push({sev:1,text:`${n} change(s) wait for your yes before going to MoreOrderz`,view:"molink",d:today()})}}catch(_){}return a}})(attention);
 (function(){try{const st=document.createElement("style");st.textContent=`.mo-box{width:min(920px,100%)}.mo-tools{display:flex;gap:6px}.mo-list{overflow:auto;display:flex;flex-direction:column;gap:6px}.mo-it{border:1px solid var(--line);border-radius:10px;padding:6px 10px}.mo-it summary{cursor:pointer;display:flex;gap:8px;align-items:center;min-height:36px}
 .mo-f{width:100%;border-collapse:collapse;font-size:13px}.mo-f td{padding:3px 6px;border-top:1px solid var(--line);vertical-align:top;word-break:break-word}.mo-old{color:var(--muted);text-decoration:line-through}.mo-new{font-weight:600}.mo-foot{display:flex;gap:8px;align-items:center;justify-content:flex-end}.mo-foot .status{margin-right:auto}`;document.head.appendChild(st)}catch(_){}})();
+
+/* ---------- Adding a NEW product (owner, 15 Nov 2026) ----------
+   Type the name first: brand, category, "pack of" and the SKU fill themselves from the name (and from the most similar
+   product already in MY TOOL). When no category fits, the form offers "＋ New category" with the name ready —
+   never a random "most used" category. No old product names pop up under the name box. */
+function paTok(s){return norm(String(s||"")).split(/[^a-z0-9]+/).filter(w=>w.length>2&&!["with","and","the","for","pcs","pack","set","new"].includes(w))}
+function paGuess(name){const t=paTok(name);if(!t.length)return null;const T=new Set(t);let best=null;
+ /* 1) a category whose name is in the product name (sub-category wins when its parent matches too) */
+ items("category").forEach(c=>{const lt=paTok(c.label);if(!lt.length)return;const hit=lt.filter(w=>T.has(w)||T.has(w.replace(/s$/,""))||[...T].some(x=>x.replace(/s$/,"")===w.replace(/s$/,""))).length/lt.length;if(hit<1)return;
+  const par=c.parent&&item("category",c.parent);const ph=par?paTok(par.label).some(w=>T.has(w)||[...T].some(x=>x.replace(/s$/,"")===w.replace(/s$/,""))):false;if(c.parent&&!ph)return;const sc=1+(c.parent?0.5:0);if(!best||sc>best.sc)best={cat:c.id,sc,why:"category name in the product name"}});
+ /* 2) the most similar product already in MY TOOL */
+ let sim=null;live(D.products).forEach(p=>{const pt=new Set(paTok(p.name));if(!pt.size)return;const sc=t.filter(w=>pt.has(w)).length/Math.max(t.length,pt.size);if(sc>=0.5&&(!sim||sc>sim.sc))sim={p,sc}});
+ const out={};if(best){out.cat=best.cat;out.why=best.why}else if(sim){out.cat=sim.p.category;out.why="like "+sim.p.sku}if(sim)out.brand=sim.p.brand;
+ const pk=String(name).match(/pack of\s*(\d+)|(\d+)\s*(?:pcs|pieces|pack)\b|\b(\d+)\s*pk\b/i);if(pk)out.packOf=+(pk[1]||pk[2]||pk[3]);return out}
+let paT=null;
+function paRun(){const d=S.drawer;if(!d||d.form!=="product"||d.ctx?.edit)return;const name=val("name");const g=paGuess(name)||{};
+ if(g.brand&&!touched("brand")&&item("brand",g.brand))setv("brand",g.brand,true);
+ if(!touched("category")){if(g.cat&&item("category",g.cat))setv("category",g.cat,true);else if(d.autoSet?.category||val("category")&&d._paCat)setv("category","",true);d._paCat=!!g.cat}
+ if(g.packOf&&!touched("packOf"))setv("packOf",g.packOf,true);
+ try{syncProduct()}catch(_){}try{showAll("product")}catch(_){}paHint(name,g)}
+function paHint(name,g){const w=$("#fw_category");if(!w)return;const old=w.querySelector(".pahint");if(!name||val("category")){old?.remove();return}if(old&&old.dataset.n===name)return;old?.remove();
+ const sug=paTok(name).slice(0,2).map(x=>x[0].toUpperCase()+x.slice(1)).join(" ");
+ w.insertAdjacentHTML("beforeend",`<div class="hint pahint" data-n="${esc(name)}">No category fits “${esc(name.slice(0,40))}”. ${can("setup")?`<button type="button" class="btn sm" data-act="panewcat" data-v="${esc(sug)}">＋ New category “${esc(sug)}”</button> <button type="button" class="btn sm" data-act="panewcat" data-v="">＋ Other name…</button>`:"Ask the owner to add the category."}</div>`)}
+document.addEventListener("input",e=>{if(e.target.id!=="f_name"||S.drawer?.form!=="product")return;clearTimeout(paT);paT=setTimeout(paRun,350)});
+document.addEventListener("change",e=>{if(S.drawer?.form!=="product")return;if(e.target.id==="f_name")paRun();if(e.target.id==="f_category"){$("#fw_category .pahint")?.remove()}});
+document.addEventListener("click",e=>{const b=e.target.closest('[data-act="panewcat"]');if(!b)return;e.preventDefault();e.stopPropagation();inlineAdd("category","category");const inp=$("#inl_in_category");if(inp){inp.value=b.dataset.v||"";inp.focus();inp.select()}},true);
+/* never suggest an unrelated "most used" category for a new product */
+const paReq0=faReqSuggest;
+faReqSuggest=function(form,k,c){if(form==="product"&&!S.drawer?.ctx?.edit&&k==="category"){const g=paGuess(val("name"));return g&&g.cat&&item("category",g.cat)?[{label:`Use ${L("category",g.cat)} (${g.why})`,safe:false,apply:()=>faSetField(k,g.cat)}]:[]}return paReq0.apply(this,arguments)};
+/* opened with a name (from an order line, the importer, "Create product") → fill the rest straight away */
+const paOpen0=openForm;openForm=function(form,ctx={}){const r=paOpen0.apply(this,arguments);if(form==="product"&&ctx&&ctx.name&&!ctx.edit)setTimeout(()=>{try{paRun()}catch(_){}},400);return r};
 
 /* ===================== events & boot v3 ===================== */
 const FORM_FOR_COL={purchases:"purchase",shipments:"shipment",payments:"payment",inspections:"inspection",receipts:"receive",moves:"move",credits:"credit",products:"product",parties:"party"};
@@ -6967,5 +6998,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='cf588d5147';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='d0d9a4bc90';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
 </body></html>

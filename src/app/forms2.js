@@ -20,7 +20,7 @@ function syncCurrent(){const f=S.drawer?.form;({purchase:()=>syncPurchase(false)
 function rowChanged(k,i,c,v,el){const r=rowsOf(k)[i];if(!r)return;const f=S.drawer.form;const col=(ROWS[fields(f).find(x=>x.k===k)?.rows]?.cols||[]).find(x=>x.k===c);
  /* "＋ Add to list…" / "＋ New product…" inside a row never become stored values */
  if(v==="__add"){if(el)el.value=r[c]??"";if(col?.list)rowInlineAdd(k,i,c,col.list);return}
- if(v==="__new"){if(el)el.value=r[c]??"";const st=stashForm();if(col?.t==="sku")openForm("product",{force:true,returnTo:{stash:st,rows:k,i,c}});else if(col?.t==="party")openForm("party",{force:true,type:col.ptype||"supplier",returnTo:{stash:st,rows:k,i,c}});return}
+ if(v==="__new"){if(el)el.value=r[c]??"";const st=stashForm();if(col?.t==="sku")openForm("product",{force:true,name:String(r.p||r.desc||"").split(/ [—|] /)[0].slice(0,60)||undefined,returnTo:{stash:st,rows:k,i,c}});else if(col?.t==="party")openForm("party",{force:true,type:col.ptype||"supplier",returnTo:{stash:st,rows:k,i,c}});return}
  if(v==="__all"){if(el)el.value=r[c]??"";S.drawer.allParties=true;redrawRows(k);return}
  r[c]=el?.type==="number"?(v===""?null:+v):v;markDirty();S.drawer.changed["rows:"+k]=true;
  if(f==="purchase"&&k==="lines"&&["q","u","sku"].includes(c))delete r._stored;

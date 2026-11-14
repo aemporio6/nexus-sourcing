@@ -46,8 +46,8 @@ const FORM_DEFAULTS={
   {k:"party",l:"Supplier",t:"party",ptype:"supplier",req:1},{k:"no",l:"Our ref (auto)",t:"ro"},{k:"po",l:"Purchase",t:"poref"},{k:"receipt",l:"Receipt (if short / damaged)",t:"rcref"},{k:"reason",l:"Reason",t:"list",list:"creditReason",req:1},
   {k:"amount",l:"Amount",t:"num",req:1},{k:"cur",l:"Currency",t:"list",list:"currency",req:1},{k:"date",l:"Date",t:"date",req:1},{k:"status",l:"Status",t:"list",list:"creditStatus"},{k:"yourRef",l:"Supplier credit note no.",t:"text"},{k:"tags",l:"Tags",t:"tags"},{k:"notes",l:"Notes",t:"textarea",w:1}],
  product:[
-  {k:"brand",l:"Brand",t:"list",list:"brand",req:1},{k:"category",l:"Category",t:"list",list:"category",req:1,twoLevel:1},{k:"packOf",l:"Pack of",t:"int",req:1},{k:"unit",l:"Unit",t:"list",list:"uom"},
-  {k:"sku",l:"SKU (auto from brand + category)",t:"text",req:1},{k:"name",l:"Name",t:"text",req:1},{k:"status",l:"Status",t:"list",list:"productStatus"},{k:"isNew",l:"New product (5% fee until first receipt)",t:"bool"},
+  {k:"name",l:"Name (type it first — brand, category, pack and SKU fill themselves)",t:"text",req:1,w:1},{k:"brand",l:"Brand",t:"list",list:"brand",req:1},{k:"category",l:"Category",t:"list",list:"category",req:1,twoLevel:1},{k:"packOf",l:"Pack of",t:"int",req:1},{k:"unit",l:"Unit",t:"list",list:"uom"},
+  {k:"sku",l:"SKU (auto from brand + category)",t:"text",req:1},{k:"status",l:"Status",t:"list",list:"productStatus"},{k:"isNew",l:"New product (5% fee until first receipt)",t:"bool"},
   {k:"sellGbp",l:"Sell price £ inc VAT",t:"num"},{k:"ean",l:"Barcodes / EAN (comma separated)",t:"text"},{k:"fnsku",l:"FNSKU",t:"text"},{k:"asin",l:"ASIN",t:"text"},
   {k:"listings",l:"Listings",t:"rows",w:1,rows:"listings"},{k:"suppliers",l:"Suppliers & prices (latest first)",t:"rows",w:1,rows:"suppliers"},
   {k:"item",l:"Product itself L×W×H cm / kg",t:"dims"},{k:"pkType",l:"Packaging type",t:"list",list:"packType"},{k:"pk",l:"Pack / gift box size L×W×H cm / kg",t:"dims"},{k:"ctn",l:"Carton size L×W×H cm / gross kg",t:"dims"},{k:"perCtn",l:"Packs per carton",t:"int"},{k:"ctnPerPallet",l:"Cartons per pallet",t:"int"},

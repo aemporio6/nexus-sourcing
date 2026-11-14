@@ -39,7 +39,7 @@ formShell=function(form){const h=fnFormShell0(form);return h.replace('<div class
 const fnDrawerNav0=drawerNav;
 drawerNav=function(d){const h=fnDrawerNav0(d);return h.replace('<div class="dtop">','<div class="dtop">'+fnBar(false))};
 /* ---- suggestions: what was typed before in the same field ---- */
-const FN_NOSUG=new Set(["notes","note","desc","yourRef","piNo","no","id","oldRef","email","url","password","account","iban","sortCode"]);
+const FN_NOSUG=new Set(["name","spec","material","link","asin","fnsku","ean","sku","notes","note","desc","yourRef","piNo","no","id","oldRef","email","url","password","account","iban","sortCode"]);
 function fnSuggest(form,k){const col=FN_COL[form];if(!col||FN_NOSUG.has(k))return[];const seen=new Map();(D[col]||[]).filter(x=>!x.deletedAt).slice(-400).reverse().forEach(x=>{const v=x[k]??x.custom?.[k];if(typeof v==="string"){const t=v.trim();if(t&&t.length<=80&&!seen.has(t.toLowerCase()))seen.set(t.toLowerCase(),t)}});return[...seen.values()].slice(0,30)}
 const fnInputFor0=inputFor;
 inputFor=function(f,id,v,attrs=""){if(f.t==="text"&&S.drawer?.form&&id==="f_"+f.k){const s=fnSuggest(S.drawer.form,f.k);if(s.length){const dl="dl_"+f.k;return fnInputFor0(f,id,v,attrs+` list="${dl}" autocomplete="off"`)+`<datalist id="${dl}">${s.map(x=>`<option value="${esc(x)}">`).join("")}</datalist>`}}return fnInputFor0(f,id,v,attrs)};
