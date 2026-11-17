@@ -13,7 +13,7 @@ ok(!/approval/i.test(by("va@x.com").body.split("To stop")[0]),"VA: no approvals,
 ok(by("fin@x.com")&&/PAY-2/.test(by("fin@x.com").body)&&!/PAY-1/.test(by("fin@x.com").body),"Finance: approvals waiting, but not their own request");
 ok(!/Joyce — call/.test(by("fin@x.com").body),"Finance: not their own bank-detail change");
 ok(/SH-1/.test(by("fin@x.com").body)&&/RC-1/.test(by("fin@x.com").body)&&/50% overdue/.test(by("fin@x.com").body)&&!/small thing/.test(by("fin@x.com").body),"Finance: arriving, landed changed, serious alerts only");
-ok(by("maashiq@gmail.com")&&/PAY-1/.test(by("maashiq@gmail.com").body)&&/Joyce — call/.test(by("maashiq@gmail.com").body),"Owner: everything waiting");
-ok(!by("quiet@x.com"),"nothing waiting → no email");ok(!by("aemporio6@gmail.com")&&!by("maashiq123@gmail.com"),"owner gets ONE email (not one per admin account)");ok(!by("off@x.com"),"morning email off → none");
+ok(by("aemporio6@gmail.com")&&/PAY-1/.test(by("aemporio6@gmail.com").body)&&/Joyce — call/.test(by("aemporio6@gmail.com").body),"Owner: everything waiting");
+ok(!by("quiet@x.com"),"nothing waiting → no email");ok(!by("maashiq@gmail.com")&&!by("maashiq123@gmail.com"),"owner gets ONE email (not one per admin account)");ok(!by("off@x.com"),"morning email off → none");
 ok(/#\/doc\/payments\/PAY-2/.test(by("fin@x.com").body),"each line links to the record");
 console.log(by("fin@x.com").subject);process.exit(fails?1:0);
