@@ -52,7 +52,7 @@ document.addEventListener("click",async e=>{const b=e.target.closest("[data-id-a
  if(a==="rmq"){const qs=(x.quotes||[]).filter((_,i)=>i!==+b.dataset.i);await idPatch(x.no,{quotes:qs});render();return}
  if(a==="paste"){const t=String($("#id_paste")?.value||"");if(!t.trim())return;const num_=re=>{const m=t.match(re);return m?+m[1]:null};
   const price=num_(/(?:price|rate|unit|单价)[^\d]{0,12}(\d+(?:\.\d+)?)/i)??num_(/(\d+(?:\.\d+)?)\s*(?:rmb|cny|¥|yuan|usd|\$)/i)??num_(/[¥$]\s*(\d+(?:\.\d+)?)/);const moq=num_(/moq[^\d]{0,6}(\d+)/i);const days=num_(/(\d+)\s*(?:working\s*)?days?/i);
-  const cur=/usd|\$/i.test(t)?"USD":"RMB";const who=(t.match(/^\s*([A-Za-z][\w .&-]{1,40}?)\s*[:：]/)||[])[1]||"";const p=who&&live(D.parties).find(p=>String(p.name||"").trim().length>=3&&(norm(p.name).includes(norm(who))||norm(who).includes(norm(p.name))));
+  const cur=/usd|\$/i.test(t)?"USD":"RMB";const who=(t.match(/^\s*([A-Za-z][\w .&-]{1,40}?)\s*[:：]/)||[])[1]||"";const p=who&&live(D.parties).find(p=>{const a=norm(p.name),w=norm(who);return a.length>=3&&w.length>=3&&(a.includes(w)||w.includes(a))});
   if(price==null){toast("No price found in the text — type it in the table");return}await idPatch(x.no,{quotes:[...(x.quotes||[]),{...(p?{party:p.code}:{name:who||"(from message)"}),price,cur,moq,days,note:t.slice(0,300)}],status:"quoting"},"Quote read from a message");toast(`Quote added: ${price} ${cur}${moq?" · MOQ "+moq:""}${days?" · "+days+" days":""}`);render();return}
  if(a==="drop"){const why=prompt("Why drop this idea? (kept on it)")||"";await idPatch(x.no,{status:"dropped",dropWhy:why.trim()||null},`${x.no} dropped`);render();return}
  if(a==="reopen"){await idPatch(x.no,{status:"quoting",dropWhy:null},`${x.no} reopened`);render();return}

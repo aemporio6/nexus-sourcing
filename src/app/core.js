@@ -542,7 +542,7 @@ function setF(page,k,v){const f=F(page);if(v===""||v==null)delete f[k];else f[k]
 function clearF(page){S.f[page]={};S.limit[page]=60;filtersChanged(page)}
 
 /* ---------- search ---------- */
-function norm(s){s=String(s||"").toLowerCase();const al=SET().aliases||{};return s.split(/[\s,;|·]+/).map(w=>al[w]||w).join(" ").replace(/[^a-z0-9£$¥.\-\s]/g," ").replace(/\s+/g," ").trim()}
+function norm(s){s=String(s||"").toLowerCase();const al=SET().aliases||{};return s.split(/[\s,;|·]+/).map(w=>al[w]!=null?String(al[w]).toLowerCase():w).join(" ").replace(/[^a-z0-9£$¥.\-\s]/g," ").replace(/\s+/g," ").trim()}
 function lev(a,b){if(a===b)return 0;const al=a.length,bl=b.length;if(!al)return bl;if(!bl)return al;if(Math.abs(al-bl)>3)return 9;let d=[];for(let i=0;i<=al;i++){d[i]=[i]}for(let j=0;j<=bl;j++)d[0][j]=j;for(let i=1;i<=al;i++)for(let j=1;j<=bl;j++){const c=a[i-1]===b[j-1]?0:1;d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+c);if(i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1])d[i][j]=Math.min(d[i][j],d[i-2][j-2]+1)}return d[al][bl]}
 function score(text,q){const t=norm(text);const words=norm(q).split(" ").filter(Boolean);if(!words.length)return 0;let s=0,hit=0;const tw=t.split(" ");for(const w of words){if(t.includes(w)){s+=w.length>2?3:1;hit++;continue}const nw=w.replace(/[,.]/g,"");if(/^\d+(\.\d+)?$/.test(nw)&&tw.some(x=>x.replace(/[,.]/g,"")===nw||x.replace(/[,.]/g,"").startsWith(nw))){s+=2;hit++;continue}if(w.length>3){const tol=w.length>6?2:1;if(tw.some(x=>x.length>3&&lev(x,w)<=tol)){s+=1;hit++;continue}}}
  if(!hit)return 0;return hit===words.length?s:s*hit/words.length*0.6}

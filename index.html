@@ -1798,7 +1798,7 @@ function setF(page,k,v){const f=F(page);if(v===""||v==null)delete f[k];else f[k]
 function clearF(page){S.f[page]={};S.limit[page]=60;filtersChanged(page)}
 
 /* ---------- search ---------- */
-function norm(s){s=String(s||"").toLowerCase();const al=SET().aliases||{};return s.split(/[\s,;|·]+/).map(w=>al[w]||w).join(" ").replace(/[^a-z0-9£$¥.\-\s]/g," ").replace(/\s+/g," ").trim()}
+function norm(s){s=String(s||"").toLowerCase();const al=SET().aliases||{};return s.split(/[\s,;|·]+/).map(w=>al[w]!=null?String(al[w]).toLowerCase():w).join(" ").replace(/[^a-z0-9£$¥.\-\s]/g," ").replace(/\s+/g," ").trim()}
 function lev(a,b){if(a===b)return 0;const al=a.length,bl=b.length;if(!al)return bl;if(!bl)return al;if(Math.abs(al-bl)>3)return 9;let d=[];for(let i=0;i<=al;i++){d[i]=[i]}for(let j=0;j<=bl;j++)d[0][j]=j;for(let i=1;i<=al;i++)for(let j=1;j<=bl;j++){const c=a[i-1]===b[j-1]?0:1;d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+c);if(i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1])d[i][j]=Math.min(d[i][j],d[i-2][j-2]+1)}return d[al][bl]}
 function score(text,q){const t=norm(text);const words=norm(q).split(" ").filter(Boolean);if(!words.length)return 0;let s=0,hit=0;const tw=t.split(" ");for(const w of words){if(t.includes(w)){s+=w.length>2?3:1;hit++;continue}const nw=w.replace(/[,.]/g,"");if(/^\d+(\.\d+)?$/.test(nw)&&tw.some(x=>x.replace(/[,.]/g,"")===nw||x.replace(/[,.]/g,"").startsWith(nw))){s+=2;hit++;continue}if(w.length>3){const tol=w.length>6?2:1;if(tw.some(x=>x.length>3&&lev(x,w)<=tol)){s+=1;hit++;continue}}}
  if(!hit)return 0;return hit===words.length?s:s*hit/words.length*0.6}
@@ -7158,7 +7158,7 @@ document.addEventListener("click",async e=>{const b=e.target.closest("[data-id-a
  if(a==="rmq"){const qs=(x.quotes||[]).filter((_,i)=>i!==+b.dataset.i);await idPatch(x.no,{quotes:qs});render();return}
  if(a==="paste"){const t=String($("#id_paste")?.value||"");if(!t.trim())return;const num_=re=>{const m=t.match(re);return m?+m[1]:null};
   const price=num_(/(?:price|rate|unit|单价)[^\d]{0,12}(\d+(?:\.\d+)?)/i)??num_(/(\d+(?:\.\d+)?)\s*(?:rmb|cny|¥|yuan|usd|\$)/i)??num_(/[¥$]\s*(\d+(?:\.\d+)?)/);const moq=num_(/moq[^\d]{0,6}(\d+)/i);const days=num_(/(\d+)\s*(?:working\s*)?days?/i);
-  const cur=/usd|\$/i.test(t)?"USD":"RMB";const who=(t.match(/^\s*([A-Za-z][\w .&-]{1,40}?)\s*[:：]/)||[])[1]||"";const p=who&&live(D.parties).find(p=>String(p.name||"").trim().length>=3&&(norm(p.name).includes(norm(who))||norm(who).includes(norm(p.name))));
+  const cur=/usd|\$/i.test(t)?"USD":"RMB";const who=(t.match(/^\s*([A-Za-z][\w .&-]{1,40}?)\s*[:：]/)||[])[1]||"";const p=who&&live(D.parties).find(p=>{const a=norm(p.name),w=norm(who);return a.length>=3&&w.length>=3&&(a.includes(w)||w.includes(a))});
   if(price==null){toast("No price found in the text — type it in the table");return}await idPatch(x.no,{quotes:[...(x.quotes||[]),{...(p?{party:p.code}:{name:who||"(from message)"}),price,cur,moq,days,note:t.slice(0,300)}],status:"quoting"},"Quote read from a message");toast(`Quote added: ${price} ${cur}${moq?" · MOQ "+moq:""}${days?" · "+days+" days":""}`);render();return}
  if(a==="drop"){const why=prompt("Why drop this idea? (kept on it)")||"";await idPatch(x.no,{status:"dropped",dropWhy:why.trim()||null},`${x.no} dropped`);render();return}
  if(a==="reopen"){await idPatch(x.no,{status:"quoting",dropWhy:null},`${x.no} reopened`);render();return}
@@ -7616,5 +7616,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='f81364232a';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='59fa2c759a';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
 </body></html>
