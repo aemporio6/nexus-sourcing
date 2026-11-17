@@ -11,14 +11,17 @@ function chItems(){const forms=CREATE_REG.map(c=>({key:"f:"+c.k,title:c.menu||c.
   {key:"v:planner",title:"Reorder plan (ICC)",hint:"How much to order and when",dept:"Planning",page:"planner",words:"plan reorder icc forecast"},
   {key:"v:tools",title:"Calculator (CBM, landed cost)",hint:"Carton CBM, chargeable weight, landed cost",dept:"Planning",page:"tools",words:"calculator cbm weight landed cost tools"},
   {key:"v:reports",title:"Report / Payment Summary",hint:"PDF or Excel for a party or month",dept:"Reports",page:"reports",words:"report payment summary pdf excel export statement"},
-  {key:"v:calendar",title:"Something on a date",hint:"Open the calendar and pick a day",dept:"Planning",page:"calendar",words:"calendar date day schedule"}];
+  {key:"v:calendar",title:"Something on a date",hint:"Open the calendar and pick a day",dept:"Planning",page:"calendar",words:"calendar date day schedule"},
+  {key:"v:task",title:"New task",hint:"For you or someone in the team, with a due date",dept:"Planning",page:"tasks",focus:"#tk_title",words:"task todo reminder follow up job assign"},
+  {key:"v:pis",title:"Product information sheet",hint:"Read a supplier's sheet into its order and products",dept:"Data",page:"import",pis:1,words:"product information sheet packing carton supplier sheet"},
+  {key:"v:views",title:"Saved view of a list",hint:"Open a list, set filters / columns, then “Save view”",dept:"Reports",page:"purchases",words:"view saved list filter columns table"}];
  return forms.concat(more.filter(m=>m.page!=="import"||can("create")))}
 /* a word matches when it is inside the text, or the text has a word that starts it ("importer" finds "import", "payments" finds "payment") */
 function chHas(text,w){text=String(text).toLowerCase();if(text.includes(w))return true;return w.length>=4&&text.split(/[^a-z0-9]+/).some(tok=>tok.length>=4&&w.startsWith(tok))}
 function chMatch(it,t){if(!t)return true;return t.split(/\s+/).every(w=>chHas(it.title,w)||chHas(it.words,w)||chHas(it.dept,w))}
 function chRun(key,q){const it=chItems().find(x=>x.key===key);if(!it)return;chClose();
  if(it.form){S._chFrom=q||"";try{openNew(it.form)}finally{S._chFrom=null}return}
- go(it.page);if(it.drive)setTimeout(()=>{try{ixDrv().open=true;ixDriveRender();$("#ix_drive_link")?.focus()}catch(_){}},300)}
+ go(it.page);if(it.focus)setTimeout(()=>$(it.focus)?.focus(),300);if(it.pis)setTimeout(()=>{try{document.querySelector(".pis_file")?.click()}catch(_){}},350);if(it.drive)setTimeout(()=>{try{ixDrv().open=true;ixDriveRender();$("#ix_drive_link")?.focus()}catch(_){}},300)}
 function chClose(){const o=$("#chub");if(o)o.remove()}
 function openCreateHub(q=""){if(!can("create")&&!chItems().some(i=>!i.form)){toast("Your role cannot create records");return}chClose();
  const o=document.createElement("div");o.id="chub";o.className="ch-ov";o.innerHTML=`<div class="ch-box" role="dialog" aria-modal="true" aria-labelledby="ch_t"><div class="ch-h"><div><h2 id="ch_t">Create</h2><div class="status">Everything you can create or start, from anywhere. Press <kbd>N</kbd> on any screen.</div></div><button class="x" data-act="chclose" aria-label="Close">×</button></div>
