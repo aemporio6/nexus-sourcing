@@ -33,7 +33,7 @@ const FORM_DEFAULTS={
  receive:[
   {k:"src",l:"Shipment or UK purchase",t:"recvref",req:1},{k:"no",l:"Our ref (auto)",t:"ro"},{k:"date",l:"Date received",t:"date",req:1},{k:"loc",l:"Default location",t:"loc",req:1},
   {k:"lines",l:"Count per product",t:"rows",w:1,rows:"rcLines"},
-  {k:"ukExtraGbp",l:"Extra UK costs £ (not on shipment)",t:"num"},{k:"dutyGbp",l:"Duty paid £",t:"num"},{k:"vatGbp",l:"Import VAT £ (C79)",t:"num"},{k:"customsEntryNo",l:"Customs entry no.",t:"text"},{k:"agent",l:"Customs agent",t:"party",ptype:"customs"},{k:"c79Link",l:"C79 / duty invoice link",t:"link"},
+  {k:"ukExtraGbp",l:"Extra UK costs £ (not on shipment)",t:"num"},{k:"dutyGbp",l:"Duty paid £",t:"num"},{k:"vatGbp",l:"Import VAT £ (C79)",t:"num"},{k:"customsEntryNo",l:"Customs entry no.",t:"text"},{k:"agent",l:"Customs agent",t:"party",ptype:"customs|forwarder"},{k:"c79Link",l:"C79 / duty invoice link",t:"link"},
   {k:"claimStatus",l:"Claim",t:"list",list:"claimStatus"},{k:"claimText",l:"Claim details (short / damaged)",t:"textarea",w:1},{k:"tags",l:"Tags",t:"tags"},{k:"notes",l:"Notes",t:"textarea",w:1}],
  move:[
   {k:"type",l:"Movement",t:"list",list:"moveType",req:1},{k:"no",l:"Our ref (auto)",t:"ro"},{k:"sku",l:"Product",t:"sku",req:1},{k:"qty",l:"Packs",t:"int",req:1},
@@ -102,7 +102,7 @@ function inputFor(f,id,v,attrs=""){switch(f.t){
  case"textarea":return`<textarea id="${id}" rows="2" ${attrs}>${esc(v??"")}</textarea>`;
  case"opts":{const o=f.opts||[];const miss=v!=null&&v!==""&&!o.some(x=>String(Array.isArray(x)?x[0]:x)===String(v))?[[String(v),String(v)+" (archived)"]]:[];return`<select id="${id}" ${attrs}>${optsHtml(o.concat(miss),v)}</select>`}
  case"list":return selectHtml(id,listOpts(f.list,f),v,{list:f.list,attrs,f});
- case"party":{const ps=live(D.parties).filter(p=>p.status!=="archived"&&(!f.ptype||p.type===f.ptype));return selectHtml(id,ps.map(p=>[p.code,plabel(p.code)]),v,{empty:"— pick —",newOpt:`<option value="__new">＋ Add new party…</option>`,attrs,f})}
+ case"party":{/* "customs|forwarder": several types; the asked type first; never an empty list when other parties exist */const want=f.ptype?String(f.ptype).split("|"):null;let ps=live(D.parties).filter(p=>p.status!=="archived"&&(!want||want.includes(p.type)));if(want&&!ps.length)ps=live(D.parties).filter(p=>p.status!=="archived"&&["forwarder","supplier","inspector","customs"].includes(p.type));return selectHtml(id,ps.map(p=>[p.code,plabel(p.code)]),v,{empty:"— pick —",newOpt:`<option value="__new">＋ Add new party…</option>`,attrs,f})}
  case"company":return selectHtml(id,(SET().companies||[]).filter(c=>!c.archived).map(c=>[c.id,c.name]),v,{attrs,f,setAdd:"company"});
  case"bank":return selectHtml(id,(SET().banks||[]).filter(b=>!b.archived).map(b=>[b.id,b.name+(b.cur?" · "+b.cur:"")]),v,{attrs,f,setAdd:"bank"});
  case"email":return selectHtml(id,(SET().emails||[]).filter(e=>!e.archived).map(e=>[e.id,e.address]),v,{attrs,f,setAdd:"email"});
@@ -110,7 +110,7 @@ function inputFor(f,id,v,attrs=""){switch(f.t){
  case"loc":return selectHtml(id,leafLocs(),v,{attrs,f,setAdd:"loc"});
  case"sku":{/* ordering forms do not offer discontinued products; a stored value stays selectable */const ordering=["purchase"].includes(S.drawer?.form);return selectHtml(id,live(D.products).filter(p=>p.status!=="archived"&&!p.mergedInto&&!(ordering&&item("productStatus",p.status)?.sellable===false)).map(p=>[p.sku,`${p.name} · ${p.sku}`]),v,{empty:"— product —",newOpt:`<option value="__new">＋ New product…</option>`,attrs,f})}
  case"poref":return selectHtml(id,live(D.purchases).filter(p=>!["cancelled"].includes(p.status)).sort((a,b)=>a.date<b.date?1:-1).map(p=>[p.no,`${p.no} · ${pname(p.party)} · ${poDesc(p).slice(0,30)}${p.oldRef?" · "+p.oldRef:""}`]),v,{empty:"— order —",attrs,f});
- case"rcref":return selectHtml(id,live(D.receipts).slice().sort((a,b)=>(a.date||"")<(b.date||"")?1:-1).map(r=>[r.no,`${r.no} · ${r.src||""} · ${fmtD(r.date)}${(r.lines||[]).some(l=>+l.damaged)?" · damaged":""}`]),v,{empty:"— receipt —",attrs,f});
+ case"rcref":return selectHtml(id,live(D.receipts).slice().sort((a,b)=>(a.date||"")<(b.date||"")?1:-1).map(r=>[r.no,`${r.no} · ${r.src||""} · ${fmtD(r.date)}${(r.lines||[]).some(l=>+l.damaged)?" · damaged":""}`]),v,{empty:live(D.receipts).length?"— receipt —":"— no goods received yet —",attrs,f});
  case"payref":return selectHtml(id,live(D.payments).filter(p=>!["cancelled","failed","reversed"].includes(p.status)).slice().sort((a,b)=>(a.date||"")<(b.date||"")?1:-1).slice(0,300).map(p=>[p.no,`${p.no} · ${pname(p.party)} · ${fmt(p.amount,p.cur)} · ${fmtD(p.date)}`]),v,{empty:"— payment —",attrs,f});
  case"ref":return`<select id="${id}" ${attrs}></select>`;
  case"recvref":return`<select id="${id}" ${attrs}></select>`;
