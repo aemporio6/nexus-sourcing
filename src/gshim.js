@@ -19,6 +19,9 @@ const DEMO = /[?&]demo\b/.test(location.search) || location.protocol === "file:"
 const API = "https://www.googleapis.com";
 /* ---------------- data gateway (roles enforced at the data boundary; tools/gateway.gs) ---------------- */
 let GW = "", gwFallback = ""; try{ const g = localStorage.getItem("mt_gw"); GW = g === "off" ? "" : (g || CFG.gateway || ""); }catch(_){ GW = CFG.gateway || ""; }   /* "off" = this device uses Drive directly */
+/* workspace (17 Nov 2026): "" = the company data (Vartleaves, through the gateway) · "own" = this person's own Drive, their own data, they are its Owner */
+const WS = (() => { try{ return localStorage.getItem("mt_ws") === "own" ? "own" : ""; }catch(_){ return ""; } })();
+if(WS === "own") GW = "";
 const viaGw = () => !DEMO && !!GW;
 async function gw(op, extra){
   for(let attempt = 0; attempt < 2; attempt++){
@@ -62,7 +65,7 @@ let remote = { fileId: null, folderId: null, filesFolderId: null, version: null,
 let readyRes; const ready = new Promise(r => readyRes = r);
 const subs = {};
 let pushT = null, pushing = false, pushAgain = false, pollT = null;
-const cacheKey = () => "db:" + (DEMO ? "demo" : lc(me && me.email));
+const cacheKey = () => "db:" + (DEMO ? "demo" : lc(me && me.email)) + (WS === "own" ? ":own" : "");
 
 /* ---------------- small UI helpers (login / status) ---------------- */
 const LOGO = '<div style="filter:drop-shadow(0 8px 20px rgba(35,54,72,.14))">' + (window.MT_LOGO_FULL ? window.MT_LOGO_FULL(180) : '<img src="assets/logo.svg" alt="MY TOOL" width="150" height="150">') + '</div>';
@@ -151,7 +154,7 @@ async function signOut(){
 async function findOrCreateFolder(name, parent, create){
   const q = "mimeType='application/vnd.google-apps.folder' and trashed=false and name='" + name.replace(/'/g, "\\'") + "'" + (parent ? " and '" + parent + "' in parents" : "");
   const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent(q) + "&fields=files(id,name,owners(emailAddress))&pageSize=10");
-  const own = (j.files || []).find(f => (f.owners || []).some(o => lc(o.emailAddress) === CFG.dataOwner)) || (j.files || [])[0];
+  const own = (j.files || []).find(f => (f.owners || []).some(o => lc(o.emailAddress) === CFG.dataOwner)) || (WS === "own" ? null : (j.files || [])[0]);
   if(own) return own.id;
   if(!create) return null;
   const f = await gjson(API + "/drive/v3/files?fields=id", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, mimeType: "application/vnd.google-apps.folder", parents: parent ? [parent] : undefined }) });
@@ -573,7 +576,8 @@ async function start(){
     }
     gate('<p>Connecting…</p>');
     await signIn();
-    gate('<p>Opening your data…</p>');
+    if(WS === "own"){ CFG.dataOwner = me.email; if(!CFG.admins.includes(me.email)) CFG.admins.push(me.email); }
+    gate('<p>Opening ' + (WS === "own" ? "your own data (" + esc(me.email) + ")" : "your data") + '…</p>');
     const c = await kvGet(cacheKey());
     if(c){ store = c.store || {}; tomb = c.tomb || {}; dirty = c.dirty || {}; shadow = c.shadow || clone(store); forceMine = new Set(c.forceMine || (c.shadow ? [] : Object.keys(dirty))); held = c.held || {}; shadowRevs = c.shadowRevs || {}; revs = c.revs || {}; sent = c.sent || {}; conflicts = c.conflicts || []; remote.version = c.version; remote.fileId = c.fileId; }
     let f = null;
@@ -586,27 +590,30 @@ async function start(){
     }else if(!c){
       if(me.email !== CFG.dataOwner){
         gate('<p>Signed in as <b>' + esc(me.email) + '</b>.</p><p>The data has not been shared with this account yet. Ask the admin (' + esc(CFG.dataOwner) + ') to add you in <b>Setup › Users</b> and share the Drive folder <b>' + esc(CFG.folderName) + '</b> with you.</p><button type="button" class="mt_btn ghost" id="mt_out">Use another account</button>');
-        document.getElementById("mt_out").onclick = signOut; return;
+        document.getElementById("mt_out").onclick = signOut; mtOwnBtn(); return;
       }
       await firstRun(); return;
     }
     const ok = allowedUser();
     if(!ok){
       gate('<p>Signed in as <b>' + esc(me.email) + '</b>.</p><p>This account is not allowed to use MY TOOL. Ask the admin to add you in <b>Setup › Users</b>.</p><button type="button" class="mt_btn ghost" id="mt_out">Use another account</button>');
-      document.getElementById("mt_out").onclick = signOut; return;
+      document.getElementById("mt_out").onclick = signOut; mtOwnBtn(); return;
     }
     await saveCache();
     ungate(); readyRes(); poll(); loadArchives();
-    status(gwFallback ? "Gateway not reachable (" + gwFallback + ") — using Drive directly on this device" : "Synced", gwFallback ? "warn" : "ok");
+    status(gwFallback ? "Gateway not reachable (" + gwFallback + ") — using Drive directly on this device" : (WS === "own" ? "Synced · your own Drive" : "Synced"), gwFallback ? "warn" : "ok");
   }catch(e){
     console.error(e);
     gate('<p class="mt_bad">' + esc(e.message || e) + '</p><button type="button" class="mt_btn" id="mt_retry">Try again</button> <button type="button" class="mt_btn ghost" id="mt_out">Use another account</button>');
     document.getElementById("mt_retry").onclick = () => location.reload();
     document.getElementById("mt_out").onclick = signOut;
+    if(/not allowed|not shared|403/i.test(String(e && e.message || e)) && WS !== "own") mtOwnBtn();
   }
 }
+/* someone the company data is not shared with can still use MY TOOL – with their own Drive */
+function mtOwnBtn(){ try{ const g = document.getElementById("mt_out"); if(!g || document.getElementById("mt_ownws")) return; g.insertAdjacentHTML("afterend", ' <button type="button" class="mt_btn" id="mt_ownws">Use MY TOOL with my own Drive (my own data)</button><p class="mt_small">Your own empty MY TOOL in your Google Drive — nothing of the company data, and you are its Owner. You can switch back any time.</p>'); document.getElementById("mt_ownws").onclick = () => { try{ localStorage.setItem("mt_ws", "own"); }catch(_){} location.reload(); }; }catch(_){} }
 async function firstRun(){
-  const g = gate('<p>Welcome, <b>' + esc(me.name) + '</b>. This is the first time MY TOOL opens on ' + esc(CFG.dataOwner) + '.</p>' +
+  const g = gate('<p>Welcome, <b>' + esc(me.name) + '</b>. This is the first time MY TOOL opens on ' + esc(CFG.dataOwner) + (WS === "own" ? ' (your own Drive)' : '') + '.</p>' +
     '<p>Choose how to start. Your data will be kept in your Google Drive, folder <b>' + esc(CFG.folderName) + '</b>.</p>' +
     '<label class="mt_btn">⬆ Load my starting file / old NEXUS backup<input type="file" id="mt_file" accept=".json,application/json" hidden></label>' +
     '<button type="button" class="mt_btn ghost" id="mt_empty">Start empty</button><p class="mt_small" id="mt_err"></p>');
@@ -713,6 +720,8 @@ const userApi = {
   async isOwner(){ await ready; return DEMO || !!(me && CFG.admins.includes(me.email)); }
 };
 window.MYTOOL = {
+  workspace: WS,
+  setWorkspace(ws){ try{ if(ws === "own") localStorage.setItem("mt_ws", "own"); else localStorage.removeItem("mt_ws"); }catch(_){} location.reload(); },
   get me(){ return me; }, get st(){ return lastSt; },
   async reauth(){ await requestToken(""); await push(); }, demo: DEMO, signOut, cfg: CFG,
   async syncNow(){ await push(); await poll(); },
