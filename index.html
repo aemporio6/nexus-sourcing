@@ -6843,18 +6843,18 @@ function ovShipList(o){const out=[];(o.lines||[]).forEach((l,i)=>{if(!l.po||!l.s
 /* ---- payment ---- */
 const ovValPay0=validatePay;
 validatePay=function(o){const r=ovValPay0.apply(this,arguments);const L_=ovPayList(o);S.drawer._ov={kind:"pay",list:L_};
- L_.filter(x=>x.over&&!x.adv).forEach(x=>{r.errors.allocations=`${x.ref}: only ${fmt(x.remaining,x.cur)} is still owed, this payment puts ${fmt(x.inCur,x.cur)} on it (${fmt(x.extra,x.cur)} too much). Use "Set to what is owed" or "It is an advance" below.`});
+ L_.filter(x=>x.over&&!x.adv).forEach(x=>{r.errors.allocations=`${x.ref}: only ${fmt(x.remaining,x.cur)} is still owed, this payment puts ${fmt(x.inCur,x.cur)} on it (${fmt(x.extra,x.cur)} too much). Fix it under "Applied to": Set to what is owed, or It is an advance (with the reason).`});
  L_.filter(x=>x.over&&x.adv).forEach(x=>r.warnings.push(`${x.ref}: ${fmt(x.extra,x.cur)} more than owed — kept as an advance (${x.adv.why})`));
  /* the 150% "extra zero?" stop stays; it is clearer than ours, so ours does not repeat it */return r};
 /* ---- shipment ---- */
 const ovValShip0=validateShip;
 validateShip=function(o){const r=ovValShip0.apply(this,arguments);r.warnings=r.warnings.filter(w=>!/ shipped vs \d+ ordered$/.test(w));const L_=ovShipList(o);S.drawer._ov={kind:"ship",list:L_};
- L_.filter(x=>x.over&&!x.adv).forEach(x=>{r.errors.lines=`${x.po} · ${product(x.sku)?.name||x.sku}: ${num(x.left)} packs left to ship (${num(x.ordered)} ordered), this line has ${num(x.q)}. Use "Set to what is left" or "Extra goods sent" below.`});
+ L_.filter(x=>x.over&&!x.adv).forEach(x=>{r.errors.lines=`${x.po} · ${product(x.sku)?.name||x.sku}: ${num(x.left)} packs left to ship (${num(x.ordered)} ordered), this line has ${num(x.q)}. Fix it under the lines: Set to what is left, or Extra goods sent (with the reason).`});
  L_.filter(x=>x.over&&x.adv).forEach(x=>r.warnings.push(`${x.po} ${x.sku}: ${num(x.extra)} packs more than ordered — ${x.adv.why}`));return r};
 /* ---- the box with the two ways out, under the form's error list ---- */
 const ovShow0=showErrors;
 showErrors=function(errors,warnings){ovShow0.apply(this,arguments);try{ovPaint()}catch(e){console.warn(e)}};
-function ovPaint(){const d=S.drawer;const w=$("#formwarn");if(!d||!w||!d._ov)return;w.querySelector(".ovbox")?.remove();const bad=d._ov.list.filter(x=>x.over&&!x.adv);if(!bad.length)return;
+function ovPaint(){const d=S.drawer;if(!d||!d._ov)return;const w=$(d._ov.kind==="pay"?"#fw_allocations":"#fw_lines")||$("#formwarn");if(!w)return;document.querySelectorAll(".ovbox").forEach(x=>x.remove());const bad=d._ov.list.filter(x=>x.over&&!x.adv);if(!bad.length)return;
  const pay=d._ov.kind==="pay";
  w.insertAdjacentHTML("beforeend",`<div class="ovbox warnbox" role="group" aria-label="Too much">${bad.map(x=>pay?
   `<div class="ovrow"><b>${esc(x.ref)}</b> — still owed <b>${esc(fmt(x.remaining,x.cur))}</b>, this payment <b>${esc(fmt(x.inCur,x.cur))}</b>.<div class="ovact"><button type="button" class="btn sm pri" data-ov="fix" data-i="${x.i}">Set to what is owed</button> <input id="ov_why_${x.i}" placeholder="Why is it more? e.g. advance for the next order" aria-label="Reason for the extra" style="min-width:220px"> <button type="button" class="btn sm" data-ov="adv" data-i="${x.i}">It is an advance</button></div></div>`:
@@ -7616,5 +7616,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='59fa2c759a';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='0311bbc4db';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
 </body></html>
