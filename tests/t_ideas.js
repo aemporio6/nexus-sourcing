@@ -1,0 +1,21 @@
+/* Product ideas (17 Nov 2026): quotes → landed + margin with own freight rates → best → GO makes product + sample. Demo :8093 */
+const{chromium}=require("playwright");
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:950}});const errs=[];p.on("pageerror",e=>errs.push(e.message));p.on("dialog",d=>d.accept("too small margin"));let fails=0;const ok=(c,m)=>{console.log((c?"PASS ":"FAIL ")+m);if(!c)fails++};
+ await p.route(/fonts\.(googleapis|gstatic)/,r=>r.abort());await p.goto("http://localhost:8093/index.html?demo");await p.waitForFunction(()=>{try{return S.ready}catch(e){return false}});await p.waitForTimeout(600);
+ ok(await p.evaluate(()=>NAV_MODULES.find(m=>m.k==="purchases").items.some(i=>i[1]==="ideas")&&CREATE_REG.some(c=>c.k==="idea")),"in Buying menu and Create");
+ const R=await p.evaluate(()=>idRates());console.log(JSON.stringify(R));ok(R.cbm>0||R.kg>0,"freight rates from own shipments");
+ await p.evaluate(()=>openNew("idea"));await p.waitForTimeout(1200);ok(await p.evaluate(()=>S.view.k==="ideas"&&!!$("#id_name")),"new idea opens");
+ const set=async(k,v)=>{await p.evaluate(([k,v])=>{const e=document.getElementById("id_"+k);e.value=v;e.dispatchEvent(new Event("change",{bubbles:true}))},[k,v]);await p.waitForTimeout(250)};
+ await set("name","Silicone soap dish grey pack of 2");await p.evaluate(()=>{const s=$("#id_brand");s.value=s.options[1].value;s.dispatchEvent(new Event("change",{bubbles:true}))});await p.waitForTimeout(250);await p.evaluate(()=>{const s=$("#id_category");s.value=s.options[1].value;s.dispatchEvent(new Event("change",{bubbles:true}))});await p.waitForTimeout(250);
+ for(const [k,v] of [["sellGbp","12.99"],["perCtn","40"],["L","50"],["W","40"],["H","30"],["ctnKg","12"],["unitsPlan","800"]])await set(k,v);
+ await p.click('[data-id-act="addq"]');await p.waitForTimeout(300);await p.evaluate(()=>{const s=(k,v)=>{const e=document.querySelector(`.idq [data-idq="0"][data-qk="${k}"]`);e.value=v;e.dispatchEvent(new Event("change",{bubbles:true}))};s("party","Joyce Wen")});await p.waitForTimeout(300);
+ await p.evaluate(()=>{const e=document.querySelector('.idq [data-idq="0"][data-qk="price"]');e.value="9.5";e.dispatchEvent(new Event("change",{bubbles:true}))});await p.waitForTimeout(300);
+ await p.evaluate(()=>{document.querySelector(".idcard details").open=true;const t=$("#id_paste");t.value="Lily: price 7.8 rmb, MOQ 1000, 20 days";});await p.click('[data-id-act="paste"]');await p.waitForTimeout(500);
+ const x=await p.evaluate(()=>{const x=docOf("ideas",S.f.ideas.open);return{q:x.quotes,c:x.quotes.map(q=>idCalc(x,q)),best:idBest(x)?.i}});console.log(JSON.stringify(x.c));
+ ok(x.q.length===2&&x.q[1].price===7.8&&x.q[1].moq===1000&&x.q[1].days===20,"quote read from a pasted message");
+ ok(x.c.every(c=>c.landed>0&&c.fr>0&&c.pct!=null),"landed £ (with freight) and margin for each quote");ok(x.best===1,"cheaper quote marked best");
+ ok(await p.evaluate(()=>!!document.querySelector(".idbest")),"best row highlighted");
+ await p.click('[data-id-act="go"][data-kind="sample"]');await p.waitForTimeout(1500);
+ const g=await p.evaluate(()=>{const x=docOf("ideas",S.f.ideas.open);const pr=product(x.product);const po=docOf("purchases",x.order);return{st:x.status,sku:x.product,pr:!!pr&&pr.perCtn===40&&pr.sellGbp===12.99,po:po&&po.kind==="sample"&&po.fromIdea===x.no&&po.lines[0].sku===x.product,sup:party(x.supplier)?.name}});console.log(JSON.stringify(g));
+ ok(g.st==="go"&&g.pr&&g.po,"GO made the product (SKU auto, carton, price) and the sample, linked");ok(g.sup==="(from message)"||!!g.sup,"supplier of the quote ("+g.sup+")");
+ ok(!errs.length,"no page errors "+errs.join(" | "));await b.close();process.exit(fails?1:0)})();

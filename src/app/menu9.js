@@ -10,7 +10,7 @@
  const ren=(arr,l)=>arr.map(it=>[l,...it.slice(1)]);
  const G=[
   {k:"home",l:"Home",ic:"home",items:[...takeAll("home"),...takeAll("tasks"),...takeAll("attention"),...take("calendar")]},
-  {k:"purchases",l:"Buying",ic:"purchases",items:[...takeAll("purchases"),...ren(take("planner"),"Reorder planner (ICC)"),...takeNew("purchase"),...takeNew("inspection")]},
+  {k:"purchases",l:"Buying",ic:"purchases",items:[...takeAll("purchases"),...takeAll("ideas"),...ren(take("planner"),"Reorder planner (ICC)"),...takeNew("purchase"),...takeNew("inspection"),...takeNew("sample"),...takeNew("idea")]},
   {k:"shipments",l:"Shipments",ic:"shipments",items:[...takeAll("shipments"),...takeNew("shipment")]},
   {k:"payments",l:"Money",ic:"payments",items:[...takeAll("payments"),...takeAll("mkt"),...takeNew("payment"),...takeNew("credit")]},
   {k:"stock",l:"Stock",ic:"stock",items:[...takeAll("stock"),...takeNew("receive"),...takeNew("count"),...takeNew("move")]},
