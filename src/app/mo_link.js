@@ -10,7 +10,7 @@
    · Every send / receive is written to the Activity log. */
 const MO_KINDS=[["purchases","Orders (POs)"],["shipments","Shipments"],["payments","Payments"],["inspections","Inspections"],["receipts","Goods received"],["moves","Stock moves"],["credits","Credit notes"],["products","Products"],["parties","Suppliers & partners"],["tasks","Tasks"],["salesStats","Marketplace sales"]];
 const MO_MODES=[["ask","Ask every time"],["always","Always"],["never","Never"]];
-const MO_BANK=["bank","beneficiary","iban","swift","account","sortCode"];
+const MO_BANK=["bank","beneficiary","iban","swift","account","sortCode","beneficiaryPending"];
 if(!PAGES.includes("molink"))PAGES.push("molink");
 function moCfg(){const c=(SET().moLink)||{};return{on:!!c.on,url:c.url||"",bank:!!c.bank,auto:!!c.auto,send:{...(c.send||{})},recv:{...(c.recv||{})},lastSent:{...(c.lastSent||{})},sent:{...(c.sent||{})},lastRecv:c.lastRecv||null,history:(c.history||[]).slice(-30)}}
 function moMode(dir,kind){const c=moCfg();return(c[dir]||{})[kind]||"ask"}

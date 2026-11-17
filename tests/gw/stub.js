@@ -12,14 +12,14 @@ function makeGateway(seed, tokens, clientId){
   const data = mkFolder("MY TOOL – DATA"); data.editors = ["editor@x.com"]; data.viewers = ["viewer@x.com"];
   data.api.createFile("MYTOOL-DATA.json", JSON.stringify(seed), "application/json");
   const ctx = {
-    DriveApp: { getFoldersByName: n => iter(Object.values(folders).filter(f => f.name === n).map(f => f.api)), getFileById: id => wrapFile(drive.files[id]), createFolder: n => mkFolder(n).api, getRootFolder: () => ({}), Access: {}, Permission: {} },
+    DriveApp: { getFoldersByName: n => iter(Object.values(folders).filter(f => f.name === n).map(f => f.api)), getFileById: id => wrapFile(drive.files[id]), createFolder: n => mkFolder(n).api, getRootFolder: () => mkFolder("ROOT").api, Access: {}, Permission: {} },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => drive.props[k] == null ? null : drive.props[k], setProperty: (k, v) => { drive.props[k] = v; } }) },
     CacheService: { getScriptCache: () => ({ get: k => drive.cache[k] || null, put: (k, v) => { drive.cache[k] = v; } }) },
     LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => {} }) },
     UrlFetchApp: { fetch: url => { const t = decodeURIComponent(url.split("access_token=")[1]); const u = tokens[t]; return { getResponseCode: () => u ? 200 : 400, getContentText: () => JSON.stringify(u ? { aud: u.aud || CID, email: u.email, email_verified: "true", expires_in: 3000 } : { error: "invalid" }) }; } },
-    Utilities: { base64EncodeWebSafe: b => Buffer.from(b).toString("base64url"), computeDigest: (a, s) => [...require("crypto").createHash("sha256").update(s).digest()], DigestAlgorithm: { SHA_256: 1 }, formatDate: (d, tz, fmt) => fmt === "yyyy-MM" ? d.toISOString().slice(0, 7) : fmt === "yyyy-MM-dd" ? d.toISOString().slice(0, 10) : d.toISOString().slice(0, 16).replace(/[T:]/g, "-"), base64Decode: s => [...Buffer.from(s, "base64")], base64Encode: b => Buffer.from(b).toString("base64"), newBlob: (bytes, mime, name) => ({ bytes, mime, name }) },
+    Utilities: { base64EncodeWebSafe: b => Buffer.from(b).toString("base64url"), computeDigest: (a, s) => [...require("crypto").createHash("sha256").update(s).digest()], DigestAlgorithm: { SHA_256: 1 }, formatDate: (d, tz, fmt) => fmt === "yyyy-MM" ? d.toISOString().slice(0, 7) : fmt === "yyyy-MM-dd" ? d.toISOString().slice(0, 10) : d.toISOString().slice(0, 16).replace(/[T:]/g, "-"), base64Decode: s => [...Buffer.from(s, "base64")], base64Encode: b => Buffer.from(b).toString("base64"), newBlob: (bytes, mime, name) => ({ bytes, mime, name }), computeHmacSha256Signature: (v, k) => [...require("crypto").createHmac("sha256", Buffer.from((typeof k === "string" ? Buffer.from(k) : Buffer.from(k.map(x => x & 255))))).update(typeof v === "string" ? Buffer.from(v) : Buffer.from(v.map(x => x & 255))).digest()].map(x => x << 24 >> 24), getUuid: () => require("crypto").randomUUID() },
     ContentService: { createTextOutput: s => ({ setMimeType: () => ({ text: s }) }), MimeType: { JSON: 1 } },
-    Logger: { log: () => {} }, JSON, Number, String, Object, Array, Math, Date, Error, RegExp, encodeURIComponent, Buffer
+    Logger: { log: () => {} }, escape, unescape, decodeURIComponent, JSON, Number, String, Object, Array, Math, Date, Error, RegExp, encodeURIComponent, Buffer
   };
   ctx.DriveApp.createFile = undefined;
   vm.createContext(ctx);

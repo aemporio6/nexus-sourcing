@@ -78,5 +78,26 @@ r = G.call({ op: "upload", token: "T_VA", name: "a/b:c.pdf", mime: "application/
   r = put("T_FIN2", d => { const p = d.payments["PAY-26-9001"]; p.approved = true; p.approvedBy = "fin2@x.com"; }); ok(r.ok, "another Finance approves → ok");
   r = put("T_FIN", d => { d.payments["PAY-26-9001"].status = "paid"; }); ok(r.ok, "then marked paid → ok");
   r = put("T_FIN", d => { d.payments["PAY-26-9002"] = Object.assign(pay({ status: "paid", needsApproval: false, approved: true, gbp: 900, amount: 8000 }), { id: "PAY-26-9002", no: "PAY-26-9002" }); }); ok(r.ok, "below the limit → paid at once"); }
+/* supplier bank details + vault (17 Nov 2026) */
+{ const put = (tok, fn) => { const c = G.call({ op: "read", token: tok }); const nb = clone(c.file); fn(nb.data); return G.call({ op: "write", token: tok, base: c.version, body: nb }); };
+  const sup = Object.keys(seedData.parties).find(k => seedData.parties[k].type === "supplier") || Object.keys(seedData.parties)[0];
+  r = put("T_ADMIN", d => { d.parties[sup].beneficiary = "OLD BANK 6222 0000 1111 2222"; }); ok(r.ok, "admin sets bank details");
+  r = put("T_FIN", d => { d.parties[sup].beneficiary = "NEW BANK 6222 9999 8888 7777"; }); let pa = G.call({ op: "read", token: "T_ADMIN" }).file.data.parties[sup];
+  ok(r.ok && pa.beneficiary === "OLD BANK 6222 0000 1111 2222" && pa.beneficiaryPending && pa.beneficiaryPending.text === "NEW BANK 6222 9999 8888 7777", "Finance changes bank details → old kept, new waits for approval");
+  r = put("T_FIN", d => { d.parties[sup].beneficiary = "NEW BANK 6222 9999 8888 7777"; }); pa = G.call({ op: "read", token: "T_ADMIN" }).file.data.parties[sup]; ok(pa.beneficiary === "OLD BANK 6222 0000 1111 2222", "the asker cannot approve their own bank change");
+  r = put("T_FIN2", d => { d.parties[sup].beneficiary = "NEW BANK 6222 9999 8888 7777"; }); pa = G.call({ op: "read", token: "T_ADMIN" }).file.data.parties[sup];
+  ok(r.ok && pa.beneficiary === "NEW BANK 6222 9999 8888 7777" && !pa.beneficiaryPending && pa.beneficiaryChangedAt, "another approver accepts → new details active, change date kept");
+  /* vault */
+  const raw0 = () => Object.values(G.drive.files).find(f => f.name === "MYTOOL-DATA.json").content;
+  ok(raw0().includes("6222 9999 8888 7777"), "before the vault: details are plain in the file");
+  ok(G.ctx.vaultInit() === "on", "vaultInit turns the vault on");
+  ok(!raw0().includes("6222 9999 8888 7777") && raw0().includes("enc:v1:"), "after: the data file holds only encrypted bank details");
+  ok(Object.values(G.drive.files).some(f => /VAULT KEY/.test(f.name) && f.content.includes(G.drive.props.VAULT_KEY)), "a copy of the key is kept in My Drive");
+  ok(G.call({ op: "read", token: "T_ADMIN" }).file.data.parties[sup].beneficiary === "NEW BANK 6222 9999 8888 7777", "admin read → decrypted");
+  ok(!("beneficiary" in G.call({ op: "read", token: "T_VA" }).file.data.parties[sup]), "VA read → still hidden");
+  r = put("T_VA", d => { d.parties["SUP-998"] = { id: "SUP-998", no: "SUP-998", code: "SUP-998", name: "VA new", createdAt: "2026-11-17T00:00:00Z", createdBy: "va@x.com" }; }); ok(r.ok, "VA still saves (hidden encrypted details stay untouched)");
+  ok(G.call({ op: "read", token: "T_ADMIN" }).file.data.parties[sup].beneficiary === "NEW BANK 6222 9999 8888 7777", "details intact after the VA save");
+  r = put("T_ADMIN", d => { d.parties[sup].note = "x"; }); ok(r.ok && raw0().includes("enc:v1:") && !raw0().includes("6222 9999 8888 7777"), "admin save keeps them encrypted");
+  const e1 = raw0().match(/enc:v1:[^"]+/)[0]; r = put("T_ADMIN", d => { d.parties[sup].note = "y"; }); ok(raw0().includes(e1), "same value → same encrypted text"); }
 ok(G.drive.files && Object.values(G.drive.files).some(f => f.name.startsWith("MYTOOL-GATEWAY-LOG") && /REFUSED/.test(f.content) && /ok write va@x.com/.test(f.content)), "gateway log has writes and refusals");
 console.log(fails ? fails + " FAILED" : "ALL PASS"); process.exit(fails ? 1 : 0);

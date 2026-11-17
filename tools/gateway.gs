@@ -92,7 +92,7 @@ function needAdmin(who){ if(!who || !who.admin) fail(403, "only an admin can do 
 /* ================= data file ================= */
 function dataFolder(){ var it = DriveApp.getFoldersByName(FOLDER); if(!it.hasNext()) fail(500, "folder not found: " + FOLDER); return it.next(); }
 function dataFile(){ var it = dataFolder().getFilesByName(FILE); return it.hasNext() ? it.next() : null; }
-function readCurrent(){ var f = dataFile(); if(!f) return null; var text = f.getBlob().getDataAsString(); return { file: f, text: text, json: JSON.parse(text) }; }
+function readCurrent(){ var f = dataFile(); if(!f) return null; var text = f.getBlob().getDataAsString(); return { file: f, text: text, json: vaultOpen(JSON.parse(text)) }; }
 function version(){ return Number(PropertiesService.getScriptProperties().getProperty("v") || 0); }
 function bump(){ var v = version() + 1; PropertiesService.getScriptProperties().setProperty("v", String(v)); return v; }
 function stamp(){ return Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd HH-mm"); }
@@ -118,7 +118,7 @@ function doWrite(req, cur, who, email, v){
     if(next.schema && cur.json.schema && next.schema < cur.json.schema) fail(409, "your app is older than the data file — reload");
     enforce(cur.json, next, who);
     next.savedBy = email; next.savedAt = new Date().toISOString(); next.gatewayVersion = v + 1;
-    var text = JSON.stringify(next);
+    var text = JSON.stringify(vaultSeal(JSON.parse(JSON.stringify(next))));
     cur.file.setContent(text);
     var check = cur.file.getBlob().getDataAsString();
     if(check.length !== text.length) fail(500, "the save did not land completely — nothing was changed on your device, it will retry");
@@ -151,6 +151,7 @@ function enforce(curJ, next, who){
 }
 /* approvals (17 Nov 2026): the person who asked never approves; nothing above the limit is counted without approval */
 function approvalRules(cd, nd, main, who){
+  bankChangeRules(cd, nd, who);
   var a = cd.payments || {}, b = nd.payments || {}, limit = +((main.defaults || {}).approvalGbp || 2000), me = String(who.email || "").toLowerCase();
   Object.keys(b).forEach(function(id){
     var o = a[id], n = b[id]; if(!n || n.deletedAt) return;
@@ -164,6 +165,49 @@ function approvalRules(cd, nd, main, who){
     /* above the limit and not approved by someone else: never refused (a save must not get stuck) – it is put to "waiting for approval" */
     if(moved && n.direction !== "in" && n.status !== "cancelled" && +n.gbp > limit && !(n.needsApproval && !n.approved)){ n.status = "pending"; n.needsApproval = true; n.approved = false; n.requestedBy = n.requestedBy || me; delete n.approvedBy; delete n.approvedAt; who.changed = (who.changed || 0) + 1; }
   });
+}
+/* supplier bank details (17 Nov 2026): a non-admin's change never replaces them – it waits as beneficiaryPending until someone
+   else who may approve accepts it (never refused, so a save cannot get stuck) */
+function bankChangeRules(cd, nd, who){
+  var a = cd.parties || {}, b = nd.parties || {}, me = String(who.email || "").toLowerCase(), now = new Date().toISOString();
+  Object.keys(b).forEach(function(id){
+    var o = a[id], n = b[id]; if(!o || !n) return;
+    var was = String(o.beneficiary || ""), is = String(n.beneficiary || ""); if(was === is || !("beneficiary" in n)) return;
+    var pend = o.beneficiaryPending, asked = pend ? String(pend.by || "").toLowerCase() : "";
+    if(pend && is === String(pend.text || "") && who.perms.approve && asked !== me){ n.beneficiaryPending = null; n.beneficiaryChangedAt = now; n.beneficiaryApprovedBy = me; return; }
+    if(!was){ n.beneficiaryChangedAt = now; return; }                                        /* first details: no approval */
+    n.beneficiaryPending = { text: is, by: me, at: now }; n.beneficiary = was; who.changed = (who.changed || 0) + 1;
+  });
+}
+/* ================= vault: bank details encrypted inside the data file (opt-in: run vaultInit once) =================
+   Deterministic stream cipher from HMAC-SHA256 (key never leaves Script Properties; a copy is kept in the owner's Drive). */
+var VAULT_TAG = "enc:v1:";
+function vaultKey(){ try{ return PropertiesService.getScriptProperties().getProperty("VAULT_KEY") || ""; }catch(_){ return ""; } }
+function vB(s){ var b = unescape(encodeURIComponent(String(s))), out = []; for(var i = 0; i < b.length; i++) out.push(b.charCodeAt(i) << 24 >> 24); return out; }
+function vS(bytes){ var s = ""; for(var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i] & 255); return decodeURIComponent(escape(s)); }
+function vH(key, msg){ return Utilities.computeHmacSha256Signature(msg, key); }
+function vKeys(){ var k = vB(vaultKey()); return { e: vH(k, vB("enc")), m: vH(k, vB("mac")) }; }
+function vStream(kE, iv, n){ var out = []; for(var i = 0; out.length < n; i++){ var blk = vH(kE, iv.concat([i & 127, (i >> 7) & 127])); for(var j = 0; j < blk.length && out.length < n; j++) out.push(blk[j]); } return out; }
+function vEnc(pt){ var K = vKeys(), p = vB(pt), iv = vH(K.m, p).slice(0, 16), ks = vStream(K.e, iv, p.length), ct = p.map(function(x, i){ return (x ^ ks[i]) << 24 >> 24; }), tag = vH(K.m, iv.concat(ct)).slice(0, 16);
+  return VAULT_TAG + Utilities.base64Encode(iv) + ":" + Utilities.base64Encode(ct) + ":" + Utilities.base64Encode(tag); }
+function vDec(s){ var parts = String(s).slice(VAULT_TAG.length).split(":"); var K = vKeys(), iv = Utilities.base64Decode(parts[0]).map(function(x){ return x << 24 >> 24; }), ct = Utilities.base64Decode(parts[1]).map(function(x){ return x << 24 >> 24; }), tag = Utilities.base64Encode(Utilities.base64Decode(parts[2]));
+  if(Utilities.base64Encode(vH(K.m, iv.concat(ct)).slice(0, 16)) !== tag) throw new Error("vault: a value does not match its key");
+  var ks = vStream(K.e, iv, ct.length); return vS(ct.map(function(x, i){ return (x ^ ks[i]) << 24 >> 24; })); }
+function vaultWalk(json, fn){ var d = (json && json.data) || {}; var main = d.setup && (d.setup.main || d.setup);
+  if(d.parties) Object.keys(d.parties).forEach(function(id){ var p = d.parties[id]; if(!p) return; ["beneficiary", "iban", "swift", "account", "sortCode"].forEach(function(k){ if(typeof p[k] === "string" && p[k]) p[k] = fn(p[k]); }); if(p.beneficiaryPending && typeof p.beneficiaryPending.text === "string") p.beneficiaryPending.text = fn(p.beneficiaryPending.text); });
+  if(main && main.banks) main.banks.forEach(function(b){ SENSITIVE.forEach(function(k){ if(typeof b[k] === "string" && b[k]) b[k] = fn(b[k]); }); });
+  return json; }
+function vaultSeal(json){ if(!vaultKey()) return json; return vaultWalk(json, function(v){ return v.indexOf(VAULT_TAG) === 0 ? v : vEnc(v); }); }
+function vaultOpen(json){ if(!vaultKey()) return json; return vaultWalk(json, function(v){ return v.indexOf(VAULT_TAG) === 0 ? vDec(v) : v; }); }
+/* run ONCE from the editor (as aemporio6): makes the key, keeps a copy in your Drive, and encrypts the bank details already in the file */
+function vaultInit(){
+  var props = PropertiesService.getScriptProperties();
+  if(props.getProperty("VAULT_KEY")){ Logger.log("Vault already on."); return "already on"; }
+  var key = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Utilities.getUuid() + Date.now()));
+  props.setProperty("VAULT_KEY", key);
+  DriveApp.getRootFolder().createFile("MY TOOL – VAULT KEY (secret, never share).txt", "MY TOOL vault key — needed to read the bank details in MYTOOL-DATA.json.\nIf the gateway script is ever lost: paste this as Script property VAULT_KEY in the new script.\n\n" + key, "text/plain");
+  var cur = readCurrent(); if(cur){ var text = JSON.stringify(vaultSeal(cur.json)); cur.file.setContent(text); bump(); }
+  Logger.log("Vault ON. Key copy saved in My Drive."); return "on";
 }
 /* tasks: anyone may move a task given to them (or made by them) along To do → Doing → Done; nothing else in it may change */
 function ownTaskStep(c, before, after, who){
@@ -182,13 +226,13 @@ function redact(json, who){
   var main = d.setup && (d.setup.main || d.setup);
   if(main && main.banks) main.banks.forEach(function(b){ SENSITIVE.forEach(function(k){ if(k in b && k !== "number") delete b[k]; }); });
   if(d.payments) Object.keys(d.payments).forEach(function(id){ var p = d.payments[id]; ["bank", "beneficiary"].forEach(function(k){ if(k in p) delete p[k]; }); });
-  if(d.parties) Object.keys(d.parties).forEach(function(id){ var p = d.parties[id]; ["bank", "iban", "swift", "account"].forEach(function(k){ if(k in p) delete p[k]; }); });
+  if(d.parties) Object.keys(d.parties).forEach(function(id){ var p = d.parties[id]; ["bank", "iban", "swift", "account", "beneficiary", "sortCode", "beneficiaryPending"].forEach(function(k){ if(k in p) delete p[k]; }); });
   j.redacted = true; return j;
 }
 function reattach(cd, nd){
   var cm = cd.setup && (cd.setup.main || cd.setup), nm = nd.setup && (nd.setup.main || nd.setup);
   if(cm && nm && cm.banks && nm.banks) nm.banks.forEach(function(b){ var o = cm.banks.filter(function(x){ return x.id === b.id; })[0]; if(o) SENSITIVE.forEach(function(k){ if(k in o && !(k in b)) b[k] = o[k]; }); });
-  ["payments", "parties"].forEach(function(c){ if(!cd[c] || !nd[c]) return; Object.keys(nd[c]).forEach(function(id){ var o = cd[c][id], n = nd[c][id]; if(o && n) ["bank", "beneficiary", "iban", "swift", "account"].forEach(function(k){ if(k in o && !(k in n)) n[k] = o[k]; }); }); });
+  ["payments", "parties"].forEach(function(c){ if(!cd[c] || !nd[c]) return; Object.keys(nd[c]).forEach(function(id){ var o = cd[c][id], n = nd[c][id]; if(o && n) ["bank", "beneficiary", "iban", "swift", "account", "sortCode", "beneficiaryPending"].forEach(function(k){ if(k in o && !(k in n)) n[k] = o[k]; }); }); });
 }
 
 /* ================= attachments: the FILES folder is shared, the data is not ================= */
