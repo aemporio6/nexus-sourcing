@@ -3,7 +3,7 @@
    › (or hovering with a mouse) opens the button's panel beside the menu: every page of it, and its "+ New …" lines;
    a page opens on the right as before; links still open in a new tab / window (Ctrl / ⌘ / middle click, ↗).
    Nothing is lost: any page a module added that is not placed below lands in Settings. */
-(function(){const all=[];NAV_MODULES.forEach(m=>m.items.forEach(it=>all.push(it)));const used=new Set();
+(function(){const all=[],from=[];NAV_MODULES.forEach(m=>m.items.forEach(it=>{all.push(it);from.push(m.k)}));const used=new Set();
  const take=(page,f)=>{const i=all.findIndex((it,ix)=>!used.has(ix)&&it[1]===page&&(f===undefined||JSON.stringify(it[2]||{})===JSON.stringify(f)));if(i<0)return[];used.add(i);return[all[i]]};
  const takeAll=page=>{const out=[];all.forEach((it,ix)=>{if(!used.has(ix)&&it[1]===page){used.add(ix);out.push(it)}});return out};
  const takeNew=k=>{const i=all.findIndex((it,ix)=>!used.has(ix)&&it[3]===k);if(i<0)return[];used.add(i);return[all[i]]};
@@ -20,11 +20,13 @@
   {k:"setup",l:"Settings",ic:"setup",items:[...takeAll("setup"),...takeAll("import"),...takeAll("health"),...takeAll("trash"),...takeAll("tools"),...takeAll("refs")]}];
  /* anything else (pages added by other parts) – Settings, never lost */
  const placed=new Set(G.flatMap(g=>g.items.map(i=>i[3]?"new:"+i[3]:i[1])));
- all.forEach((it,ix)=>{if(used.has(ix))return;if(!it[3]&&placed.has(it[1])&&!G.some(g=>g.items.some(i=>i[1]===it[1]&&JSON.stringify(i[2]||{})!==JSON.stringify(it[2]||{})&&false))){used.add(ix);return}if(it[3]){const g=G.find(g=>g.k===(CREATE_REG.find(c=>c.k===it[3])?.mod))||G[8];g.items.push(it)}else G[8].items.push(it);used.add(ix)});
+ /* a page a module adds goes to the button of the module it was added to (planner → Buying, eBay → Money, data → Settings …) */const HOME={home:"home",purchases:"purchases",planner:"purchases",shipments:"shipments",payments:"payments",mkt:"payments",stock:"stock",products:"products",parties:"parties",reports:"reports",import:"setup",setup:"setup"};
+ all.forEach((it,ix)=>{if(used.has(ix))return;if(!it[3]&&!placed.has(it[1])){const g=G.find(g=>g.k===(HOME[from[ix]]||from[ix]));if(g&&g!==G[8]){g.items.push(it);used.add(ix);placed.add(it[1]);return}}if(!it[3]&&placed.has(it[1])&&!G.some(g=>g.items.some(i=>i[1]===it[1]&&JSON.stringify(i[2]||{})!==JSON.stringify(it[2]||{})&&false))){used.add(ix);return}if(it[3]){const g=G.find(g=>g.k===(CREATE_REG.find(c=>c.k===it[3])?.mod))||G[8];g.items.push(it)}else G[8].items.push(it);used.add(ix)});
  NAV_MODULES.splice(0,NAV_MODULES.length,...G);
  const seenP=new Set(G.flatMap(g=>g.items.filter(i=>i[1]&&!i[3]).map(i=>i[1]+JSON.stringify(i[2]||{}))));
  /* the eBay import line belongs with the eBay figures */const ebI=G[8].items.findIndex(i=>/transaction report/i.test(i[0]));if(ebI>=0)G[3].items.splice(G[3].items.findIndex(i=>i[3])<0?G[3].items.length:G[3].items.findIndex(i=>i[3]),0,...G[8].items.splice(ebI,1));
  const where={};G.forEach(g=>g.items.forEach(it=>{if(it[1]&&!where[it[1]])where[it[1]]=g.k}));Object.keys(NAV_OF_PAGE).forEach(p=>{if(where[p])NAV_OF_PAGE[p]=where[p];else if(!G.some(g=>g.k===NAV_OF_PAGE[p]))NAV_OF_PAGE[p]="setup"});Object.assign(NAV_OF_PAGE,where);
+ NAV_OF_PAGE.import="setup";NAV_OF_PAGE.health="setup";NAV_OF_PAGE.trash="setup";
  /* new things land in their group too */CREATE_REG.forEach(c=>{if(c.mod==="planner")c.mod="purchases";if(c.mod==="import")c.mod="setup"})})();
 /* the rail: no inline lists, › opens the panel */
 nav=(function(orig){return function(){orig();try{const rail=$("#rail");if(!rail)return;rail.querySelectorAll(".nsubs").forEach(x=>x.remove());rail.querySelectorAll("[data-navexp]").forEach(b=>{b.dataset.navfly=b.dataset.navexp;b.removeAttribute("data-navexp");b.textContent="›";b.setAttribute("aria-haspopup","true");b.setAttribute("aria-expanded",String(S.navFly===b.dataset.navfly));b.setAttribute("aria-label","Open "+(NAV_MODULES.find(m=>m.k===b.dataset.navfly)?.l||"")+" menu")})}catch(e){console.warn(e)}if(S.navFly){if(S._m9At!==m9Where())m9Close();else m9Open(S.navFly,true)}}})(nav);

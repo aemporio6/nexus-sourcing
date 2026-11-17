@@ -4,7 +4,14 @@
    Top search: besides records it now offers matching pages ("Go to") and things to create ("Create").
    Forms: "Fill from last" copies the last saved form of the same kind into the empty fields; Quick shows only the key fields. */
 const CH_DEPT={purchases:"Buying",shipments:"Shipping",payments:"Money",stock:"Stock",products:"Products",parties:"Partners"};
-function chItems(){const forms=CREATE_REG.map(c=>({key:"f:"+c.k,title:c.menu||c.l,hint:c.hint,dept:CH_DEPT[c.mod]||"Other",form:c.k,words:(c.l+" "+(c.menu||"")+" "+(c.hint||"")).toLowerCase()}));
+/* Create builds itself from the system (owner, 18 Nov 2026): every form MY TOOL has, every "+ New" line and every page of the menu
+   come in by themselves, grouped under the menu button they belong to — a new module needs no Create code of its own. */
+function chGroupOf(page,newK){try{if(page&&!newK&&NAV_OF_PAGE[page]){const m=NAV_MODULES.find(m=>m.k===NAV_OF_PAGE[page]);if(m)return m.l}const g=NAV_MODULES.find(m=>m.items.some(i=>(newK&&i[3]===newK)||(page&&i[1]===page)));return g?g.l:null}catch(_){return null}}
+function chItems(){const seen=new Set();const forms=[];
+ CREATE_REG.forEach(c=>{seen.add(c.k);forms.push({key:"f:"+c.k,title:c.menu||c.l,hint:c.hint,dept:chGroupOf(null,c.k)||CH_DEPT[c.mod]||"Other",form:c.k,words:(c.l+" "+(c.menu||"")+" "+(c.hint||"")).toLowerCase()})});
+ /* any form the forms engine knows that is not listed yet */try{Object.keys(SAVE).forEach(k=>{if(seen.has(k))return;seen.add(k);const col=FORM_COL[k];const t=FORM_TITLE[k]||k;forms.push({key:"f:"+k,title:"New "+t.toLowerCase(),hint:(fields(k).filter(f=>f.req).map(f=>f.l.replace(/\s*\(.*$/,"")).slice(0,4).join(" · ")),dept:chGroupOf(col&&NAV_OF_PAGE[col]===col?col:col,null)||"Other",form:k,words:(t+" "+k+" "+(col||"")).toLowerCase()})})}catch(_){}
+ /* every page of the menu: shown when you type (so the list stays short), opens that page with its filter */
+ const pages=[];try{const ps=new Set();NAV_MODULES.forEach(m=>m.items.forEach(([l,pg,f,newK])=>{if(newK||!pg)return;const id=pg+JSON.stringify(f||{});if(ps.has(id))return;ps.add(id);pages.push({key:"p:"+id,title:l,hint:"Open · "+m.l,dept:m.l,page:pg,f:f||{},nav:1,words:(l+" "+pg+" "+m.l).toLowerCase()})}))}catch(_){}
  const more=[
   {key:"v:import",title:"Import a file",hint:"Bank statement, eBay / Amazon report, PI, packing list…",dept:"Data",page:"import",words:"import importer upload file csv excel statement report invoice ci pi"},
   {key:"v:drive",title:"Import from a Drive link",hint:"Paste a Drive folder or file link",dept:"Data",page:"import",drive:1,words:"drive link google folder"},
@@ -15,19 +22,19 @@ function chItems(){const forms=CREATE_REG.map(c=>({key:"f:"+c.k,title:c.menu||c.
   {key:"v:task",title:"New task",hint:"For you or someone in the team, with a due date",dept:"Planning",page:"tasks",focus:"#tk_title",words:"task todo reminder follow up job assign"},
   {key:"v:pis",title:"Product information sheet",hint:"Read a supplier's sheet into its order and products",dept:"Data",page:"import",pis:1,words:"product information sheet packing carton supplier sheet"},
   {key:"v:views",title:"Saved view of a list",hint:"Open a list, set filters / columns, then “Save view”",dept:"Reports",page:"purchases",words:"view saved list filter columns table"}];
- return forms.concat(more.filter(m=>m.page!=="import"||can("create")))}
+ return forms.concat(more.filter(m=>m.page!=="import"||can("create")).map(m=>({...m,dept:chGroupOf(m.page,null)||m.dept})),pages.filter(p=>!more.some(m=>m.page===p.page&&!m.focus&&!m.pis&&!m.drive&&!Object.keys(p.f).length)))}
 /* a word matches when it is inside the text, or the text has a word that starts it ("importer" finds "import", "payments" finds "payment") */
 function chHas(text,w){text=String(text).toLowerCase();if(text.includes(w))return true;return w.length>=4&&text.split(/[^a-z0-9]+/).some(tok=>tok.length>=4&&w.startsWith(tok))}
 function chMatch(it,t){if(!t)return true;return t.split(/\s+/).every(w=>chHas(it.title,w)||chHas(it.words,w)||chHas(it.dept,w))}
 function chRun(key,q){const it=chItems().find(x=>x.key===key);if(!it)return;chClose();
  if(it.form){S._chFrom=q||"";try{openNew(it.form)}finally{S._chFrom=null}return}
- go(it.page);if(it.focus)setTimeout(()=>$(it.focus)?.focus(),300);if(it.pis)setTimeout(()=>{try{document.querySelector(".pis_file")?.click()}catch(_){}},350);if(it.drive)setTimeout(()=>{try{ixDrv().open=true;ixDriveRender();$("#ix_drive_link")?.focus()}catch(_){}},300)}
+ if(it.nav){goHref(it.page,it.f||{});return}go(it.page);if(it.focus)setTimeout(()=>$(it.focus)?.focus(),300);if(it.pis)setTimeout(()=>{try{document.querySelector(".pis_file")?.click()}catch(_){}},350);if(it.drive)setTimeout(()=>{try{ixDrv().open=true;ixDriveRender();$("#ix_drive_link")?.focus()}catch(_){}},300)}
 function chClose(){const o=$("#chub");if(o)o.remove()}
 function openCreateHub(q=""){if(!can("create")&&!chItems().some(i=>!i.form)){toast("Your role cannot create records");return}chClose();
  const o=document.createElement("div");o.id="chub";o.className="ch-ov";o.innerHTML=`<div class="ch-box" role="dialog" aria-modal="true" aria-labelledby="ch_t"><div class="ch-h"><div><h2 id="ch_t">Create</h2><div class="status">Everything you can create or start, from anywhere. Press <kbd>N</kbd> on any screen.</div></div><button class="x" data-act="chclose" aria-label="Close">×</button></div>
   <input id="ch_q" class="ch-q" placeholder="Type what you want to create… (payment, shipment, product, import)" autocomplete="off" value="${esc(q)}"><div class="ch-grid" id="ch_grid" role="listbox"></div></div>`;
  document.body.appendChild(o);const inp=$("#ch_q");
- const draw=()=>{const t=inp.value.trim().toLowerCase();const items=chItems().filter(i=>(!i.form||can("create"))&&chMatch(i,t));const depts=[...new Set(items.map(i=>i.dept))];
+ const draw=()=>{const t=inp.value.trim().toLowerCase();const items=chItems().filter(i=>(!i.form||can("create"))&&(!i.nav||t)&&chMatch(i,t));const depts=[...new Set(items.map(i=>i.dept))];
   $("#ch_grid").innerHTML=depts.map(d=>{const its=items.filter(i=>i.dept===d);return`<div class="ch-dept"><h4>${esc(d)} <span class="status">${its.length}</span></h4>${its.map(i=>`<button type="button" class="ch-item" role="option" data-act="chrun" data-key="${esc(i.key)}"><b>${i.form?"+ ":"→ "}${esc(i.title)}</b><small>${esc(i.hint||"")}</small></button>`).join("")}</div>`}).join("")||`<div class="empty">Nothing matches “${esc(t)}”.</div>`};
  draw();inp.addEventListener("input",draw);inp.addEventListener("keydown",e=>{if(e.key==="Enter"){const b=$("#ch_grid .ch-item");if(b){e.preventDefault();chRun(b.dataset.key,inp.value)}}else if(e.key==="ArrowDown"){e.preventDefault();$("#ch_grid .ch-item")?.focus()}});
  o.addEventListener("keydown",e=>{if(e.key==="Escape"){e.stopPropagation();chClose()}if((e.key==="ArrowDown"||e.key==="ArrowUp")&&e.target.classList.contains("ch-item")){e.preventDefault();const all=[...o.querySelectorAll(".ch-item")];const i=all.indexOf(e.target)+(e.key==="ArrowDown"?1:-1);(all[i]||inp).focus()}});
