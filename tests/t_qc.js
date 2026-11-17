@@ -1,0 +1,21 @@
+/* Item 3 (17 Nov 2026): QC checklist in the Inspection. Demo :8093 */
+const{chromium}=require("playwright");
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:950}});const errs=[];p.on("pageerror",e=>errs.push(e.message));let fails=0;const ok=(c,m)=>{console.log((c?"PASS ":"FAIL ")+m);if(!c)fails++};
+ await p.goto("http://localhost:8093/index.html?demo");await p.waitForFunction(()=>{try{return S.ready}catch(e){return false}});await p.waitForTimeout(500);
+ const po=await p.evaluate(()=>live(D.purchases).find(p=>p.status!=="cancelled"&&(p.lines||[]).length).no);
+ await p.evaluate(po=>openForm("inspection",{po}),po);await p.waitForTimeout(1000);
+ const n=await p.evaluate(()=>S.drawer.rows.checks.length);ok(n>=5,"checklist filled itself ("+n+" checks)");
+ ok(await p.evaluate(()=>document.querySelectorAll("[data-qcph]").length>0),"📷 button on each check");
+ await p.evaluate(()=>{const r=S.drawer.rows.checks;r.forEach(x=>x.res="pass");r[0].res="fail";r[0].note="";redrawRows("checks");document.querySelector('[data-row="checks"]').dispatchEvent(new Event("change",{bubbles:true}))});await p.waitForTimeout(300);
+ ok(await p.evaluate(()=>val("result"))==="fail","result suggests Fail");
+ const v=await p.evaluate(()=>validateInsp(collect("inspection")));ok(/add a note and a photo/.test(v.errors.checks||""),"Fail without note + photo refused");
+ await p.evaluate(()=>{const r=S.drawer.rows.checks;r[0].note="wrong colour";r[0].photo="https://drive.google.com/file/d/x/view";redrawRows("checks");if(!val("party")){const ins=live(D.parties).find(x=>x.type==="inspector")||live(D.parties)[0];setv("party",ins.code)}});
+ await p.evaluate(()=>saveInsp());await p.waitForTimeout(400);await p.evaluate(()=>{if(S.drawer?.form){S.drawer.ack=true;return saveInsp()}});await p.waitForTimeout(1500);
+ const ins=await p.evaluate(po=>{const i=live(D.inspections).filter(i=>i.po===po).pop();return{no:i.no,res:i.result,ch:(i.checks||[]).length,task:live(D.tasks||[]).find(t=>t.kind==="qc"&&t.ref===i.no),hold:docOf("purchases",po).hold}},po);console.log(ins.no,ins.res,ins.hold);
+ ok(ins.res==="fail"&&ins.ch>=5&&ins.task&&ins.hold,"saved: Fail, checklist kept, task made, order on hold");
+ await p.evaluate(no=>{S.drawer=null;openDoc("inspections",no)},ins.no);await p.waitForTimeout(700);ok(await p.evaluate(()=>!!$('[data-qc="claim"]')&&/QC checklist/.test(document.querySelector(".drawer").innerText)),"record shows checklist + Claim + Re-inspect");
+ await p.click('[data-qc="re"]');await p.waitForTimeout(1000);const re=await p.evaluate(()=>({n:S.drawer.rows.checks.length,note:S.drawer.rows.checks[0].note}));ok(re.note&&/was:/.test(re.note),"re-inspection starts from the first one's checks");
+ await p.evaluate(()=>{S.drawer.rows.checks.forEach(x=>x.res="pass");redrawRows("checks");setv("result","pass");setv("date",today());const ins=live(D.parties).find(x=>x.type==="inspector")||live(D.parties)[0];if(!val("party"))setv("party",ins.code)});
+ await p.evaluate(()=>saveInsp());await p.waitForTimeout(400);await p.evaluate(()=>{if(S.drawer?.form){S.drawer.ack=true;return saveInsp()}});await p.waitForTimeout(1500);
+ const t=await p.evaluate(no=>({task:live(D.tasks||[]).find(t=>t.kind==="qc"&&t.ref===no)?.status,hold:docOf("purchases",docOf("inspections",no).po).hold}),ins.no);ok(t.task==="done"&&!t.hold,"passing re-inspection closes the task and releases the hold");
+ ok(!errs.length,"no page errors "+errs.join(" | "));await b.close();process.exit(fails?1:0)})();
