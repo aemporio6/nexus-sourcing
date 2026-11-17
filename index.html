@@ -59,8 +59,9 @@ const API = "https://www.googleapis.com";
 /* ---------------- data gateway (roles enforced at the data boundary; tools/gateway.gs) ---------------- */
 let GW = "", gwFallback = ""; try{ const g = localStorage.getItem("mt_gw"); GW = g === "off" ? "" : (g || CFG.gateway || ""); }catch(_){ GW = CFG.gateway || ""; }   /* "off" = this device uses Drive directly */
 /* workspace (17 Nov 2026): "" = the company data (Vartleaves, through the gateway) · "own" = this person's own Drive, their own data, they are its Owner */
-const WS = (() => { try{ return localStorage.getItem("mt_ws") === "own" ? "own" : ""; }catch(_){ return ""; } })();
+let WS = (() => { try{ return localStorage.getItem("mt_ws") === "own" ? "own" : ""; }catch(_){ return ""; } })();
 if(WS === "own") GW = "";
+function pickWorkspace(ws){ WS = ws === "own" ? "own" : ""; try{ if(WS) localStorage.setItem("mt_ws", "own"); else localStorage.removeItem("mt_ws"); }catch(_){} let g = ""; try{ g = localStorage.getItem("mt_gw") || ""; }catch(_){} GW = WS === "own" || g === "off" ? "" : (g || CFG.gateway || ""); }
 const viaGw = () => !DEMO && !!GW;
 async function gw(op, extra){
   for(let attempt = 0; attempt < 2; attempt++){
@@ -167,16 +168,18 @@ async function gjson(url, opt){ const r = await gfetch(url, opt); const j = awai
 async function signIn(){
   await loadGis();
   tokenClient = google.accounts.oauth2.initTokenClient({ client_id: CFG.clientId, scope: CFG.scopes, callback: () => {} });
-  try{ const s = JSON.parse(sessionStorage.getItem("mt_tok") || "null"); if(s && s.token && Date.now() < s.tokenExp){ token = s.token; tokenExp = s.tokenExp; } }catch(_){}
-  if(!token){
-    await new Promise((res) => {
-      const g = gate('<p>Sign in with your Google account to open your data.</p><button type="button" class="mt_btn" id="mt_signin">Sign in with Google</button><p class="mt_small" id="mt_err"></p>');
-      g.querySelector("#mt_signin").onclick = async () => {
-        try{ await requestToken(localStorage.getItem("mt_hint") ? "" : "select_account"); res(); }
-        catch(e){ g.querySelector("#mt_err").textContent = e.message; }
-      };
-    });
-  }
+  /* owner, 18 Nov 2026: every time MY TOOL opens it asks WHICH data (company / own Drive) and Google asks WHICH account — never opens by itself */
+  token = null; try{ sessionStorage.removeItem("mt_tok"); }catch(_){}
+  await new Promise((res) => {
+    const own = WS === "own";
+    const g = gate('<p><b>Which data do you want to open?</b></p>' +
+      '<button type="button" class="mt_btn' + (own ? ' ghost' : '') + '" id="mt_signin">🏢 Company data — Vartleaves</button><p class="mt_small">The business data in ' + esc(CFG.dataOwner) + '\'s Drive (roles and approvals apply).</p>' +
+      '<button type="button" class="mt_btn' + (own ? '' : ' ghost') + '" id="mt_signin_own">📁 My own Drive (my own data)</button><p class="mt_small">Your own MY TOOL in your own Google Drive — nothing of the company data.</p>' +
+      '<p class="mt_small">Google then asks which account to use.</p><p class="mt_small" id="mt_err"></p>');
+    const go = async (ws) => { try{ pickWorkspace(ws); await requestToken("select_account"); res(); }catch(e){ g.querySelector("#mt_err").textContent = e.message; } };
+    g.querySelector("#mt_signin").onclick = () => go("");
+    g.querySelector("#mt_signin_own").onclick = () => go("own");
+  });
   const u = await gjson("https://www.googleapis.com/oauth2/v3/userinfo");
   me = { email: lc(u.email), name: u.name || u.email, picture: u.picture || "" };
   try{ localStorage.setItem("mt_hint", me.email); }catch(_){}
@@ -759,7 +762,7 @@ const userApi = {
   async isOwner(){ await ready; return DEMO || !!(me && CFG.admins.includes(me.email)); }
 };
 window.MYTOOL = {
-  workspace: WS,
+  get workspace(){ return WS; },
   setWorkspace(ws){ try{ if(ws === "own") localStorage.setItem("mt_ws", "own"); else localStorage.removeItem("mt_ws"); }catch(_){} location.reload(); },
   get me(){ return me; }, get st(){ return lastSt; },
   async reauth(){ await requestToken(""); await push(); }, demo: DEMO, signOut, cfg: CFG,
@@ -1229,27 +1232,32 @@ function alWsHtml(){const ws=(window.MYTOOL&&MYTOOL.workspace)||"";return`<div c
 function alMenuClose(){const m=document.getElementById("almenu");if(m)m.hidden=true}
 document.addEventListener("click",e=>{const b=e.target.closest("#alb");const m=document.getElementById("almenu");if(b){e.preventDefault();e.stopImmediatePropagation();const c=alCfg();m.innerHTML=`${c&&c.on?`<button type="button" class="m9i" data-al="lock" role="menuitem">Lock now</button>`:""}<button type="button" class="m9i" data-al="setup" role="menuitem">${c&&c.on?"Change the lock on this device":"Set up a lock on this device"}</button>${alWsHtml()}`;m.hidden=!m.hidden;return}if(m&&!m.hidden&&!e.target.closest("#almenu"))m.hidden=true},true);
 /* set up / change / turn off */
-async function alSetup(){const c=alCfg()||{};const bio=await alBioOk();let o=document.getElementById("alset");if(!o){o=document.createElement("div");o.id="alset";o.className="ch-ov";document.body.appendChild(o)}
- o.innerHTML=`<div class="ch-box albox2" role="dialog" aria-modal="true" aria-labelledby="als_t"><div class="ch-h"><div><h2 id="als_t">Lock MY TOOL on this device</h2><div class="status">Only this device / browser. Your team set their own on their devices.</div></div><button type="button" class="x" data-als="close" aria-label="Close">×</button></div>
+let alForced=false;
+const alIsDemo=/[?&]demo\b/.test(location.search)||location.protocol==="file:";
+const alIsDev=()=>{try{return/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&localStorage.getItem("mt_lock_force")!=="1"}catch(_){return false}};
+/* owner, 18 Nov 2026: MY TOOL never opens without the device's own lock — the first time on a device it must be set up */
+function alForce(){alForced=true;alLocked=true;let o=document.getElementById("alov");if(!o){o=document.createElement("div");o.id="alov";document.body.appendChild(o)}o.hidden=false;o.innerHTML=`<div id="alset"></div>`;document.documentElement.classList.add("al-on");alSetup()}
+async function alSetup(){const c=alCfg()||{};const bio=await alBioOk();let o=document.getElementById("alset");if(!o){o=document.createElement("div");o.id="alset";o.className="ch-ov";document.body.appendChild(o)}if(alForced)o.className="";
+ o.innerHTML=`<div class="ch-box albox2" role="dialog" aria-modal="true" aria-labelledby="als_t"><div class="ch-h"><div><h2 id="als_t">${alForced?"Protect MY TOOL on this device":"Lock MY TOOL on this device"}</h2><div class="status">${alForced?"MY TOOL opens only with this device’s own lock — fingerprint, face, Windows Hello or the phone’s PIN / pattern. Set it once; it is asked every time MY TOOL opens.":"Only this device / browser. Your team set their own on their devices."}</div></div>${alForced?"":`<button type="button" class="x" data-als="close" aria-label="Close">×</button>`}</div>
   <div class="form" style="padding:12px 16px">
-   <label class="alrow"><input type="checkbox" id="als_bio" ${bio?"":"disabled"} ${c.bio?"checked":""}> Fingerprint / face / Windows Hello ${bio?"":`<span class="status">— not available on this device</span>`}</label>
-   <div class="f"><label for="als_pw">Password ${c.pw?"(leave empty to keep the current one)":"(needed — the way in when the fingerprint does not work)"}</label><input id="als_pw" type="password" autocomplete="new-password" minlength="6"></div>
+   <label class="alrow"><input type="checkbox" id="als_bio" ${bio?"":"disabled"} ${c.bio||(alForced&&bio)?"checked":""}> This device’s lock: fingerprint / face / Windows Hello / phone PIN ${bio?"":`<span class="status">— not available on this device, use a password</span>`}</label>
+   <div class="f"><label for="als_pw">Password ${c.pw?"(leave empty to keep the current one)":bio?"(optional — a second way in)":"(needed)"}</label><input id="als_pw" type="password" autocomplete="new-password" minlength="6"></div>
    <div class="f"><label for="als_pw2">Password again</label><input id="als_pw2" type="password" autocomplete="new-password"></div>
    <div class="f"><label for="als_idle">Lock after (minutes without use)</label><select id="als_idle">${[2,5,10,15,30,60].map(n=>`<option value="${n}" ${(+c.idleMin||10)===n?"selected":""}>${n}</option>`).join("")}</select></div>
    <div class="status" id="als_msg" aria-live="polite"></div>
-   <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"><button type="button" class="btn pri" data-als="save">${c.on?"Save":"Turn the lock on"}</button>${c.on?`<button type="button" class="btn" data-als="off">Turn the lock off</button>`:""}<button type="button" class="btn" data-als="close">Cancel</button></div></div></div>`;o.hidden=false;setTimeout(()=>document.getElementById(bio&&!c.bio?"als_bio":"als_pw")?.focus(),50)}
+   <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"><button type="button" class="btn pri" data-als="save">${c.on?"Save":"Turn the lock on"}</button>${c.on&&(alIsDemo||alIsDev())?`<button type="button" class="btn" data-als="off">Turn the lock off</button>`:""}${alForced?`<button type="button" class="lnk" data-al="forgot">Use another Google account</button>`:`<button type="button" class="btn" data-als="close">Cancel</button>`}</div></div></div>`;o.hidden=false;setTimeout(()=>document.getElementById(bio&&!c.bio?"als_bio":"als_pw")?.focus(),50)}
 document.addEventListener("click",async e=>{const b=e.target.closest("[data-als]");if(!b)return;e.preventDefault();e.stopImmediatePropagation();const o=document.getElementById("alset");const a=b.dataset.als;const msg=document.getElementById("als_msg");
  if(a==="close"){o.hidden=true;return}
  if(a==="off"){const c=alCfg();if(c?.pw){const pw=document.getElementById("als_pw").value;if(!pw||await alHash(pw,c.pw.salt,c.pw.iter)!==c.pw.hash){msg.textContent="Type your current password in the box above to turn the lock off";return}}alSave(null);o.hidden=true;toast("Lock is off on this device");return}
  if(a==="save"){const c=alCfg()||{};const pw=document.getElementById("als_pw").value,pw2=document.getElementById("als_pw2").value;const wantBio=document.getElementById("als_bio").checked;
-  if(!c.pw&&!pw){msg.textContent="Choose a password (6 or more characters) — it is the way in when the fingerprint does not work";return}
+  if(!c.pw&&!pw&&!(wantBio&&!c.bio)&&!c.bio){msg.textContent="Choose this device’s lock, or a password (6 or more characters)";return}
   if(pw&&pw.length<6){msg.textContent="Use 6 or more characters";return}if(pw&&pw!==pw2){msg.textContent="The two passwords are not the same";return}
   const n={...c,on:true,idleMin:+document.getElementById("als_idle").value||10,email:(typeof uid!=="undefined"&&uid)||c.email||"",fails:0,waitUntil:0};
   if(pw){const salt=alB64(crypto.getRandomValues(new Uint8Array(16)));n.pw={salt,iter:150000,hash:await alHash(pw,salt,150000)}}
-  if(wantBio&&!c.bio){try{msg.textContent="Touch the fingerprint sensor / look at the camera…";n.bio=await alBioCreate()}catch(err){msg.textContent="Fingerprint / face was not set up ("+(err.name||err.message)+") — the password still works";n.bio=null}}else if(!wantBio)n.bio=null;
-  alSave(n);o.hidden=true;toast(`Lock is on — ${n.bio?"fingerprint / face or password":"password"}, after ${n.idleMin} min without use`)}},true);
+  if(wantBio&&!c.bio){try{msg.textContent="Use the device lock now (fingerprint / face / PIN)…";n.bio=await alBioCreate()}catch(err){n.bio=null;if(!n.pw){msg.textContent="The device lock was not set up ("+(err.name||err.message)+") — try again, or choose a password";return}msg.textContent="Device lock not set up — the password works"}}else if(!wantBio)n.bio=null;if(!n.bio&&!n.pw){msg.textContent="Choose this device’s lock, or a password";return}
+  alSave(n);if(alForced){alForced=false;alUnlock()}else o.hidden=true;toast(`Lock is on — ${n.bio?"fingerprint / face or password":"password"}, after ${n.idleMin} min without use`)}},true);
 /* when the app opens: lock first (before anything is shown), and put the 🔒 in the top bar */
-(function(){const c=alCfg();if(c&&c.on){if(document.body)alShow();else document.addEventListener("DOMContentLoaded",alShow)}const t=setInterval(()=>{alBtn();if(document.getElementById("alb"))clearInterval(t)},300)})();
+(function(){const c=alCfg();const start=()=>{if(c&&c.on)alShow();else if(!alIsDemo&&!alIsDev())alForce()};if(document.body)start();else document.addEventListener("DOMContentLoaded",start);const t=setInterval(()=>{alBtn();if(document.getElementById("alb"))clearInterval(t)},300)})();
 (function(){try{const st=document.createElement("style");st.textContent=`#alov{position:fixed;inset:0;z-index:1000;background:var(--bg,#f8fafb);display:flex;align-items:center;justify-content:center;padding:16px}#alov[hidden]{display:none}html.al-on body>*:not(#alov):not(script):not(style){visibility:hidden}
 .albox{width:min(380px,100%);text-align:center;display:flex;flex-direction:column;gap:12px;align-items:stretch}.albox h2{margin:4px 0 0}.albox .mt-logo{margin:0 auto}.albig{min-height:52px;font-size:16px}.albox .lnk{align-self:center}.alpw{display:flex;gap:8px}.alpw input{flex:1;min-height:44px}
 #almenu{position:absolute;right:0;top:44px;z-index:40;min-width:240px;background:var(--card,#fff);border:1px solid var(--line,#dde3ea);border-radius:10px;box-shadow:0 10px 28px rgba(20,40,60,.16);padding:6px}#almenu[hidden]{display:none}.alrow{display:flex;gap:8px;align-items:center;padding:6px 0}.albox2{max-width:480px}`;document.head.appendChild(st)}catch(_){}})();
@@ -7617,5 +7625,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='bc4f4839f4';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='1ceba8eec6';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
 </body></html>

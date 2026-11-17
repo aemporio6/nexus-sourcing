@@ -7,7 +7,7 @@ const{chromium}=require("playwright");const fs=require("fs");const{drive,mkRoute
  await ctx.route(/fonts\.(googleapis|gstatic)/,r=>r.abort());await ctx.route(/accounts\.google\.com|googleapis\.com/,mkRoute(ctx));
  const p=await ctx.newPage();p.on("pageerror",e=>errs.push(e.message));p.on("dialog",d=>d.accept());await p.goto("http://localhost:8098/index.html");await p.waitForSelector("#mt_signin");await p.click("#mt_signin");
  await p.waitForSelector("#mt_ownws",{timeout:20000});ok(/not been shared/.test(await p.textContent("body")),"not shared → the gate offers own Drive");
- await p.click("#mt_ownws");await p.waitForSelector("#mt_signin,#mt_empty",{timeout:20000});if(await p.$("#mt_signin"))await p.click("#mt_signin");
+ await p.click("#mt_ownws");await p.waitForSelector("#mt_signin_own,#mt_empty",{timeout:20000});if(await p.$("#mt_signin_own"))await p.click("#mt_signin_own");
  await p.waitForSelector("#mt_empty",{timeout:20000});ok(/your own Drive/.test(await p.textContent("body")),"first run in own Drive");await p.click("#mt_empty");
  await p.waitForFunction(()=>{try{return S.ready}catch(e){return false}},null,{timeout:30000});await p.waitForTimeout(1500);
  ok(await p.evaluate(()=>S.role==="owner"&&MYTOOL.workspace==="own"),"they are Owner of their own data");
@@ -15,5 +15,5 @@ const{chromium}=require("playwright");const fs=require("fs");const{drive,mkRoute
  ok(await p.evaluate(()=>live(D.purchases).length===0),"their data is empty (no company data)");
  ok(drive.files[coId].content===co0,"company file untouched");
  await p.click("#alb");ok(/My own Drive/.test(await p.textContent("#almenu")),"🔒 menu shows which data this device opens");
- await p.evaluate(()=>MYTOOL.setWorkspace(""));await p.waitForTimeout(3000);if(await p.$("#mt_signin"))await p.click("#mt_signin");await p.waitForSelector("#mt_ownws",{timeout:20000});ok(true,"switch back → company data (not shared) gate");
+ await p.evaluate(()=>MYTOOL.setWorkspace(""));await p.waitForSelector("#mt_signin",{timeout:20000});ok(await p.$("#mt_signin_own")!==null,"every open asks: company data or own Drive");await p.click("#mt_signin");await p.waitForSelector("#mt_ownws",{timeout:20000});ok(true,"switch back → company data (not shared) gate");
  ok(!errs.length,"no page errors "+errs.join(" | "));await b.close();process.exit(fails?1:0)})();

@@ -24,4 +24,12 @@ const{chromium}=require("playwright");
   await q.goto("http://localhost:8093/index.html?demo");await q.waitForFunction(()=>{try{return S.ready}catch(e){return false}});await q.waitForTimeout(600);await q.click("#alb");await q.click('[data-al="setup"]');await q.waitForTimeout(400);
   await q.check("#als_bio");await q.fill("#als_pw","secret123");await q.fill("#als_pw2","secret123");await q.click('[data-als="save"]');await q.waitForTimeout(1500);ok(await q.evaluate(()=>!!JSON.parse(localStorage.getItem("mt_lock")).bio),"fingerprint / face set up");
   await q.click("#alb");await q.click('[data-al="lock"]');await q.waitForTimeout(1500);ok(await q.evaluate(()=>document.getElementById("alov").hidden),"fingerprint / face unlocks");await c2.close()}
+ /* real (non-demo) app: the device lock MUST be set up before anything opens */
+ {const{drive,mkRoute}=require("./fakedrive");const fs=require("fs");const who="aemporio6@gmail.com";const mk=(name,parent,extra)=>{const id="F"+(++drive.n);drive.files[id]={id,name,owner:who,parent,version:1,...extra};return id};const df=mk("MY TOOL – DATA","root",{folder:true});mk("MYTOOL-DATA.json",df,{content:fs.readFileSync(process.env.SEED_FILE,"utf8")});
+  const c3=await b.newContext({viewport:{width:1280,height:900}});await c3.addInitScript(w=>{window.__who=w;try{localStorage.setItem("mt_gw","off");localStorage.setItem("mt_lock_force","1")}catch(_){}},who);await c3.route(/fonts\.(googleapis|gstatic)/,r=>r.abort());await c3.route(/accounts\.google\.com|googleapis\.com/,mkRoute(c3));
+  const q=await c3.newPage();await q.goto("http://localhost:8098/index.html");await q.waitForTimeout(1500);
+  ok(await q.evaluate(()=>!!document.querySelector("#alov #alset")&&/Protect MY TOOL/.test(document.body.innerText)&&!document.querySelector('[data-als="close"]')),"real app: device-lock setup comes first and cannot be closed");
+  await q.fill("#als_pw","secret123");await q.fill("#als_pw2","secret123");await q.click('[data-als="save"]');await q.waitForTimeout(800);
+  ok(await q.evaluate(()=>!!document.getElementById("mt_signin")&&!!document.getElementById("mt_signin_own")),"then it asks which data: company or own Drive");
+  await q.reload();await q.waitForTimeout(1500);ok(await q.evaluate(()=>!document.getElementById("alov").hidden&&/locked/.test(document.body.innerText)),"next open: locked until the device lock / password");await c3.close()}
  ok(!errs.length,"no page errors "+errs.join(" | "));await b.close();process.exit(fails?1:0)})();

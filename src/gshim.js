@@ -20,8 +20,9 @@ const API = "https://www.googleapis.com";
 /* ---------------- data gateway (roles enforced at the data boundary; tools/gateway.gs) ---------------- */
 let GW = "", gwFallback = ""; try{ const g = localStorage.getItem("mt_gw"); GW = g === "off" ? "" : (g || CFG.gateway || ""); }catch(_){ GW = CFG.gateway || ""; }   /* "off" = this device uses Drive directly */
 /* workspace (17 Nov 2026): "" = the company data (Vartleaves, through the gateway) · "own" = this person's own Drive, their own data, they are its Owner */
-const WS = (() => { try{ return localStorage.getItem("mt_ws") === "own" ? "own" : ""; }catch(_){ return ""; } })();
+let WS = (() => { try{ return localStorage.getItem("mt_ws") === "own" ? "own" : ""; }catch(_){ return ""; } })();
 if(WS === "own") GW = "";
+function pickWorkspace(ws){ WS = ws === "own" ? "own" : ""; try{ if(WS) localStorage.setItem("mt_ws", "own"); else localStorage.removeItem("mt_ws"); }catch(_){} let g = ""; try{ g = localStorage.getItem("mt_gw") || ""; }catch(_){} GW = WS === "own" || g === "off" ? "" : (g || CFG.gateway || ""); }
 const viaGw = () => !DEMO && !!GW;
 async function gw(op, extra){
   for(let attempt = 0; attempt < 2; attempt++){
@@ -128,16 +129,18 @@ async function gjson(url, opt){ const r = await gfetch(url, opt); const j = awai
 async function signIn(){
   await loadGis();
   tokenClient = google.accounts.oauth2.initTokenClient({ client_id: CFG.clientId, scope: CFG.scopes, callback: () => {} });
-  try{ const s = JSON.parse(sessionStorage.getItem("mt_tok") || "null"); if(s && s.token && Date.now() < s.tokenExp){ token = s.token; tokenExp = s.tokenExp; } }catch(_){}
-  if(!token){
-    await new Promise((res) => {
-      const g = gate('<p>Sign in with your Google account to open your data.</p><button type="button" class="mt_btn" id="mt_signin">Sign in with Google</button><p class="mt_small" id="mt_err"></p>');
-      g.querySelector("#mt_signin").onclick = async () => {
-        try{ await requestToken(localStorage.getItem("mt_hint") ? "" : "select_account"); res(); }
-        catch(e){ g.querySelector("#mt_err").textContent = e.message; }
-      };
-    });
-  }
+  /* owner, 18 Nov 2026: every time MY TOOL opens it asks WHICH data (company / own Drive) and Google asks WHICH account — never opens by itself */
+  token = null; try{ sessionStorage.removeItem("mt_tok"); }catch(_){}
+  await new Promise((res) => {
+    const own = WS === "own";
+    const g = gate('<p><b>Which data do you want to open?</b></p>' +
+      '<button type="button" class="mt_btn' + (own ? ' ghost' : '') + '" id="mt_signin">🏢 Company data — Vartleaves</button><p class="mt_small">The business data in ' + esc(CFG.dataOwner) + '\'s Drive (roles and approvals apply).</p>' +
+      '<button type="button" class="mt_btn' + (own ? '' : ' ghost') + '" id="mt_signin_own">📁 My own Drive (my own data)</button><p class="mt_small">Your own MY TOOL in your own Google Drive — nothing of the company data.</p>' +
+      '<p class="mt_small">Google then asks which account to use.</p><p class="mt_small" id="mt_err"></p>');
+    const go = async (ws) => { try{ pickWorkspace(ws); await requestToken("select_account"); res(); }catch(e){ g.querySelector("#mt_err").textContent = e.message; } };
+    g.querySelector("#mt_signin").onclick = () => go("");
+    g.querySelector("#mt_signin_own").onclick = () => go("own");
+  });
   const u = await gjson("https://www.googleapis.com/oauth2/v3/userinfo");
   me = { email: lc(u.email), name: u.name || u.email, picture: u.picture || "" };
   try{ localStorage.setItem("mt_hint", me.email); }catch(_){}
@@ -720,7 +723,7 @@ const userApi = {
   async isOwner(){ await ready; return DEMO || !!(me && CFG.admins.includes(me.email)); }
 };
 window.MYTOOL = {
-  workspace: WS,
+  get workspace(){ return WS; },
   setWorkspace(ws){ try{ if(ws === "own") localStorage.setItem("mt_ws", "own"); else localStorage.removeItem("mt_ws"); }catch(_){} location.reload(); },
   get me(){ return me; }, get st(){ return lastSt; },
   async reauth(){ await requestToken(""); await push(); }, demo: DEMO, signOut, cfg: CFG,
