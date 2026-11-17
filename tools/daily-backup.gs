@@ -10,7 +10,7 @@
    (their late / due tasks; for those who approve: payments and bank-detail changes waiting; for Owner / Finance: today's alerts,
    shipments arriving, landed cost changed after FINAL). Nothing to say = no email. A user with "digest: off" gets none. */
 var FOLDER = "MY TOOL – DATA", FILE = "MYTOOL-DATA.json", ALERT_TO = "aemporio6@gmail.com";
-var ADMINS = ["aemporio6@gmail.com", "maashiq123@gmail.com", "maashiq@gmail.com"], APP = "https://aemporio6.github.io/nexus-sourcing/";
+var ADMINS = ["aemporio6@gmail.com", "maashiq123@gmail.com"], APP = "https://aemporio6.github.io/nexus-sourcing/";
 var OWNER_MAIL = "aemporio6@gmail.com";   /* the owner's morning email goes here — aemporio6 only (owner, 18 Nov 2026) */
 
 function setup(){

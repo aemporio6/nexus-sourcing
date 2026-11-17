@@ -6,7 +6,7 @@
 const CFG = {
   clientId: "605045779540-pjncsnms1af0s9al9k0de2om67fg0hce.apps.googleusercontent.com",
   scopes: "openid email profile https://www.googleapis.com/auth/drive",
-  admins: ["aemporio6@gmail.com", "maashiq123@gmail.com", "maashiq@gmail.com"], // can never be locked out
+  admins: ["aemporio6@gmail.com", "maashiq123@gmail.com"], // can never be locked out
   dataOwner: "aemporio6@gmail.com",           // the account whose Drive holds the data
   folderName: "MY TOOL – DATA",
   fileName: "MYTOOL-DATA.json",
