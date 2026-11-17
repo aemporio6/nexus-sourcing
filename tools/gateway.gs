@@ -134,6 +134,7 @@ function enforce(curJ, next, who){
   if(!who.perms.bank) reattach(cd, nd);                                           // hidden bank details come back untouched, before anything is compared
   if(canon(curMain.users || []) !== canon(nextMain.users || []) || canon(curMain.roles || {}) !== canon(nextMain.roles || {})) fail(403, "only an admin can change users or roles");
   if(!who.perms.setup && canon(cd.setup || {}) !== canon(nd.setup || {})) fail(403, "your role cannot change Setup");
+  approvalRules(cd, nd, nextMain, who);
   var cols = Object.keys(cd);
   for(var i = 0; i < cols.length; i++){
     var c = cols[i]; if(c === "setup" || c === "log" || c === "errors" || c === "views" || c === "counters") continue;
@@ -147,6 +148,22 @@ function enforce(curJ, next, who){
     }
     if(!who.perms.create){ var nids = Object.keys(b); for(var m = 0; m < nids.length; m++) if(!a[nids[m]]) fail(403, "your role cannot create " + c + "/" + nids[m]); }
   }
+}
+/* approvals (17 Nov 2026): the person who asked never approves; nothing above the limit is counted without approval */
+function approvalRules(cd, nd, main, who){
+  var a = cd.payments || {}, b = nd.payments || {}, limit = +((main.defaults || {}).approvalGbp || 2000), me = String(who.email || "").toLowerCase();
+  Object.keys(b).forEach(function(id){
+    var o = a[id], n = b[id]; if(!n || n.deletedAt) return;
+    var asked = String(n.requestedBy || (o && o.requestedBy) || (o && o.createdBy) || "").toLowerCase();
+    if(o && !o.approved && n.approved && o.needsApproval){
+      if(!who.perms.approve) fail(403, "your role cannot approve " + id);
+      if(asked && asked === me) fail(403, "you asked for " + id + " — someone else must approve it");
+    }
+    if(n.needsApproval && !n.approved && n.status === "paid") fail(403, id + " is waiting for approval — it cannot be marked paid");
+    var moved = !o || +o.amount !== +n.amount || o.cur !== n.cur;
+    /* above the limit and not approved by someone else: never refused (a save must not get stuck) – it is put to "waiting for approval" */
+    if(moved && n.direction !== "in" && n.status !== "cancelled" && +n.gbp > limit && !(n.needsApproval && !n.approved)){ n.status = "pending"; n.needsApproval = true; n.approved = false; n.requestedBy = n.requestedBy || me; delete n.approvedBy; delete n.approvedAt; who.changed = (who.changed || 0) + 1; }
+  });
 }
 /* tasks: anyone may move a task given to them (or made by them) along To do → Doing → Done; nothing else in it may change */
 function ownTaskStep(c, before, after, who){

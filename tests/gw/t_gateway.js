@@ -2,11 +2,11 @@
 const { makeGateway } = require("./stub");
 const seedData = JSON.parse(require("fs").readFileSync(process.env.SEED_FILE || "/home/claude/mt_data/MYTOOL-start-data.json", "utf8")).data;
 const main = seedData.setup.main || seedData.setup;
-main.users = (main.users || []).concat([{ id: "u_fin", name: "Fin", uid: "finance@x.com", role: "finance", active: true }, { id: "u_va", name: "VA", uid: "va@x.com", role: "va", active: true }, { id: "u_off", name: "Old", uid: "old@x.com", role: "finance", active: false }]);
+main.users = (main.users || []).concat([{ id: "u_fin", name: "Fin", uid: "finance@x.com", role: "finance", active: true }, { id: "u_va", name: "VA", uid: "va@x.com", role: "va", active: true }, { id: "u_off", name: "Old", uid: "old@x.com", role: "finance", active: false }, { id: "u_fin2", name: "Fin2", uid: "fin2@x.com", role: "finance", active: true }]);
 main.roles.viewer = { setup: false, approve: false, bank: false, deleteAny: false, edit: false, create: false, export: false };
 main.users.push({ id: "u_view", name: "View", uid: "viewer@x.com", role: "viewer", active: true });
 const seed = { format: "mytool-1", schema: 1, savedBy: "aemporio6@gmail.com", data: seedData, tomb: {}, revs: {} };
-const tokens = { T_ADMIN: { email: "aemporio6@gmail.com" }, T_FIN: { email: "finance@x.com" }, T_VA: { email: "va@x.com" }, T_VIEW: { email: "viewer@x.com" }, T_OLD: { email: "old@x.com" }, T_STRANGER: { email: "nobody@x.com" }, T_WRONGAUD: { email: "aemporio6@gmail.com", aud: "other-app" } };
+const tokens = { T_ADMIN: { email: "aemporio6@gmail.com" }, T_FIN: { email: "finance@x.com" }, T_VA: { email: "va@x.com" }, T_VIEW: { email: "viewer@x.com" }, T_OLD: { email: "old@x.com" }, T_FIN2: { email: "fin2@x.com" }, T_STRANGER: { email: "nobody@x.com" }, T_WRONGAUD: { email: "aemporio6@gmail.com", aud: "other-app" } };
 const G = makeGateway(seed, tokens);
 let fails = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if(!c) fails++; };
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -67,5 +67,16 @@ r = G.call({ op: "upload", token: "T_VA", name: "a/b:c.pdf", mime: "application/
   r = step("T_VA", "TA-26-0001", t => { t.title = "changed"; }); ok(r.status === 403, "VA changes the task title → 403");
   r = step("T_VA", "TA-26-0002", t => { t.status = "done"; }); ok(r.status === 403, "VA ticks someone else's task → 403");
   r = step("T_VA", "TA-26-0001", t => { t.status = "deleted"; }); ok(r.status === 403, "VA sets an unknown status → 403"); }
+/* approvals (17 Nov 2026) */
+{ const put = (tok, fn) => { const c = G.call({ op: "read", token: tok }); const nb = clone(c.file); fn(nb.data); return G.call({ op: "write", token: tok, base: c.version, body: nb }); };
+  const pay = (extra) => Object.assign({ id: "PAY-26-9001", no: "PAY-26-9001", party: "SUP-001", amount: 30000, cur: "RMB", gbp: 3200, date: "2026-11-17", direction: "out", allocations: [], createdAt: "2026-11-17T00:00:00Z", createdBy: "finance@x.com" }, extra);
+  r = put("T_FIN", d => { d.payments["PAY-26-9001"] = pay({ status: "paid", needsApproval: false, approved: true }); }); ok(r.ok && G.call({ op: "read", token: "T_ADMIN" }).file.data.payments["PAY-26-9001"].status === "pending", "Finance saves £3,200 as paid → kept, but put to waiting for approval (never stuck)");
+  r = put("T_FIN", d => { d.payments["PAY-26-9001"].notes = "waiting"; }); ok(r.ok, "Finance edits a note on it → ok");
+  r = put("T_FIN", d => { const p = d.payments["PAY-26-9001"]; p.approved = true; p.approvedBy = "finance@x.com"; }); ok(r.status === 403 && /someone else/.test(r.error), "Finance approves own request → 403");
+  r = put("T_FIN", d => { d.payments["PAY-26-9001"].status = "paid"; }); ok(r.status === 403, "marked paid while waiting → 403");
+  r = put("T_VA", d => { d.payments["PAY-26-9001"].approved = true; }); ok(r.status === 403, "VA approves → 403");
+  r = put("T_FIN2", d => { const p = d.payments["PAY-26-9001"]; p.approved = true; p.approvedBy = "fin2@x.com"; }); ok(r.ok, "another Finance approves → ok");
+  r = put("T_FIN", d => { d.payments["PAY-26-9001"].status = "paid"; }); ok(r.ok, "then marked paid → ok");
+  r = put("T_FIN", d => { d.payments["PAY-26-9002"] = Object.assign(pay({ status: "paid", needsApproval: false, approved: true, gbp: 900, amount: 8000 }), { id: "PAY-26-9002", no: "PAY-26-9002" }); }); ok(r.ok, "below the limit → paid at once"); }
 ok(G.drive.files && Object.values(G.drive.files).some(f => f.name.startsWith("MYTOOL-GATEWAY-LOG") && /REFUSED/.test(f.content) && /ok write va@x.com/.test(f.content)), "gateway log has writes and refusals");
 console.log(fails ? fails + " FAILED" : "ALL PASS"); process.exit(fails ? 1 : 0);
