@@ -25,4 +25,7 @@ const{chromium}=require("playwright");
  ok(await p.evaluate(()=>[...document.querySelectorAll('[data-nav="payments"]')].every(e=>e.hidden||getComputedStyle(e).display==="none")),"…and it is not in the menu");
  ok(await p.evaluate(()=>a3Partial()),"this device skips automatic re-calculations (it does not have every number)");
  await p.evaluate(()=>{const o=window.__o;S.isOwner=o.o;uid=o.u;S.role=o.r;S.realRole=o.rr;go("payments")});await p.waitForTimeout(500);ok(await p.evaluate(()=>!/not available for you/.test($("#view").innerText)),"the Owner sees everything");
+ /* catch-up: a change by the limited person is re-calculated on a full-access device */
+ const cu=await p.evaluate(async()=>{const sh=live(D.shipments)[0];await rawSet("shipments",sh.no,{...sh,updatedBy:"omer@example.com",updatedAt:nowIso()});localStorage.removeItem("mt_a3swept");let called=0;const r0=recomputeShipment;recomputeShipment=async function(no){if(no===sh.no)called++;return r0.apply(this,arguments)};await a3CatchUp();const first=called;await a3CatchUp();recomputeShipment=r0;return{first,second:called,mark:!!localStorage.getItem("mt_a3swept")}});
+ ok(cu.first===1&&cu.second===1&&cu.mark,"totals changed by a limited person are re-calculated once on a full-access device");
  ok(!errs.length,"no page errors "+errs.join(" | "));await b.close();process.exit(fails?1:0)})();

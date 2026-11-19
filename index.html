@@ -71,10 +71,35 @@ async function gw(op, extra){
     catch(e){ throw new Error("Gateway not reachable (" + e.message + ")"); }
     const j = await r.json().catch(() => ({ error: "gateway answered with something that is not JSON", status: 502 }));
     if(j.status === 401 && attempt === 0){ token = null; continue; }
+    if(j.status === 410 && j.moved) followMove({ data: { setup: { main: { movedTo: j.moved } } } });
     if(j.error){ const e = new Error(j.error); e.status = j.status || 500; throw e; }
     return j;
   }
   throw new Error("Signed out — sign in again");
+}
+/* the same call to ANOTHER gateway (moving the data to the company account talks to both) */
+async function gwAt(url, op, extra){
+  if(DEMO){ if(window.__DEMO_GW) return window.__DEMO_GW(op, extra || {}, url); throw new Error("not in the demo"); }
+  if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(String(url || ""))) throw new Error("That is not an Apps Script web-app URL (…/macros/s/…/exec)");
+  const t = await getToken(); let r;
+  try{ r = await fetch(url, { method: "POST", redirect: "follow", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ op, token: t, ...(extra || {}) }) }); }
+  catch(e){ throw new Error("That gateway is not reachable (" + e.message + ")"); }
+  const j = await r.json().catch(() => ({ error: "it answered with something that is not JSON — is it deployed as a Web app, access: Anyone?", status: 502 }));
+  if(j.error){ const e = new Error(j.error); e.status = j.status || 500; throw e; }
+  return j;
+}
+/* owner, 20 Nov 2026: when the data has moved to another account, the old copy carries a pointer (setup.movedTo). Every device that
+   reads it switches to the new gateway by itself; the old copy is never used again (not even by an Owner in direct-Drive mode). */
+function followMove(j){
+  const m = j && j.data && j.data.setup && (j.data.setup.main || j.data.setup), mv = m && m.movedTo;
+  if(!mv || !mv.gateway || mv.gateway === GW || DEMO) return;
+  if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(mv.gateway)) return;
+  let n = 0; try{ n = +sessionStorage.getItem("mt_mvtry") || 0; }catch(_){}
+  if(n >= 2){ const e = new Error("The data now lives in the company account (" + (mv.account || "new account") + ") and its gateway cannot be reached right now — try again in a few minutes. The old copy is not used any more."); e.moved = true; throw e; }
+  try{ sessionStorage.setItem("mt_mvtry", String(n + 1)); localStorage.setItem("mt_gw", mv.gateway); }catch(_){}
+  try{ gate('<p><b>The data has moved to the company account' + (mv.account ? ' (' + esc(mv.account) + ')' : '') + '.</b></p><p>MY TOOL is switching to it…</p>'); }catch(_){}
+  setTimeout(() => location.reload(), 900);
+  const e = new Error("The data has moved — switching to the company account"); e.moved = true; throw e;
 }
 const clone = o => o === undefined ? undefined : JSON.parse(JSON.stringify(o));
 const nowIso = () => new Date().toISOString();
@@ -228,10 +253,11 @@ function checkFile(j){
   return j;
 }
 async function readRemote(){
-  if(viaGw()){ const m = await gw("read"); remote.version = m.version; return checkFile(m.file); }
+  if(viaGw()){ const m = await gw("read"); remote.version = m.version; followMove(m.file); try{ sessionStorage.removeItem("mt_mvtry"); }catch(_){} return checkFile(m.file); }
   const r = await gfetch(API + "/drive/v3/files/" + remote.fileId + "?alt=media");
   if(!r.ok) throw new Error("Could not read the data file (" + r.status + ")");
   const j = await r.json();
+  followMove(j);
   return checkFile(j);
 }
 async function metaVersion(){
@@ -781,6 +807,9 @@ window.MYTOOL = {
   async reauth(){ await requestToken(""); await push(); }, demo: DEMO, signOut, cfg: CFG,
   async syncNow(){ await push(); await poll(); },
   get gateway(){ return viaGw() ? GW : ""; },
+  gwAt, async gwCall(op, extra){ if(DEMO){ if(window.__DEMO_GW) return window.__DEMO_GW(op, extra || {}, ""); throw new Error("not in the demo"); } if(!viaGw()) throw new Error("This needs the data gateway"); return gw(op, extra); },
+  /* after the data has moved: this device uses the new gateway from now on */
+  useGateway(url){ try{ localStorage.setItem("mt_gw", url); sessionStorage.removeItem("mt_mvtry"); }catch(_){} location.reload(); },
   /* admin: point this device at the data gateway (tools/gateway.gs). Checks it answers for this account before switching; "" goes back to direct Drive */
   async setGateway(url){
     url = String(url || "").trim();
@@ -7696,6 +7725,17 @@ function ixaRank(name){const n=" "+String(name||"").toLowerCase().replace(/[_\-.
 const ixaQ0=ixQStart;
 ixQStart=function(items){try{if(Array.isArray(items)&&items.length>1){items=items.map((x,i)=>({x,i,r:ixaRank(x.name||x.file?.name||x.title)})).sort((a,b)=>a.r-b.r||a.i-b.i).map(o=>o.x)}}catch(_){}return ixaQ0.call(this,items)};
 (function(){try{const st=document.createElement("style");st.textContent=`.ixanew{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.ixanew input{flex:1;min-width:160px}.ixa_po{display:block;margin-top:4px}.ixa_why ul li{margin:4px 0}`;document.head.appendChild(st)}catch(_){}})();
+/* 7) several files / a whole folder: ONE plan first — what each file looks like, where it will go, in which order —
+   then "Start". Untick a file to leave it out. (Kinds are read from the file names here; each file is confirmed when it opens.) */
+const IXA_PLAN=[["Suppliers / parties","Suppliers"],["Products / product information","Products"],["Order / PI","Buying › Orders"],["Supplier invoice / packing","Buying › Orders (+ Shipments for packing)"],["Freight / shipment","Shipments"],["Payments / bank statement","Money › Payments"],["Other (decided when it opens)","—"]];
+function ixaPlanHtml(){const P=S.impPlan;if(!P)return"";const n=P.items.filter(x=>!x.off).length;return`<div class="card" id="ix_plan"><div class="card-h"><h2>Import plan — ${P.items.length} files</h2><div class="ixacts"><button type="button" class="btn pri" data-ixa-plan="go" ${n?"":"disabled"}>Start — ${n} file${n===1?"":"s"}, in this order</button><button type="button" class="btn" data-ixa-plan="cancel">Cancel</button></div></div>
+ <div class="status" style="padding:8px 14px 0;color:var(--fg)">Taken in the order the records need each other: suppliers → products → orders → invoices / packing → shipments → payments. Each file opens for a check before anything is saved; everything can be undone.</div>
+ <div class="tbl" style="padding:8px 14px 12px"><table><tr><th></th><th>#</th><th>File</th><th>Looks like</th><th>Goes to</th></tr>${P.items.map((x,i)=>{const r=IXA_PLAN[x.rank]||IXA_PLAN[6];return`<tr class="${x.off?"arch":""}"><td><input type="checkbox" data-ixa-planx="${i}" ${x.off?"":"checked"} aria-label="Include ${esc(x.name)}"></td><td>${x.off?"":P.items.slice(0,i+1).filter(y=>!y.off).length}</td><td>${esc(x.name)}${x.from?`<div class="status">${esc(x.from)}</div>`:""}</td><td>${esc(r[0])}</td><td>${esc(r[1])}</td></tr>`}).join("")}</table></div></div>`}
+function ixaPlanRender(){const b=$("#ix_qbox");if(b&&S.impPlan)b.innerHTML=ixaPlanHtml()}
+const ixaQPlan0=ixQStart;
+ixQStart=function(items){try{if(Array.isArray(items)&&items.length>1&&!items._planned){const sorted=items.map((x,i)=>({x,i,r:ixaRank(x.name||x.file?.name||x.title)})).sort((a,b)=>a.r-b.r||a.i-b.i);S.impPlan={items:sorted.map(o=>({name:o.x.name||o.x.file?.name||o.x.title||"file",rank:o.r,from:o.x.path||o.x.folder||"",item:o.x,off:false}))};S.impQ=null;S.imp=null;const o=$("#imp_out");if(o)o.innerHTML="";ixaPlanRender();$("#ix_qbox")?.scrollIntoView({behavior:"smooth",block:"start"});return}}catch(e){console.warn("ixa plan",e)}return ixaQPlan0.call(this,items)};
+document.addEventListener("change",e=>{const t=e.target;if(!t.matches?.("[data-ixa-planx]")||!S.impPlan)return;S.impPlan.items[+t.dataset.ixaPlanx].off=!t.checked;ixaPlanRender()});
+document.addEventListener("click",e=>{const b=e.target.closest("[data-ixa-plan]");if(!b||!S.impPlan)return;e.preventDefault();e.stopImmediatePropagation();const P=S.impPlan;S.impPlan=null;if(b.dataset.ixaPlan==="cancel"){const q=$("#ix_qbox");if(q)q.innerHTML="";return}const items=P.items.filter(x=>!x.off).map(x=>x.item);items._planned=true;ixaQPlan0.call(null,items)},true);
 
 /* ---------- Access: who can do what — one tick each (owner, 20 Nov 2026) ----------
    Setup › Users › "Access" shows every person as a card with ticks: See bank details · Create · Edit · Delete (to the
@@ -7855,6 +7895,13 @@ document.addEventListener("input",e=>{const t=e.target;if(!t.matches?.("[data-a3
 function a3Partial(){const u=a3User();if(!u)return false;return Object.values(u.areas||{}).includes("hide")||Object.values(u.fields||{}).includes("hide")}
 const a3Rec0=reconcile;reconcile=async function(){if(a3Partial())return;return a3Rec0.apply(this,arguments)};
 if(typeof derivedUpdate==="function"){const a3Der0=derivedUpdate;derivedUpdate=async function(){if(a3Partial())return false;return a3Der0.apply(this,arguments)}}
+/* catch-up: when someone with full access opens MY TOOL, the totals of records changed by a limited person (whose device
+   could not re-calculate) are re-calculated here — once per change, quietly */
+async function a3CatchUp(){try{if(!S.ready||a3Partial()||!can("edit")||S.batch)return;const lim=new Set((SET().users||[]).filter(u=>Object.values(u.areas||{}).includes("hide")||Object.values(u.fields||{}).includes("hide")).map(u=>String(u.uid||"").toLowerCase()).filter(Boolean));if(!lim.size)return;
+ let since="";try{since=localStorage.getItem("mt_a3swept")||""}catch(_){}const t=newTouch();let n=0,latest=since;const pick=(col,set)=>live(D[col]||[]).forEach(x=>{if(x.updatedAt&&x.updatedAt>since&&lim.has(String(x.updatedBy||"").toLowerCase())){set.add(x.no||x.id);n++;if(x.updatedAt>latest)latest=x.updatedAt}});
+ pick("purchases",t.po);pick("shipments",t.sh);pick("credits",t.cn);pick("receipts",t.rc);live(D.payments||[]).forEach(x=>{if(x.updatedAt&&x.updatedAt>since&&lim.has(String(x.updatedBy||"").toLowerCase())){(x.allocations||[]).forEach(a=>{if(a.ref&&docOf("purchases",a.ref))t.po.add(a.ref);if(a.ref&&docOf("shipments",a.ref))t.sh.add(a.ref)});n++;if(x.updatedAt>latest)latest=x.updatedAt}});
+ if(!n)return;await a3Rec0({touch:t,label:"re-calculated after a change by a person with limited access"});try{localStorage.setItem("mt_a3swept",latest)}catch(_){}}catch(e){console.warn("a3 catch-up",e)}}
+setTimeout(()=>a3CatchUp(),15000);setInterval(()=>a3CatchUp(),5*60000);
 
 /* ---------- Import › From Google Drive: "Shared with me" by PERSON, and company (shared) drives (owner, 20 Nov 2026) ----------
    Before: everything anyone ever shared came as one long list. Now:
@@ -7877,6 +7924,109 @@ ixDriveHtml=function(){let h=dpHtml0.apply(this,arguments);try{const d=ixDrv();i
  h=h.replace(/<input type="checkbox" data-ixc="drvself" data-id="who:[^>]*>/g,"").replace(/📁 ((?:[^<]*) — \d+ folders?, \d+ files?<)/g,"👤 $1");
  if(d.root==="shared"&&d.path.length<=1||d.root==="drives"&&!d.path.length)h=h.replace(/<button[^>]*>[^<]*Import all new files here[^<]*<\/button>/,"");
  if(d.root==="shared"&&!d.path.length)h=h.replace('<div class="ixbar"><label class="status">Drive',`<div class="status" style="color:var(--fg)">👥 People who shared something with you — tap a person to see only their folders and files.</div><div class="ixbar"><label class="status">Drive`)}catch(_){}return h};
+
+/* ---------- Move the data to the company Google account (owner, 20 Nov 2026) ----------
+   Setup › Users (Owner only) → "Move the data to the company account". The Owner pastes the Web-app URL of the gateway that
+   was deployed IN THE NEW ACCOUNT (same tools/gateway.gs). Then, step by step and checked after every step:
+     1 new gateway answers, runs as another account, has no data of its own
+     2 everything on this device is saved; a backup copy is made in the old account
+     3 the whole data file is copied to the new account and read back — every collection must have the same number of records
+     4 attachments are copied into the new account's "MY TOOL – FILES" and their links re-pointed
+     5 only if nobody saved in between: the old copy gets a pointer "moved to …" — from that moment every device switches by
+       itself, and the old copy refuses every save (it stays untouched as a backup)
+   Nothing is deleted anywhere. "Go back" does the same in the other direction (so no work is lost either way). */
+const MV_URL=/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/;
+const mvMain=f=>f&&f.data&&f.data.setup&&(f.data.setup.main||f.data.setup)||{};
+const mvCounts=f=>{const o={};Object.keys(f.data||{}).forEach(c=>{o[c]=Object.keys(f.data[c]||{}).length});return o};
+function mvFileIds(txt){const s=new Set();const re=/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=)([A-Za-z0-9_-]{20,})/g;let m;while((m=re.exec(txt)))s.add(m[1]);return[...s]}
+async function mvRun(url,say){url=String(url||"").trim();if(!MV_URL.test(url))throw new Error("Paste the Web-app URL of the new gateway (it ends with /exec)");if(!S.isOwner)throw new Error("Only an Owner can move the data");
+ const cur=MYTOOL.gateway;if(!cur&&!MYTOOL.demo)throw new Error("This device is not using the data gateway — turn it on first (card above)");if(url===cur)throw new Error("That is the gateway MY TOOL is already using");
+ say(1,"Checking the new gateway…");const w=await MYTOOL.gwAt(url,"whoami");if(!w.admin)throw new Error("The new gateway does not know you as an Owner — paste the latest gateway.gs there and deploy it again");
+ const meNow=String(MYTOOL.me?.email||uid||"").toLowerCase();let redo=false;
+ if(w.exists){const nf0=(await MYTOOL.gwAt(url,"read")).file;/* a copy from an earlier, unfinished try of this same move (made and last saved by you) — or the frozen old copy when going back */if((nf0.adoptedFrom&&String(nf0.savedBy||"").toLowerCase()===String(w.you||meNow).toLowerCase())||mvMain(nf0).movedTo)redo=true;else throw new Error(`${w.account} already has its own MY TOOL data with later changes — nothing was touched. Tell me before going on.`)}
+ say(1,`New gateway OK — it runs as ${w.account}${redo?" (an unfinished copy from an earlier try will be replaced)":""}`,true);
+ say(2,"Saving everything and making a backup in the old account…");const dirtyN=()=>MYTOOL.demo?0:Object.keys(MYTOOL._debug().dirty||{}).length;for(let i=0;i<20&&dirtyN();i++)await new Promise(r=>setTimeout(r,1500));if(dirtyN())throw new Error("Some changes on this device are not saved yet — wait for “Synced” and press again");
+ try{await MYTOOL.gwCall("backupNow")}catch(e){throw new Error("The backup could not be made ("+e.message+") — nothing was moved")}
+ const o1=await MYTOOL.gwCall("read");const full=o1.file;if(mvMain(full).movedTo)throw new Error("This copy is already marked as moved");say(2,"Saved and backed up",true);
+ say(3,"Copying the data to the new account…");const body=JSON.parse(JSON.stringify(full));mvMain(body).movedFrom={gateway:cur,account:MYTOOL.cfg?.dataOwner||"",at:nowIso()};
+ const a=await MYTOOL.gwAt(url,"adopt",{body,from:meNow,force:redo});const want=mvCounts(full);const bad=Object.keys(want).filter(c=>(a.counts||{})[c]!==want[c]);if(bad.length)throw new Error("The copy is not complete ("+bad.join(", ")+") — nothing is switched; press again");
+ let nf=await MYTOOL.gwAt(url,"read");const strip=f=>{const d=JSON.parse(JSON.stringify(f.data));const m=d.setup.main||d.setup;delete m.movedFrom;delete m.movedTo;return JSON.stringify(d,Object.keys(d).sort())};
+ const same=Object.keys(full.data).every(c=>c==="setup"||JSON.stringify(full.data[c])===JSON.stringify(nf.file.data[c]));if(!same)throw new Error("The copy read back from the new account is different — nothing is switched; press again");
+ const total=Object.values(want).reduce((x,y)=>x+y,0);say(3,`Copied and read back: ${total} records in ${Object.keys(want).length} collections — identical`,true);
+ say(4,"Copying the attachments…");const ids=mvFileIds(JSON.stringify(full));let map={},missing=[];
+ if(ids.length){try{await MYTOOL.gwCall("share",{email:a.account||w.account,role:"reader"})}catch(e){throw new Error("The attachments folder could not be opened for the new account ("+e.message+") — nothing is switched")}
+  for(let i=0;i<ids.length;i+=20){const r=await MYTOOL.gwAt(url,"adoptFiles",{ids:ids.slice(i,i+20)});Object.assign(map,r.map||{});missing=missing.concat(r.missing||[]);say(4,`Copying the attachments… ${Math.min(i+20,ids.length)} of ${ids.length}`)}
+  const changed=Object.entries(map).filter(([o,n])=>o!==n);if(changed.length){let txt=JSON.stringify(nf.file);changed.forEach(([o,n])=>{txt=txt.split(o).join(n)});const wr=await MYTOOL.gwAt(url,"write",{base:nf.version,body:JSON.parse(txt)});if(!wr.ok)throw new Error("The new links could not be saved in the new account — nothing is switched; press again")}}
+ say(4,ids.length?`${Object.keys(map).length} attachment${Object.keys(map).length===1?"":"s"} copied${missing.length?` · ${missing.length} link${missing.length===1?"":"s"} point to files outside MY TOOL’s folder and stay as they are`:""}`:"No attachments to copy",true);
+ say(5,"Switching…");const o2=await MYTOOL.gwCall("read");if(String(o2.version)!==String(o1.version))throw new Error("Someone saved a change while the copy was running — nothing is switched. Press the button again (it starts over with the latest data).");
+ const ob=JSON.parse(JSON.stringify(o2.file));mvMain(ob).movedTo={gateway:url,account:a.account||w.account,at:nowIso(),by:meNow};const pw=await MYTOOL.gwCall("write",{base:o2.version,body:ob});if(!pw.ok)throw new Error("The old copy could not be marked as moved — nothing is switched; press again");
+ say(5,`Done — the data now lives in ${a.account||w.account}. Every device switches by itself.`,true);return{account:a.account||w.account,url}}
+function mvCard(){const main=SET();const from=main.movedFrom;const demo=!window.MYTOOL||MYTOOL.demo;const st=S.mv||{};
+ const steps=["New gateway","Save + backup","Copy the data + check","Attachments","Switch every device"];
+ const prog=st.lines?`<ol class="mvsteps">${steps.map((t,i)=>{const l=st.lines[i+1];return`<li class="${l?.done?"ok":l?"run":""}">${esc(l?.t||t)}</li>`}).join("")}</ol>${st.err?`<div class="badbox">${esc(st.err)}</div>`:""}`:"";
+ const back=from&&from.gateway?`<div class="status" style="padding:0 14px 12px">The data came from ${esc(from.account||"the old account")} on ${fmtD(String(from.at||"").slice(0,10))}; that copy is still there as a backup. <button type="button" class="btn sm" data-mv="back" ${st.busy?"disabled":""}>Go back to the old account</button></div>`:"";
+ return fsec("Move the data to the company account",`<div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+  <div class="status" style="color:var(--fg)">Now the data is in <b>${esc(MYTOOL?.cfg?.dataOwner&&!from?MYTOOL.cfg.dataOwner:(main.adoptedIn||"this account"))}</b>${from?" (moved)":""}. To put it in a pure company account (vartleaves.data@gmail.com):</div>
+  <ol class="status" style="margin:0;padding-left:20px;color:var(--fg);line-height:1.6"><li>Sign in to Google as the <b>new account</b> and open script.google.com → New project.</li><li>Paste <b>gateway.gs</b>, Save, then Deploy → New deployment → Web app → Execute as: <b>Me</b> · Who has access: <b>Anyone</b> → Deploy → copy the Web-app URL.</li><li>Make a second project with <b>daily-backup.gs</b>, Save, Run <b>setup</b> once.</li><li>Come back here (signed in to MY TOOL as an Owner), paste the URL and press the button.</li></ol>
+  <div class="ixbar"><input id="mv_url" placeholder="https://script.google.com/macros/s/…/exec" aria-label="Web-app URL of the new gateway" style="flex:1;min-width:240px" value="${esc(st.url||"")}" ${st.busy?"disabled":""}><button type="button" class="btn pri" data-mv="go" ${st.busy||demo&&!window.__DEMO_GW?"disabled":""}>Check and move the data</button></div>
+  ${prog}<div class="status">Nothing is deleted. The old copy stays as a backup and refuses changes after the switch. If anything does not check out, nothing is switched.</div></div>${back}`)}
+const mvUsers0=sUsers;
+sUsers=function(){let h=mvUsers0.apply(this,arguments);try{if(S.isOwner)h+=mvCard()}catch(e){console.warn("mv card",e)}return h};
+function mvRedraw(){const y=window.scrollY;const v=$("#view");if(v&&document.querySelector('[data-mv]')&&typeof vSetup==="function"){const u=$("#mv_url")?.value;vSetup(v);if(u&&$("#mv_url")&&!S.mv?.url)$("#mv_url").value=u}window.scrollTo(0,y)}
+document.addEventListener("click",async e=>{const b=e.target.closest("[data-mv]");if(!b)return;e.preventDefault();e.stopImmediatePropagation();if(S.mv?.busy)return;const back=b.dataset.mv==="back";const url=back?SET().movedFrom?.gateway:($("#mv_url")?.value||"").trim();
+ if(typeof alVerify==="function"&&!(await alVerify("Move the company data to another account")))return;
+ if(!confirm(back?"Go back to the old account?\nEverything saved until now is copied back first, then every device switches back.":"Move the company data to the account of this gateway?\nIt is copied and checked first; the old copy stays as a backup."))return;
+ S.mv={busy:true,url,lines:{},err:""};mvRedraw();const say=(n,t,done)=>{S.mv.lines[n]={t,done:!!done};mvRedraw()};
+ try{const r=await mvRun(url,say);S.mv.busy=false;S.mv.done=true;mvRedraw();toast(`Moved — MY TOOL now opens the data in ${r.account}`,{ms:8000});setTimeout(()=>{try{MYTOOL.useGateway(r.url)}catch(_){location.reload()}},2500)}
+ catch(err){S.mv.busy=false;S.mv.err=(err&&err.message)||String(err);mvRedraw()}},true);
+(function(){try{const st=document.createElement("style");st.textContent=`.mvsteps{margin:0;padding-left:20px;line-height:1.7}.mvsteps li{color:var(--muted)}.mvsteps li.run{color:var(--fg);font-weight:600}.mvsteps li.ok{color:#1b7a3d}.mvsteps li.ok::marker{content:"✓  "}`;document.head.appendChild(st)}catch(_){}})();
+
+/* ---------- Supplier upload link (owner, 20 Nov 2026) ----------
+   On any supplier / forwarder record: "📤 Upload link". The Owner / Finance makes a link and sends it (WeChat, email). The supplier
+   opens it — no login — and sends invoices, packing lists, photos. They land in "MY TOOL – INBOX / <supplier>" of the data
+   account; Home shows "From suppliers (n)" with, for each file: Import (opens the importer with the supplier already chosen and
+   attaches the file to the supplier) · Attach only · Done.
+   The link is upload-only (see tools/gateway.gs): it cannot read or open anything. Only a hash of its secret is stored; the
+   full link is shown once, when it is made. New link = the old one stops. Default: 90 days, 30 files a day. */
+const SL_DAYS=90,SL_MAX=30;
+async function slHash(tok){const d=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("mytool-upload:"+tok));return btoa(String.fromCharCode(...new Uint8Array(d))).replace(/\+/g,"-").replace(/\//g,"_")}
+function slTok(){const a=crypto.getRandomValues(new Uint8Array(24));return btoa(String.fromCharCode(...a)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"")}
+/* the link opens upload.html of this app (a static page); the gateway's id travels in the part after #, which is never sent to a server */
+function slGwId(){const g=(window.MYTOOL&&MYTOOL.gateway)||(MYTOOL?.demo&&window.__DEMO_GW?"https://script.google.com/macros/s/DEMOdemoDEMOdemoDEMO12/exec":"");const m=/\/macros\/s\/([A-Za-z0-9_-]+)\/exec$/.exec(g);return m?m[1]:""}
+function slBase(){const id=slGwId();if(!id)return"";return location.origin+location.pathname.replace(/[^/]*$/,"")+"upload.html"}
+function slBox(p){if(!p||p.deletedAt||!(can("edit")||can("create")))return"";const u=p.upload;const fresh=S.slNew&&S.slNew.code===p.code?S.slNew:null;const base=slBase();const exp=u&&u.exp&&u.exp<today();
+ const state=!u?"No link yet.":u.on===false?"Switched off.":exp?`Expired on ${fmtD(u.exp)}.`:`Active until ${fmtD(u.exp)} · up to ${u.max||SL_MAX} files a day.`;
+ const msg=fresh?`Please upload your invoices / packing lists for Vartleaves here (no login needed):\n${fresh.link}\n请通过此链接上传发票、装箱单等文件（无需登录）。`:"";
+ return`<details class="slbox" ${fresh?"open":""}><summary>📤 Upload link for ${esc(p.name||p.code)} <span class="status">— ${esc(state)}</span></summary>
+  ${!base?`<div class="status">The upload link works through the data gateway — it is not on for this device.</div>`:`
+  ${fresh?`<div class="okbox"><b>New link — copy it now (it is shown only once):</b><div class="slink" id="sl_link">${esc(fresh.link)}</div><div class="ixbar"><button type="button" class="btn sm pri" data-sl="copy" data-v="${esc(fresh.link)}">Copy the link</button><button type="button" class="btn sm" data-sl="copy" data-v="${esc(msg)}">Copy a ready message (English + 中文)</button></div></div>`:""}
+  <div class="ixbar"><button type="button" class="btn sm ${u&&u.on!==false&&!exp?"":"pri"}" data-sl="make" data-code="${esc(p.code)}">${u?"Make a new link (the old one stops)":"Make an upload link"}</button>${u&&u.on!==false?`<button type="button" class="btn sm" data-sl="off" data-code="${esc(p.code)}">Switch the link off</button>`:""}</div>
+  <div class="status">The supplier can only SEND files with it (PDF, Excel, CSV, Word, pictures · 20 MB each). They cannot see or open anything. Files appear on Home under “From suppliers”. In mainland China sending needs a VPN (the files go to Google).</div>`}</details>`}
+const slParty0=openParty;
+openParty=function(x){const r=slParty0.apply(this,arguments);try{const p=x&&typeof x==="object"?x:(D.parties||[]).find(d=>d.code===x||d.id===x);if(r&&typeof r.body==="string"&&p)r.body+=slBox(p)}catch(e){console.warn("sl box",e)}return r};
+document.addEventListener("click",async e=>{const b=e.target.closest("[data-sl]");if(!b)return;e.preventDefault();e.stopImmediatePropagation();const a=b.dataset.sl;
+ if(a==="copy"){try{await navigator.clipboard.writeText(b.dataset.v);toast("Copied")}catch(_){const t=document.createElement("textarea");t.value=b.dataset.v;document.body.appendChild(t);t.select();try{document.execCommand("copy");toast("Copied")}catch(__){toast("Select the text and copy it by hand")}t.remove()}return}
+ const code=b.dataset.code;const p=(D.parties||[]).find(d=>d.code===code);if(!p)return;
+ if(a==="off"){if(await updateDoc("parties",p.id||code,{upload:{...(p.upload||{}),on:false,offAt:nowIso()}},`${p.name}: upload link switched off`)!==false){S.slNew=null;toast("The link is off — it stops working at once");render()}return}
+ if(a==="make"){const base=slBase();if(!base){toast("The upload link needs the data gateway");return}if(p.upload&&p.upload.on!==false&&!confirm("Make a new link?\nThe link you sent before stops working."))return;const tok=slTok();const h=await slHash(tok);
+  if(await updateDoc("parties",p.id||code,{upload:{h,on:true,exp:addDays(today(),SL_DAYS),max:SL_MAX,made:nowIso(),by:uid||"local"}},`${p.name}: upload link made`)===false)return;S.slNew={code,link:base+"#u="+tok+"&g="+slGwId()};toast("Link made — copy it and send it to the supplier");render()}},true);
+/* ---- Home: files that came in ---- */
+function slCan(){return!!(window.MYTOOL&&(MYTOOL.gateway||MYTOOL.demo&&window.__DEMO_GW))&&(can("create")||can("edit"))}
+async function slLoad(force){if(!S.ready||!slCan())return;if(!force&&S.slIn&&Date.now()-S.slIn.at<5*60000)return;if(S.slBusy)return;S.slBusy=true;try{const r=await MYTOOL.gwCall("inboxList");const had=S.slIn?.list?.length||0;S.slIn={at:Date.now(),list:r.list||[]};if(S.slIn.list.length!==had){if(S.slIn.list.length>had)toast(`${S.slIn.list.length} file${S.slIn.list.length===1?"":"s"} from suppliers — see Home`);render()}}catch(e){S.slIn={at:Date.now(),list:S.slIn?.list||[],err:e.message}}S.slBusy=false}
+setInterval(()=>{slLoad(false)},20000);document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")slLoad(false)});
+const slHome0=vHome;
+vHome=function(v){const r=slHome0.apply(this,arguments);try{const L=S.slIn?.list||[];if(!L.length||v.querySelector("#slin"))return r;const d=document.createElement("div");d.className="card";d.id="slin";
+ d.innerHTML=`<div class="card-h"><h2>From suppliers (${L.length})</h2><button type="button" class="btn sm" data-slin="refresh">Refresh</button></div><div class="list">${L.slice(0,30).map(f=>{const p=(D.parties||[]).find(x=>x.code===f.party);return`<div class="row slrow"><div style="flex:1;min-width:200px"><b>${esc(f.name)}</b> <span class="status">${esc(f.kind||"")}</span><div class="status">${p?`<button type="button" class="lnk" data-open="parties" data-id="${esc(p.id||p.code)}">${esc(p.name)}</button>`:esc(f.folder||f.party)} · ${esc(fmtD(String(f.at).slice(0,10)))} ${esc(String(f.at).slice(11,16))}${f.note?` · “${esc(f.note)}”`:""}</div></div><div class="ixbar"><button type="button" class="btn sm pri" data-slin="import" data-id="${esc(f.id)}">Import</button><button type="button" class="btn sm" data-slin="attach" data-id="${esc(f.id)}">Attach only</button><button type="button" class="btn sm" data-slin="done" data-id="${esc(f.id)}">Done</button></div></div>`}).join("")}</div>`;
+ const first=v.querySelector(".card");if(first)first.parentNode.insertBefore(d,first);else v.appendChild(d)}catch(e){console.warn("sl home",e)}return r};
+async function slAttach(f){const r=await MYTOOL.gwCall("inboxDone",{id:f.id,attach:true});const p=(D.parties||[]).find(x=>x.code===f.party);if(p&&r.url){const links=(p.links||[]).concat([{label:`${f.kind?f.kind+": ":""}${f.name}`,url:r.url,from:"upload link",at:f.at}]);await updateDoc("parties",p.id||p.code,{links},`${p.name}: ${f.name} attached (sent through the upload link)`)}return r}
+document.addEventListener("click",async e=>{const b=e.target.closest("[data-slin]");if(!b)return;e.preventDefault();e.stopImmediatePropagation();const a=b.dataset.slin;if(a==="refresh"){await slLoad(true);render();return}
+ const f=(S.slIn?.list||[]).find(x=>x.id===b.dataset.id);if(!f)return;b.disabled=true;
+ try{if(a==="done"){await MYTOOL.gwCall("inboxDone",{id:f.id});toast("Marked as done")}
+  else if(a==="attach"){await slAttach(f);toast("Attached to the supplier")}
+  else if(a==="import"){const r=await MYTOOL.gwCall("inboxFile",{id:f.id});const bin=Uint8Array.from(atob(r.b64),c=>c.charCodeAt(0));const file=new File([bin],r.name||f.name,{type:r.mime||""});await slAttach(f);S.slIn.list=S.slIn.list.filter(x=>x.id!==f.id);go("import");await new Promise(z=>setTimeout(z,300));const res=await handleImport(file);
+   try{if(S.imp&&f.party&&(D.parties||[]).some(x=>x.code===f.party)&&!S.imp.def.party){S.imp.def.party=f.party;buildPreview();renderImportPreview()}}catch(_){}if(res&&res.error)toast(res.msg||"The file could not be read — it is attached to the supplier");return}
+  S.slIn.list=S.slIn.list.filter(x=>x.id!==f.id);render()}catch(err){b.disabled=false;toast("Not done: "+(err.message||err),{ms:7000})}},true);
+(function(){try{const st=document.createElement("style");st.textContent=`.slbox{margin-top:14px;border-top:1px solid var(--line);padding-top:10px;display:block}.slbox>summary{cursor:pointer;font-weight:600}.slbox>*+*{margin-top:8px}.slink{font-family:ui-monospace,monospace;font-size:12px;word-break:break-all;background:var(--card,#fff);border:1px dashed var(--line);border-radius:8px;padding:8px;margin:6px 0;user-select:all}.slrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}`;document.head.appendChild(st)}catch(_){}})();
 
 /* ===================== events & boot v3 ===================== */
 const FORM_FOR_COL={purchases:"purchase",shipments:"shipment",payments:"payment",inspections:"inspection",receipts:"receive",moves:"move",credits:"credit",products:"product",parties:"party"};
@@ -8144,5 +8294,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='d438778ab1';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='ecb7f172a0';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
 </body></html>

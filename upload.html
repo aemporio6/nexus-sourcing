@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com; base-uri 'none'; form-action 'none'">
+<title>Upload documents</title>
+<style>
+body{font-family:system-ui,-apple-system,"Segoe UI",Arial,"PingFang SC","Microsoft YaHei",sans-serif;margin:0;background:#f4f7fa;color:#1c2b3a}
+main{max-width:520px;margin:0 auto;padding:22px 16px 40px}h1{font-size:20px;margin:0 0 4px}p{line-height:1.5;margin:6px 0}
+.card{background:#fff;border:1px solid #d9e2ec;border-radius:14px;padding:16px;margin-top:14px}
+label{display:block;font-weight:600;font-size:14px;margin:12px 0 4px}
+select,textarea,input[type=file]{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #c5d0db;border-radius:10px;background:#fff}
+button{width:100%;margin-top:16px;padding:14px;font:inherit;font-weight:700;color:#fff;background:#2f5f8f;border:0;border-radius:12px;cursor:pointer}button[disabled]{opacity:.5;cursor:default}
+.s{font-size:13px;color:#5b6b7b}.ok{color:#1b7a3d}.bad{color:#b3261e}ul{padding-left:18px}li{margin:4px 0;word-break:break-word}[hidden]{display:none}
+</style></head><body><main>
+<div id="wait"><h1>Upload documents</h1><p class="s">Checking the link… 正在检查链接…</p></div>
+<div id="form" hidden>
+ <h1>Upload documents · 上传文件</h1>
+ <p>For <b id="who"></b> → Vartleaves</p>
+ <p class="s">PDF, Excel, CSV, Word, pictures · max 20 MB each · 每个文件最大 20 MB</p>
+ <div class="card">
+  <label for="f">Files · 文件</label><input id="f" type="file" multiple accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic,.txt">
+  <label for="k">What is it? · 类型</label><select id="k"><option>Invoice (PI / CI)</option><option>Packing list</option><option>Product information</option><option>Freight / shipping</option><option>Inspection / photos</option><option>Other</option></select>
+  <label for="n">Note (optional) · 备注</label><textarea id="n" rows="2" maxlength="300"></textarea>
+  <button id="b" type="button">Send · 发送</button>
+  <ul id="o" class="s" aria-live="polite"></ul>
+ </div>
+ <p class="s">This link can only send files. It cannot open or read anything. · 此链接只能发送文件，不能查看任何内容。</p>
+</div>
+<div id="dead" hidden><h1>This upload link is not active</h1><p id="why"></p><p>Please ask Vartleaves for a new link. · 此链接已失效，请向 Vartleaves 索取新的链接。</p></div>
+</main>
+<script>
+(function(){
+ var $=function(id){return document.getElementById(id)};
+ var h=new URLSearchParams(location.hash.replace(/^#/,""));var tok=h.get("u")||"",gid=h.get("g")||"";
+ function dead(msg){$("wait").hidden=true;$("form").hidden=true;$("dead").hidden=false;$("why").textContent=msg||""}
+ if(!/^[A-Za-z0-9_-]{24,80}$/.test(tok)||!/^[A-Za-z0-9_-]{20,120}$/.test(gid)){dead("The link is not complete — copy the whole link again.");return}
+ var GW="https://script.google.com/macros/s/"+gid+"/exec";
+ function call(body){return fetch(GW,{method:"POST",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body)}).then(function(r){return r.json()})}
+ call({op:"supplierInfo",tok:tok}).then(function(j){if(j&&j.ok){$("who").textContent=j.name||"";$("wait").hidden=true;$("form").hidden=false}else dead(j&&j.expired?"It has expired.":"It was switched off or replaced.")})
+  .catch(function(){dead("The upload service could not be reached from this network (it needs access to Google). Try another network or a VPN, or send the files by email. · 无法连接上传服务（需要访问 Google）。")});
+ $("b").onclick=function(){var fs=[].slice.call($("f").files);if(!fs.length){alert("Choose a file first · 请先选择文件");return}var b=$("b");b.disabled=true;var o=$("o");o.textContent="";var i=0;
+  function next(){if(i>=fs.length){b.disabled=false;$("f").value="";return}var f=fs[i++];var li=document.createElement("li");li.textContent=f.name+" …";o.appendChild(li);
+   if(f.size>20*1024*1024){li.className="bad";li.textContent="✗ "+f.name+" — bigger than 20 MB";next();return}
+   var r=new FileReader();r.onerror=function(){li.className="bad";li.textContent="✗ "+f.name+" — could not be read";next()};
+   r.onload=function(){var b64=String(r.result).split(",")[1]||"";call({op:"supplierUpload",tok:tok,name:f.name,mime:f.type,b64:b64,kind:$("k").value,note:$("n").value}).then(function(j){if(j&&j.ok){li.className="ok";li.textContent="✓ "+f.name+" — received · 已收到"}else{li.className="bad";li.textContent="✗ "+f.name+" — "+((j&&j.error)||"not sent")}next()}).catch(function(){li.className="bad";li.textContent="✗ "+f.name+" — not sent (network)";next()})};
+   r.readAsDataURL(f)}
+  next()};
+})();
+</script></body></html>

@@ -52,3 +52,10 @@ document.addEventListener("input",e=>{const t=e.target;if(!t.matches?.("[data-a3
 function a3Partial(){const u=a3User();if(!u)return false;return Object.values(u.areas||{}).includes("hide")||Object.values(u.fields||{}).includes("hide")}
 const a3Rec0=reconcile;reconcile=async function(){if(a3Partial())return;return a3Rec0.apply(this,arguments)};
 if(typeof derivedUpdate==="function"){const a3Der0=derivedUpdate;derivedUpdate=async function(){if(a3Partial())return false;return a3Der0.apply(this,arguments)}}
+/* catch-up: when someone with full access opens MY TOOL, the totals of records changed by a limited person (whose device
+   could not re-calculate) are re-calculated here — once per change, quietly */
+async function a3CatchUp(){try{if(!S.ready||a3Partial()||!can("edit")||S.batch)return;const lim=new Set((SET().users||[]).filter(u=>Object.values(u.areas||{}).includes("hide")||Object.values(u.fields||{}).includes("hide")).map(u=>String(u.uid||"").toLowerCase()).filter(Boolean));if(!lim.size)return;
+ let since="";try{since=localStorage.getItem("mt_a3swept")||""}catch(_){}const t=newTouch();let n=0,latest=since;const pick=(col,set)=>live(D[col]||[]).forEach(x=>{if(x.updatedAt&&x.updatedAt>since&&lim.has(String(x.updatedBy||"").toLowerCase())){set.add(x.no||x.id);n++;if(x.updatedAt>latest)latest=x.updatedAt}});
+ pick("purchases",t.po);pick("shipments",t.sh);pick("credits",t.cn);pick("receipts",t.rc);live(D.payments||[]).forEach(x=>{if(x.updatedAt&&x.updatedAt>since&&lim.has(String(x.updatedBy||"").toLowerCase())){(x.allocations||[]).forEach(a=>{if(a.ref&&docOf("purchases",a.ref))t.po.add(a.ref);if(a.ref&&docOf("shipments",a.ref))t.sh.add(a.ref)});n++;if(x.updatedAt>latest)latest=x.updatedAt}});
+ if(!n)return;await a3Rec0({touch:t,label:"re-calculated after a change by a person with limited access"});try{localStorage.setItem("mt_a3swept",latest)}catch(_){}}catch(e){console.warn("a3 catch-up",e)}}
+setTimeout(()=>a3CatchUp(),15000);setInterval(()=>a3CatchUp(),5*60000);

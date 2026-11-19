@@ -33,4 +33,9 @@ const CI=process.env.CI_FILE||A+"2ff90f76-247ctns_CI_WAP-UK-JW20261103001_VARTLE
  ok(await p.evaluate(()=>live(D.shipments).length===1&&live(D.parties).some(x=>x.type==="forwarder")),"→ shipment in Shipments + forwarder in Suppliers");
  /* 4. several files: right order */
  ok(await p.evaluate(()=>{const n=["PAYMENT SUMMARY.xlsx","Freight_Invoice.pdf","CI_WAP.xlsx","product_information.xlsx","SUPPLIER LIST.xlsx"].map(x=>[x,ixaRank(x)]).sort((a,b)=>a[1]-b[1]).map(x=>x[0]);return n[0]==="SUPPLIER LIST.xlsx"&&n[1]==="product_information.xlsx"&&n[2]==="CI_WAP.xlsx"&&n[4]==="PAYMENT SUMMARY.xlsx"}),"a folder is taken in the right order: parties → products → invoices → freight → payments");
+ /* 5. several files → one plan first */
+ await p.evaluate(()=>{go("import")});await p.waitForTimeout(400);await p.evaluate(()=>{const mk=n=>({name:n,file:new File(["a,b\n1,2"],n),src:"upload",st:"wait"});ixQStart([mk("PAYMENT SUMMARY.csv"),mk("CI_WAP-1.csv"),mk("SUPPLIER LIST.csv")])});await p.waitForTimeout(400);
+ ok(await p.evaluate(()=>{const t=$("#ix_plan")?.innerText||"";return/Import plan — 3 files/.test(t)&&t.indexOf("SUPPLIER LIST")<t.indexOf("CI_WAP")&&t.indexOf("CI_WAP")<t.indexOf("PAYMENT SUMMARY")&&/Suppliers/.test(t)&&/Money › Payments/.test(t)&&!S.impQ}),"several files: ONE plan first (order + where each goes), nothing starts by itself");
+ await p.click('[data-ixa-planx="2"]');await p.waitForTimeout(200);ok(/Start — 2 files/.test(await p.evaluate(()=>$("#ix_plan").innerText)),"a file can be left out");
+ await p.click('[data-ixa-plan="go"]');await p.waitForTimeout(1500);ok(await p.evaluate(()=>S.impQ&&S.impQ.items.length===2&&S.impQ.items[0].name==="SUPPLIER LIST.csv"&&!$("#ix_plan")),"Start → the files open one after another in that order");
  ok(!errs.length,"no page errors "+errs.join(" | "));await b.close();process.exit(fails?1:0)})();

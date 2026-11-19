@@ -32,10 +32,35 @@ async function gw(op, extra){
     catch(e){ throw new Error("Gateway not reachable (" + e.message + ")"); }
     const j = await r.json().catch(() => ({ error: "gateway answered with something that is not JSON", status: 502 }));
     if(j.status === 401 && attempt === 0){ token = null; continue; }
+    if(j.status === 410 && j.moved) followMove({ data: { setup: { main: { movedTo: j.moved } } } });
     if(j.error){ const e = new Error(j.error); e.status = j.status || 500; throw e; }
     return j;
   }
   throw new Error("Signed out — sign in again");
+}
+/* the same call to ANOTHER gateway (moving the data to the company account talks to both) */
+async function gwAt(url, op, extra){
+  if(DEMO){ if(window.__DEMO_GW) return window.__DEMO_GW(op, extra || {}, url); throw new Error("not in the demo"); }
+  if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(String(url || ""))) throw new Error("That is not an Apps Script web-app URL (…/macros/s/…/exec)");
+  const t = await getToken(); let r;
+  try{ r = await fetch(url, { method: "POST", redirect: "follow", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ op, token: t, ...(extra || {}) }) }); }
+  catch(e){ throw new Error("That gateway is not reachable (" + e.message + ")"); }
+  const j = await r.json().catch(() => ({ error: "it answered with something that is not JSON — is it deployed as a Web app, access: Anyone?", status: 502 }));
+  if(j.error){ const e = new Error(j.error); e.status = j.status || 500; throw e; }
+  return j;
+}
+/* owner, 20 Nov 2026: when the data has moved to another account, the old copy carries a pointer (setup.movedTo). Every device that
+   reads it switches to the new gateway by itself; the old copy is never used again (not even by an Owner in direct-Drive mode). */
+function followMove(j){
+  const m = j && j.data && j.data.setup && (j.data.setup.main || j.data.setup), mv = m && m.movedTo;
+  if(!mv || !mv.gateway || mv.gateway === GW || DEMO) return;
+  if(!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(mv.gateway)) return;
+  let n = 0; try{ n = +sessionStorage.getItem("mt_mvtry") || 0; }catch(_){}
+  if(n >= 2){ const e = new Error("The data now lives in the company account (" + (mv.account || "new account") + ") and its gateway cannot be reached right now — try again in a few minutes. The old copy is not used any more."); e.moved = true; throw e; }
+  try{ sessionStorage.setItem("mt_mvtry", String(n + 1)); localStorage.setItem("mt_gw", mv.gateway); }catch(_){}
+  try{ gate('<p><b>The data has moved to the company account' + (mv.account ? ' (' + esc(mv.account) + ')' : '') + '.</b></p><p>MY TOOL is switching to it…</p>'); }catch(_){}
+  setTimeout(() => location.reload(), 900);
+  const e = new Error("The data has moved — switching to the company account"); e.moved = true; throw e;
 }
 const clone = o => o === undefined ? undefined : JSON.parse(JSON.stringify(o));
 const nowIso = () => new Date().toISOString();
@@ -189,10 +214,11 @@ function checkFile(j){
   return j;
 }
 async function readRemote(){
-  if(viaGw()){ const m = await gw("read"); remote.version = m.version; return checkFile(m.file); }
+  if(viaGw()){ const m = await gw("read"); remote.version = m.version; followMove(m.file); try{ sessionStorage.removeItem("mt_mvtry"); }catch(_){} return checkFile(m.file); }
   const r = await gfetch(API + "/drive/v3/files/" + remote.fileId + "?alt=media");
   if(!r.ok) throw new Error("Could not read the data file (" + r.status + ")");
   const j = await r.json();
+  followMove(j);
   return checkFile(j);
 }
 async function metaVersion(){
@@ -742,6 +768,9 @@ window.MYTOOL = {
   async reauth(){ await requestToken(""); await push(); }, demo: DEMO, signOut, cfg: CFG,
   async syncNow(){ await push(); await poll(); },
   get gateway(){ return viaGw() ? GW : ""; },
+  gwAt, async gwCall(op, extra){ if(DEMO){ if(window.__DEMO_GW) return window.__DEMO_GW(op, extra || {}, ""); throw new Error("not in the demo"); } if(!viaGw()) throw new Error("This needs the data gateway"); return gw(op, extra); },
+  /* after the data has moved: this device uses the new gateway from now on */
+  useGateway(url){ try{ localStorage.setItem("mt_gw", url); sessionStorage.removeItem("mt_mvtry"); }catch(_){} location.reload(); },
   /* admin: point this device at the data gateway (tools/gateway.gs). Checks it answers for this account before switching; "" goes back to direct Drive */
   async setGateway(url){
     url = String(url || "").trim();

@@ -26,7 +26,10 @@ function doPost(e){
   var t0 = Date.now(), req = {}, out;
   try{
     req = JSON.parse((e && e.postData && e.postData.contents) || "{}");
-    out = handle(req);
+    /* the supplier upload page (upload.html) has no Google sign-in: these two calls are opened by the link's secret only */
+    if(req.op === "supplierInfo"){ var sw = upFind(req.tok); out = sw && !sw.expired ? { ok: true, name: sw.name } : { ok: false, expired: !!(sw && sw.expired) }; }
+    else if(req.op === "supplierUpload"){ try{ out = supplierUpload(req); }catch(ue){ out = { ok: false, error: String(ue && ue.message || ue), status: 400 }; } }
+    else out = handle(req);
   }catch(err){
     out = { error: String(err && err.message || err), status: err && err.status || 500 };
   }
@@ -60,6 +63,29 @@ function handle(req){
     case "archives": return { ok: true, list: listArchivesGw(), email: email };
     case "archiveRead": { var af = DriveApp.getFileById(req.id); var okA = false, pit = af.getParents(); while(pit.hasNext()){ if(pit.next().getName() === FOLDER) okA = true; } if(!okA || af.getName().indexOf("MYTOOL-ARCHIVE-") !== 0) fail(403, "not an archive"); return { ok: true, file: JSON.parse(af.getBlob().getDataAsString()), email: email }; }
     case "archiveWrite": { needAdmin(who); var yr = String(req.year || ""); if(!/^\d{4}$/.test(yr)) fail(400, "year?"); var nm = "MYTOOL-ARCHIVE-" + yr + ".json"; var fo = dataFolder(), fit = fo.getFilesByName(nm), af2 = fit.hasNext() ? fit.next() : null; var txt = typeof req.body === "string" ? req.body : JSON.stringify(req.body); JSON.parse(txt); if(af2) af2.setContent(txt); else af2 = fo.createFile(nm, txt, "application/json"); return { ok: true, id: af2.getId(), version: String(af2.getLastUpdated().getTime()), email: email }; }
+    /* ---- moving the data to another Google account (20 Nov 2026) ---- */
+    case "adopt": { needAdmin(who); if(cur && !req.force) fail(409, "this account already has MY TOOL data — nothing was changed");
+      var ab = typeof req.body === "string" ? JSON.parse(req.body) : req.body; if(!ab || !ab.data || !ab.data.setup) fail(400, "the file to take over is not complete");
+      var am = ab.data.setup.main || ab.data.setup; if(am && am.movedTo) delete am.movedTo;
+      ab.adoptedFrom = String(req.from || ""); ab.adoptedAt = new Date().toISOString(); ab.savedBy = email; ab.savedAt = ab.adoptedAt;
+      var afo = findDataFolder() || DriveApp.createFolder(FOLDER), atx = JSON.stringify(vaultSeal(JSON.parse(JSON.stringify(ab))));
+      if(cur) cur.file.setContent(atx); else afo.createFile(FILE, atx, "application/json");
+      var chk = readCurrent(); if(!chk || chk.text.length !== atx.length) fail(500, "the copy did not land completely — nothing is switched");
+      var cnt = {}; Object.keys(chk.json.data).forEach(function(c){ cnt[c] = Object.keys(chk.json.data[c] || {}).length; });
+      return { ok: true, version: bump(), counts: cnt, account: selfEmail(), email: email }; }
+    case "adoptFiles": { needAdmin(who); var ids = (req.ids || []).slice(0, 20), map = {}, miss = [], dest = filesFolder(), me2 = selfEmail();
+      ids.forEach(function(id){ try{ var f = DriveApp.getFileById(String(id)); var okP = false, pit = f.getParents(); while(pit.hasNext()){ if(pit.next().getName() === FILES_FOLDER) okP = true; }
+          if(!okP){ miss.push(id); return; } var own = ""; try{ own = f.getOwner().getEmail().toLowerCase(); }catch(_){}
+          if(own === me2){ map[id] = id; return; } var c2 = f.makeCopy(f.getName(), dest); try{ c2.setDescription("copied from " + own + " when the data moved"); }catch(_){} map[id] = c2.getId(); }catch(e){ miss.push(id); } });
+      return { ok: true, map: map, missing: miss, email: email }; }
+    case "whoami": return { ok: true, account: selfEmail(), exists: !!cur, admin: !!who.admin, you: email, email: email };
+    /* ---- files suppliers sent through their upload link ---- */
+    case "inboxList": if(!(who.admin || who.perms.create || who.perms.edit)) fail(403, "your role cannot see the supplier inbox"); return { ok: true, list: inboxList(), email: email };
+    case "inboxFile": { if(!(who.admin || who.perms.create || who.perms.edit)) fail(403, "your role cannot open the supplier inbox"); var xf = inboxGet(req.id); var xb = xf.getBlob(); if(xb.getBytes().length > MAX_UPLOAD) fail(413, "file too big");
+      return { ok: true, name: xf.getName(), mime: xb.getContentType(), b64: Utilities.base64Encode(xb.getBytes()), email: email }; }
+    case "inboxDone": { if(!(who.admin || who.perms.create || who.perms.edit)) fail(403, "your role cannot change the supplier inbox"); var df = inboxGet(req.id);
+      if(req.attach){ df.moveTo(filesFolder()); return { ok: true, id: df.getId(), url: df.getUrl(), email: email }; }
+      var pf = df.getParents().next(), dn = pf.getFoldersByName("done"); df.moveTo(dn.hasNext() ? dn.next() : pf.createFolder("done")); return { ok: true, email: email }; }
     case "upload":  if(!(who.admin || who.perms.create || who.perms.edit)) fail(403, "your role cannot add files"); return upload(req, email);
     default: fail(400, "unknown op " + req.op);
   }
@@ -99,8 +125,12 @@ function userPerms(u, roles){
 function needAdmin(who){ if(!who || !who.admin) fail(403, "only an admin can do this"); }
 
 /* ================= data file ================= */
-function dataFolder(){ var it = DriveApp.getFoldersByName(FOLDER); if(!it.hasNext()) fail(500, "folder not found: " + FOLDER); return it.next(); }
-function dataFile(){ var it = dataFolder().getFilesByName(FILE); return it.hasNext() ? it.next() : null; }
+/* the account this script runs as (so the SAME file works in aemporio6's account and in the company account) */
+var SELF_ = null;
+function selfEmail(){ if(SELF_) return SELF_; try{ SELF_ = String(DriveApp.getRootFolder().getOwner().getEmail() || OWNER).toLowerCase(); }catch(_){ SELF_ = OWNER; } return SELF_; }
+function findDataFolder(){ var it = DriveApp.getFoldersByName(FOLDER), first = null, me = selfEmail(); while(it.hasNext()){ var f = it.next(); if(!first) first = f; try{ if(f.getOwner() && f.getOwner().getEmail().toLowerCase() === me) return f; }catch(_){} } return first; }
+function dataFolder(){ var f = findDataFolder(); if(!f) fail(500, "folder not found: " + FOLDER); return f; }
+function dataFile(){ var fo = findDataFolder(); if(!fo) return null; var it = fo.getFilesByName(FILE); return it.hasNext() ? it.next() : null; }
 function readCurrent(){ var f = dataFile(); if(!f) return null; var text = f.getBlob().getDataAsString(); return { file: f, text: text, json: vaultOpen(JSON.parse(text)) }; }
 function version(){ return Number(PropertiesService.getScriptProperties().getProperty("v") || 0); }
 function bump(){ var v = version() + 1; PropertiesService.getScriptProperties().setProperty("v", String(v)); return v; }
@@ -125,6 +155,9 @@ function doWrite(req, cur, who, email, v){
     var next = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
     if(!next || !next.data || !next.data.setup) fail(400, "the file to save is not complete");
     if(next.schema && cur.json.schema && next.schema < cur.json.schema) fail(409, "your app is older than the data file — reload");
+    var cm0 = cur.json.data && cur.json.data.setup && (cur.json.data.setup.main || cur.json.data.setup), nm0 = next.data.setup.main || next.data.setup;
+    if(cm0 && cm0.movedTo && nm0 && nm0.movedTo) return { ok: false, status: 410, moved: cm0.movedTo, error: "the data has moved to the company account — reload MY TOOL", email: email };
+    if(!who.admin && canon(cm0 && cm0.movedTo || null) !== canon(nm0 && nm0.movedTo || null)) fail(403, "only an Owner can move the data");
     enforce(cur.json, next, who);
     next.savedBy = email; next.savedAt = new Date().toISOString(); next.gatewayVersion = v + 1;
     var text = JSON.stringify(vaultSeal(JSON.parse(JSON.stringify(next))));
@@ -273,7 +306,7 @@ function reattach(cd, nd){
 /* ================= attachments: the FILES folder is shared, the data is not ================= */
 function filesFolder(){
   var it = DriveApp.getFoldersByName(FILES_FOLDER), f = null;
-  while(it.hasNext()){ var x = it.next(); if(x.getOwner() && x.getOwner().getEmail().toLowerCase() === OWNER){ f = x; break; } }
+  while(it.hasNext()){ var x = it.next(); if(x.getOwner() && x.getOwner().getEmail().toLowerCase() === selfEmail()){ f = x; break; } }
   if(!f) f = DriveApp.createFolder(FILES_FOLDER);
   var parents = f.getParents(); if(parents.hasNext() && parents.next().getName() === FOLDER) f.moveTo(DriveApp.getRootFolder());   // never inside the data folder
   return f;
@@ -324,3 +357,38 @@ function selfTest(){
   Logger.log("OK — data file " + cur.text.length + " bytes, version " + version() + ", " + Object.keys(cur.json.data || {}).length + " collections");
   return "OK";
 }
+
+/* ================= supplier upload link (20 Nov 2026) =================
+   The Owner makes a link on a supplier's record and sends it (WeChat / email). The supplier opens it — no Google sign-in —
+   sees ONE page (upload.html of the app, a static page) with "choose files"; that page sends each file here with the link's
+   secret, and it lands in the folder "MY TOOL – INBOX / <supplier>" of this account. No HTML is served by this script (so
+   nothing in it can be called from a page).
+   The link can do nothing else: it reads nothing, lists nothing, opens nothing. Only the hash of the link's secret is kept on the
+   supplier's record; the Owner can switch the link off or make a new one any time. Limits: file types, 20 MB each, files per day. */
+var INBOX_FOLDER = "MY TOOL – INBOX", UP_TYPES = /\.(pdf|xlsx?|csv|docx?|jpe?g|png|webp|heic|txt)$/i, UP_DAY_ALL = 300;
+function upHash(tok){ return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, "mytool-upload:" + tok)); }
+function upFind(tok){ if(!/^[A-Za-z0-9_-]{24,80}$/.test(String(tok || ""))) return null; var h = upHash(tok), cache = CacheService.getScriptCache(), ck = "upf:" + h.slice(0, 60), hit = cache.get(ck);
+  if(hit){ try{ return JSON.parse(hit); }catch(_){} }                        /* 2 minutes: a switched-off link stops within 2 minutes at the latest */
+  var r = upLook(h); cache.put(ck, JSON.stringify(r), 120); return r; }
+function upLook(h){ var cur = readCurrent(); if(!cur) return null; var ps = cur.json.data.parties || {}, ids = Object.keys(ps);
+  for(var i = 0; i < ids.length; i++){ var p = ps[ids[i]], u = p && p.upload; if(!p || p.deletedAt || !u || u.on === false || String(u.h || "").replace(/=+$/, "") !== h.replace(/=+$/, "")) continue; if(u.exp && String(u.exp) < Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd")) return { expired: true }; return { code: p.code || ids[i], name: p.name || ids[i], max: +u.max || 30 }; }
+  return null; }
+function inboxRoot(){ var it = DriveApp.getFoldersByName(INBOX_FOLDER), me = selfEmail(); while(it.hasNext()){ var f = it.next(); try{ if(f.getOwner().getEmail().toLowerCase() === me) return f; }catch(_){ return f; } } return DriveApp.createFolder(INBOX_FOLDER); }
+function upSafe(s, n){ return String(s || "").replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/^\.+/, "").slice(0, n || 120); }
+/* called by upload.html through doPost — the only thing an upload link can do */
+function supplierUpload(p){ p = p || {}; var who = upFind(p.tok); if(!who || who.expired) throw new Error("This upload link is not active. Please ask for a new one.");
+  var name = upSafe(String(p.name || "").split(/[\\/]/).pop(), 120); if(!UP_TYPES.test(name)) throw new Error("This type of file cannot be sent here (PDF, Excel, CSV, Word, pictures only).");
+  var bytes = Utilities.base64Decode(String(p.b64 || "")); if(!bytes.length) throw new Error("The file is empty."); if(bytes.length > MAX_UPLOAD) throw new Error("The file is bigger than 20 MB.");
+  var cache = CacheService.getScriptCache(), day = Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd"), k1 = "up:" + day + ":" + who.code, k2 = "up:" + day + ":all", n1 = +(cache.get(k1) || 0), n2 = +(cache.get(k2) || 0);
+  if(n1 >= who.max || n2 >= UP_DAY_ALL) throw new Error("Today's limit for this link is reached. Please try again tomorrow.");
+  var root = inboxRoot(), fn = upSafe(who.code + " " + who.name, 80), it = root.getFoldersByName(fn), fo = it.hasNext() ? it.next() : root.createFolder(fn);
+  var f = fo.createFile(Utilities.newBlob(bytes, String(p.mime || "application/octet-stream"), name));
+  f.setDescription(JSON.stringify({ via: "upload link", party: who.code, kind: String(p.kind || "").replace(/[\u0000-\u001f<>]/g, " ").slice(0, 30), note: String(p.note || "").replace(/[\u0000-\u001f<>]/g, " ").slice(0, 300), at: new Date().toISOString() }));
+  cache.put(k1, String(n1 + 1), 21600); cache.put(k2, String(n2 + 1), 21600);
+  try{ logLine("ok supplierUpload " + who.code + " " + name + " " + bytes.length + "b"); }catch(_){}
+  return { ok: true, name: name, left: who.max - n1 - 1 }; }
+function inboxList(){ var out = [], it = DriveApp.getFoldersByName(INBOX_FOLDER), me = selfEmail(), root = null; while(it.hasNext()){ var r = it.next(); try{ if(r.getOwner().getEmail().toLowerCase() !== me) continue; }catch(_){} root = r; break; } if(!root) return out;
+  var subs = root.getFolders(); while(subs.hasNext()){ var fo = subs.next(), nm = fo.getName(); if(nm === "done") continue; var fs = fo.getFiles(); while(fs.hasNext() && out.length < 200){ var f = fs.next(), d = {}; try{ d = JSON.parse(f.getDescription() || "{}"); }catch(_){}
+      out.push({ id: f.getId(), name: f.getName(), size: f.getSize(), at: d.at || f.getDateCreated().toISOString(), party: d.party || nm.split(" ")[0], kind: d.kind || "", note: d.note || "", folder: nm }); } }
+  out.sort(function(a, b){ return a.at < b.at ? 1 : -1; }); return out; }
+function inboxGet(id){ var f; try{ f = DriveApp.getFileById(String(id || "")); }catch(e){ fail(404, "file not found"); } var ok = false, p = f.getParents(); while(p.hasNext()){ var fo = p.next(), g = fo.getParents(); while(g.hasNext()){ if(g.next().getName() === INBOX_FOLDER) ok = true; } } if(!ok) fail(403, "not a supplier upload"); return f; }
