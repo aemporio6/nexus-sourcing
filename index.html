@@ -45,7 +45,7 @@ document.addEventListener("input",function(e){var t=e.target;if(t&&t.tagName==="
 const CFG = {
   clientId: "605045779540-pjncsnms1af0s9al9k0de2om67fg0hce.apps.googleusercontent.com",
   scopes: "openid email profile https://www.googleapis.com/auth/drive",
-  admins: ["aemporio6@gmail.com", "maashiq123@gmail.com"], // can never be locked out
+  admins: ["aemporio6@gmail.com", "vartleaves.data@gmail.com"], // the Owner accounts — can never be locked out (owner, 20 Nov 2026)
   dataOwner: "aemporio6@gmail.com",           // the account whose Drive holds the data
   folderName: "MY TOOL – DATA",
   fileName: "MYTOOL-DATA.json",
@@ -623,6 +623,14 @@ async function start(){
     }
     gate('<p>Connecting…</p>');
     await signIn();
+    /* owner, 20 Nov 2026: someone the Owner added to the company (Setup › Users) always works in the company data — "My own Drive"
+       is not offered to them, so nothing they enter can end up in a separate, empty copy. Owners and outsiders can use their own Drive. */
+    if(WS === "own" && !DEMO && !CFG.admins.includes(me.email) && CFG.gateway){
+      let member = false;
+      try{ const r = await fetch(CFG.gateway, { method: "POST", body: JSON.stringify({ op: "meta", token }), headers: { "Content-Type": "text/plain;charset=utf-8" } }); const j = await r.json(); member = !!(j && j.ok && j.role); }catch(_){ member = false; }
+      if(member){ pickWorkspace(""); try{ sessionStorage.setItem("mt_sess", JSON.stringify({ at: Date.now(), ws: "" })); }catch(_){}
+        gate('<p>Signed in as <b>' + esc(me.email) + '</b>.</p><p>You are a member of the company workspace, so MY TOOL opens the <b>company data</b> for you (not a separate Drive).</p><p class="mt_small">Opening…</p>'); await new Promise(z => setTimeout(z, 1800)); }
+    }
     if(WS === "own"){ CFG.dataOwner = me.email; if(!CFG.admins.includes(me.email)) CFG.admins.push(me.email); }
     gate('<p>Opening ' + (WS === "own" ? "your own data (" + esc(me.email) + ")" : "your data") + '…</p>');
     const c = await kvGet(cacheKey());
@@ -884,6 +892,9 @@ window.MYTOOL = {
     async list(parentId, opts){
       opts = opts || {};
       if(DEMO) return (window.__DEMO_DRIVE && window.__DEMO_DRIVE.list(parentId, opts)) || [];
+      if(parentId === "drives"){ /* company (shared) drives the person is a member of — shown as folders */
+        let ds = [], t = ""; do{ const j = await gjson(API + "/drive/v3/drives?pageSize=100&fields=nextPageToken,drives(id,name)" + (t ? "&pageToken=" + t : "")); ds = ds.concat(j.drives || []); t = j.nextPageToken || ""; }while(t && ds.length < 500);
+        return ds.map(d => ({ id: d.id, name: d.name, mimeType: "application/vnd.google-apps.folder", sharedDrive: true })); }
       const q = [];
       if(parentId === "shared") q.push("sharedWithMe=true"); else q.push("'" + (parentId || "root") + "' in parents");
       q.push("trashed=false");
@@ -891,7 +902,7 @@ window.MYTOOL = {
       if(opts.since) q.push("modifiedTime > '" + opts.since + "'");
       let out = [], pt = "";
       do{
-        const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent(q.join(" and ")) + "&fields=nextPageToken,files(id,name,mimeType,modifiedTime,size,parents)&pageSize=200&orderBy=folder,name" + (pt ? "&pageToken=" + pt : "") + "&supportsAllDrives=true&includeItemsFromAllDrives=true");
+        const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent(q.join(" and ")) + "&fields=nextPageToken,files(id,name,mimeType,modifiedTime,size,parents,owners(emailAddress,displayName),sharingUser(emailAddress,displayName))&pageSize=200&orderBy=folder,name" + (pt ? "&pageToken=" + pt : "") + "&supportsAllDrives=true&includeItemsFromAllDrives=true");
         out = out.concat(j.files || []); pt = j.nextPageToken || "";
       }while(pt && out.length < 2000);
       return out;
@@ -1262,7 +1273,7 @@ window.addEventListener("click",e=>{const c=alCfg();if(!c||!c.on||alLocked)retur
 document.addEventListener("keydown",e=>{if(alLocked&&!e.target.closest?.("#alov")){e.stopImmediatePropagation();e.preventDefault()}},true);
 /* 🔒 in the top bar */
 function alBtn(){if(document.getElementById("alb"))return;const nb=document.querySelector('[data-act="newmenu"]')?.parentElement;if(!nb)return;const w=document.createElement("div");w.style.position="relative";w.innerHTML=`<button class="ib" id="alb" type="button" aria-label="Lock and device" title="Lock · which data this device opens" aria-haspopup="true">🔒</button><div id="almenu" hidden role="menu"></div>`;nb.parentElement.insertBefore(w,nb)}
-function alWsHtml(){const ws=(window.MYTOOL&&MYTOOL.workspace)||"";return`<div class="alws"><div class="status" style="padding:6px 10px 2px">Data on this device</div><button type="button" class="m9i" data-al="ws" data-ws="" role="menuitemradio" aria-checked="${!ws}">${!ws?"✓ ":""}Company data (Vartleaves)</button><button type="button" class="m9i" data-al="ws" data-ws="own" role="menuitemradio" aria-checked="${ws==="own"}">${ws==="own"?"✓ ":""}My own Drive (my own data)</button></div>`}
+function alWsHtml(){const ws=(window.MYTOOL&&MYTOOL.workspace)||"";try{if(!ws&&typeof S!=="undefined"&&S.ready&&!S.isOwner)return""}catch(_){}return`<div class="alws"><div class="status" style="padding:6px 10px 2px">Data on this device</div><button type="button" class="m9i" data-al="ws" data-ws="" role="menuitemradio" aria-checked="${!ws}">${!ws?"✓ ":""}Company data (Vartleaves)</button><button type="button" class="m9i" data-al="ws" data-ws="own" role="menuitemradio" aria-checked="${ws==="own"}">${ws==="own"?"✓ ":""}My own Drive (my own data)</button></div>`}
 function alMenuClose(){const m=document.getElementById("almenu");if(m)m.hidden=true}
 document.addEventListener("click",e=>{const b=e.target.closest("#alb");const m=document.getElementById("almenu");if(b){e.preventDefault();e.stopImmediatePropagation();const c=alCfg();m.innerHTML=`${c&&c.on?`<button type="button" class="m9i" data-al="lock" role="menuitem">Lock now</button>`:""}<button type="button" class="m9i" data-al="setup" role="menuitem">${c&&c.on?"Change the lock on this device":"Set up a lock on this device"}</button>${alWsHtml()}`;m.hidden=!m.hidden;return}if(m&&!m.hidden&&!e.target.closest("#almenu"))m.hidden=true},true);
 /* set up / change / turn off */
@@ -1355,7 +1366,12 @@ const party=c=>D.parties.find(p=>p.code===c);
 const pname=c=>party(c)?.name||c||"—";
 const plabel=c=>{const p=party(c);return p?`${p.name}${p.company?" · "+p.company:""} · ${p.code}`:c||"—"};
 const product=s=>D.products.find(p=>p.sku===s);
-const can=perm=>{const r=SET().roles?.[S.role];if(!r)return S.role==="owner";return!!r[perm]};
+/* what the signed-in person may do: the role's ticks, then this person's own ticks (Setup › Users › Access), then the end date.
+   Owners (always-admin accounts) are never limited. "restore" (bring back deleted / old versions) follows delete / edit unless set. */
+const curUser=()=>{try{const lc=x=>String(x||"").trim().toLowerCase();return(SET().users||[]).find(u=>u.uid&&lc(u.uid)===lc(uid)&&u.active!==false)||null}catch(_){return null}};
+const rolePerm=(role,perm)=>{const r=SET().roles?.[role];if(!r)return role==="owner";if(perm==="restore"&&r.restore===undefined)return!!(r.deleteAny||r.edit);return!!r[perm]};
+const userPerm=(u,perm)=>{if(!u)return false;if(u.until&&u.until<today())return false;if(u.perms&&u.perms[perm]!==undefined)return!!u.perms[perm];return rolePerm(u.role,perm)};
+const can=perm=>{if(S.isOwner||S.role!==S.realRole)return rolePerm(S.role,perm);const su=curUser();return su?userPerm(su,perm):rolePerm(S.role,perm)};
 const partyTypeDef=t=>item("partyType",t)||{prefix:"SUP",dept:"supplier",defaultCur:"RMB"};
 
 /* ---------- money ---------- */
@@ -3546,9 +3562,9 @@ function sRates(){const R=SET().rates||{history:[]};const hist=(R.history||[]).m
 /* ---- users & roles ---- */
 function sUsers(){const us=SET().users||[];const roles=items("role").map(r=>[r.id,r.label]);const cos=(SET().companies||[]).filter(c=>!c.archived).map(c=>[c.id,c.name]);const bks=(SET().banks||[]).filter(b=>!b.archived).map(b=>[b.id,b.name]);
  const urows=us.map((u,i)=>{const p=`users.${i}`;return`<tr class="${u.active===false?"arch":""}"><td>${spIn(p+".name",u.name,{ph:"Name"})}</td><td>${spSel(p+".role",roles,u.role,{lab:"Role",w:140,empty:"role"})}</td><td>${spSel(p+".department",items("department").map(x=>[x.id,x.label]),u.department,{lab:"Department",w:150,empty:"department"})}</td><td>${spSel(p+".defaults.company",cos,u.defaults?.company,{lab:"Default company",w:170,empty:"company"})}</td><td>${spSel(p+".defaults.bank",bks,u.defaults?.bank,{lab:"Default bank",w:150,empty:"bank"})}</td><td><input type="checkbox" data-sp="${esc(p+".active")}" ${u.active!==false?"checked":""} aria-label="Active"><label class="status" style="display:block;white-space:nowrap" title="One short email each morning with only their own things (none on quiet days)"><input type="checkbox" data-sp="${esc(p+".digest")}" ${u.digest!==false?"checked":""} aria-label="Morning email"> morning email</label></td><td>${spIn(p+".uid",u.uid,{ph:"name@gmail.com"})}${u.uid?` <button type="button" class="btn sm" data-act="shareuser" data-email="${esc(u.uid)}" data-ro="${esc(u.role==="viewer"?"viewer":"")}" title="Give this email access to the data folder in Google Drive">Share data</button>`:""}</td></tr>`}).join("");
- const PERMS=[["setup","Setup"],["approve","Approve payments"],["bank","See bank details"],["deleteAny","Trash any record"],["edit","Edit records"],["create","Create records"],["export","Export"]];const RR=SET().roles||{};const roleIds=[...new Set([...items("role",{all:true}).map(r=>r.id),...Object.keys(RR)])];
+ const PERMS=[["setup","Setup"],["approve","Approve payments"],["bank","See bank details"],["deleteAny","Trash any record"],["restore","Bring back"],["edit","Edit records"],["create","Create records"],["export","Export"]];const RR=SET().roles||{};const roleIds=[...new Set([...items("role",{all:true}).map(r=>r.id),...Object.keys(RR)])];
  const mrows=roleIds.map(r=>`<tr><td><b>${esc(L("role",r)||r)}</b> <span class="status num">${esc(r)}</span></td>${PERMS.map(([k])=>`<td style="text-align:center"><input type="checkbox" data-sp="roles.${esc(r)}.${k}" ${RR[r]?.[k]?"checked":""} aria-label="${esc(L("role",r)||r)} can ${k}"></td>`).join("")}</tr>`).join("");
- return fsec("Users",`<div class="tbl"><table><tr><th>Name</th><th>Role</th><th>Department</th><th>Default company</th><th>Default bank</th><th>Active</th><th>Google email (login)</th></tr>${urows||'<tr><td colspan="7" class="empty">No users yet</td></tr>'}</table></div><p class="note" style="padding:10px 14px">Only people listed here (with their Google email) can open MY TOOL. Also share the Drive folder <b>MY TOOL – DATA</b> with the same email (Google enforces this). aemporio6 and maashiq123 are always Admin and can never be locked out. Untick Active to stop someone — their history stays.</p>`,`<button class="btn sm" data-sadd="user">+ User</button>`)+
+ return fsec("Users",`<div class="tbl"><table><tr><th>Name</th><th>Role</th><th>Department</th><th>Default company</th><th>Default bank</th><th>Active</th><th>Google email (login)</th></tr>${urows||'<tr><td colspan="7" class="empty">No users yet</td></tr>'}</table></div><p class="note" style="padding:10px 14px">Only people listed here (with their Google email) can open MY TOOL. They sign in with their own Google account and choose <b>Company data</b> — you do <b>not</b> share your Drive with them; the data reaches them through the data gateway, by the ticks below. The Owner accounts (aemporio6, vartleaves.data) can never be locked out. Untick Active to stop someone — their history stays.</p>`,`<button class="btn sm" data-sadd="user">+ User</button>`)+
  (S.isOwner?gatewayCard():"")+
  fsec("What each role can do",`<div class="tbl"><table><tr><th>Role</th>${PERMS.map(([,l])=>`<th style="text-align:center">${esc(l)}</th>`).join("")}</tr>${mrows}</table></div><p class="note" style="padding:10px 14px">Roles come from the Role list (add one there). A user without "approve" has payments above the approval amount held as pending. Changing your own role takes effect after the next refresh.</p>`,`<button class="btn sm" data-setup="lists" data-listkey="role">Edit roles list</button>`)}
 /* ---- data gateway (admin): roles enforced at the data boundary, see tools/gateway.gs ---- */
@@ -7681,6 +7697,187 @@ const ixaQ0=ixQStart;
 ixQStart=function(items){try{if(Array.isArray(items)&&items.length>1){items=items.map((x,i)=>({x,i,r:ixaRank(x.name||x.file?.name||x.title)})).sort((a,b)=>a.r-b.r||a.i-b.i).map(o=>o.x)}}catch(_){}return ixaQ0.call(this,items)};
 (function(){try{const st=document.createElement("style");st.textContent=`.ixanew{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.ixanew input{flex:1;min-width:160px}.ixa_po{display:block;margin-top:4px}.ixa_why ul li{margin:4px 0}`;document.head.appendChild(st)}catch(_){}})();
 
+/* ---------- Access: who can do what — one tick each (owner, 20 Nov 2026) ----------
+   Setup › Users › "Access" shows every person as a card with ticks: See bank details · Create · Edit · Delete (to the
+   Recycle Bin) · Bring back / old versions · Approve payments (+ up to £…) · Download / Export · Change Settings.
+   - Choosing the role fills all the ticks (Partner = everything except Users / ownership; View only = nothing ticked).
+     Untick anything for that one person — it applies at once and is also enforced by the data gateway.
+   - "Until" date: access ends by itself that day (the person can still look, nothing else).
+   - One line in plain words under each card: "Omer can … · cannot …".
+   - Someone who is stopped can press "Ask the Owner" — the Owner gets it on Home and ticks it (or not).
+   - Users and ownership stay with the Owner accounts only — nobody else can change who has access.
+   Not possible to hide from someone who may SEE data: what is on their screen. "Download / Export" off removes every
+   download button and file export; it cannot stop a photo of the screen. */
+const R2_PERMS=[["bank","See bank details"],["create","Create new records"],["edit","Edit / correct records"],["deleteAny","Delete (goes to the Recycle Bin)"],["restore","Bring back deleted / old versions"],["approve","Approve payments"],["export","Download / Export"],["setup","Change Settings (lists, companies, rates)"]];
+const R2_ROLES={partner:{label:"Partner",perms:{bank:true,create:true,edit:true,deleteAny:true,restore:true,approve:true,export:true,setup:false}},viewer:{label:"View only",perms:{bank:false,create:false,edit:false,deleteAny:false,restore:false,approve:false,export:false,setup:false}}};
+/* once, for the Owner: the two new roles, 90 days in the Recycle Bin, and maashiq123 moves from Owner to Partner */
+async function r2Upgrade(){try{if(!S.ready||!D.setup||!S.isOwner||D.setup.roles2)return;const pairs=[];const rl=listDef("role");const its=(rl.items||[]).slice();const roles=JSON.parse(JSON.stringify(D.setup.roles||{}));
+ Object.entries(R2_ROLES).forEach(([id,r])=>{if(!its.some(i=>i.id===id))its.push({id,label:r.label});if(!roles[id])roles[id]={...r.perms}});Object.keys(roles).forEach(k=>{if(roles[k].restore===undefined)roles[k].restore=!!(roles[k].deleteAny||roles[k].edit)});
+ pairs.push([["lists","role"],{...rl,label:rl.label||"Roles",items:its}],[["roles"],roles]);
+ const us=JSON.parse(JSON.stringify(D.setup.users||[]));let moved=false;us.forEach(u=>{if(String(u.uid||"").toLowerCase()==="maashiq123@gmail.com"&&u.role==="owner"){u.role="partner";moved=true}});if(moved)pairs.push([["users"],us]);
+ if((+D.setup.defaults?.trashDays||30)<90)pairs.push([["defaults","trashDays"],90]);pairs.push([["roles2"],true]);
+ await setupPatchMany(pairs,"Access: Partner and View-only roles added",{noUndo:true,quiet:true,derived:true});logEv("setup","setup","main","Roles: Partner and View only added"+(moved?"; maashiq123@gmail.com is now Partner (Owners: aemporio6, vartleaves.data)":"")+"; Recycle Bin keeps 90 days")}catch(e){console.warn("roles2",e)}}
+setInterval(()=>{r2Upgrade()},4000);
+function r2Says(u){const nm=(u.name||u.uid||"This person").split(" ")[0];if(u.active===false)return`${nm} cannot open MY TOOL (not active).`;if(u.until&&u.until<today())return`${nm}'s access ended on ${fmtD(u.until)} — can only look.`;
+ const yes=[],no=[];R2_PERMS.forEach(([k,l])=>{const short={bank:"see bank details",create:"create",edit:"edit",deleteAny:"delete",restore:"bring back",approve:"approve payments"+(u.approveLimit!=null&&u.approveLimit!==""?` up to £${num(u.approveLimit)}`:""),export:"download",setup:"change Settings"}[k];(userPerm(u,k)?yes:no).push(short)});
+ return`${nm} can see everything${yes.length?", "+yes.join(", "):""}.${no.length?` Cannot ${no.join(", ")}.`:""}${u.until?` Until ${fmtD(u.until)}.`:""}`}
+const r2Users0=sUsers;
+sUsers=function(){let h=r2Users0.apply(this,arguments);try{if(!S.isOwner)return h;const us=SET().users||[];const roles=items("role").map(r=>[r.id,r.label]);const admins=(window.MYTOOL?.cfg?.admins)||[];
+ const cards=us.map((u,i)=>{const isAdm=admins.includes(String(u.uid||"").toLowerCase());const p=`users.${i}`;
+  if(isAdm)return`<div class="r2card"><div class="r2h"><b>${esc(u.name||u.uid)}</b><span class="pill">Owner account</span><span class="status">${esc(u.uid||"")}</span></div><div class="status">Owner accounts can do everything and can never be locked out.</div></div>`;
+  const ticks=R2_PERMS.map(([k,l])=>{const on=userPerm({...u,until:null},k);const own=u.perms&&u.perms[k]!==undefined&&u.perms[k]!==rolePerm(u.role,k);return`<label class="r2t ${own?"own":""}"><input type="checkbox" data-sp="${p}.perms.${k}" ${on?"checked":""} aria-label="${esc(l)}"> ${esc(l)}${own?` <span class="status">(changed for ${esc((u.name||"").split(" ")[0]||"this person")})</span>`:""}</label>`}).join("");
+  return`<div class="r2card ${u.active===false?"arch":""}"><div class="r2h"><b>${esc(u.name||"(no name)")}</b><span class="status">${esc(u.uid||"no Google email yet")}</span><label class="status">Role <select data-r2role="${i}" aria-label="Role of ${esc(u.name||"")}">${optsHtml(roles,u.role)}</select></label></div>
+   <div class="r2grid">${ticks}</div>
+   <div class="r2row"><label>Approve up to £ <input type="number" min="0" step="100" data-sp="${p}.approveLimit" value="${esc(u.approveLimit??"")}" placeholder="no limit" style="width:110px"></label><label>Access until <input type="date" data-sp="${p}.until" value="${esc(u.until||"")}"></label>${u.perms&&Object.keys(u.perms).length?`<button type="button" class="btn sm" data-r2reset="${i}">Back to the role's ticks</button>`:""}</div>
+   <div class="r2say">${esc(r2Says(u))}</div></div>`}).join("");
+ h+=fsec("Access — what each person can do",`<div class="r2wrap">${cards||'<div class="empty">Add a user above first</div>'}</div><p class="note" style="padding:10px 14px">Pick the role — every tick fills in by itself. Untick anything for that one person; it applies at once. Only the Owner accounts (${esc(admins.join(", "))}) can change this screen. A person never approves a payment they asked for themselves.</p>`)}catch(e){console.warn("r2 users",e)}return h};
+document.addEventListener("change",async e=>{const t=e.target;if(!t.matches?.("[data-r2role]"))return;e.stopImmediatePropagation();const i=+t.dataset.r2role;const us=JSON.parse(JSON.stringify(SET().users||[]));if(!us[i])return;us[i].role=t.value;delete us[i].perms;
+ if(await setupPatch(["users"],us,`${us[i].name||us[i].uid}: role ${L("role",t.value)}`)!==false)toast(`${us[i].name||"User"} is now ${L("role",t.value)} — all ticks follow the role`);render()},true);
+document.addEventListener("click",async e=>{const b=e.target.closest("[data-r2reset]");if(!b)return;e.preventDefault();const i=+b.dataset.r2reset;const us=JSON.parse(JSON.stringify(SET().users||[]));if(!us[i])return;delete us[i].perms;await setupPatch(["users"],us,`${us[i].name||us[i].uid}: back to the role's ticks`);render()},true);
+/* ---- the limits, applied in one place ---- */
+function r2Blocked(what,perm){toast(`${what} is not allowed for you${S.isOwner?"":" — the Owner can allow it"}`,{ms:6000});if(!S.isOwner)r2AskBar(perm,what)}
+/* approve: own limit */
+window.addEventListener("click",e=>{const b=e.target.closest?.('[data-act="approve"]');if(!b||S.isOwner)return;const su=curUser();const lim=su&&su.approveLimit;if(lim==null||lim==="")return;const pay=docOf("payments",b.dataset.id);if(pay&&+pay.gbp>+lim){e.preventDefault();e.stopImmediatePropagation();toast(`${pay.no} is ${gbp(pay.gbp)} — above your approval limit of £${num(lim)}. An Owner must approve it.`,{ms:7000})}},true);
+/* export / download: every way out */
+const R2_EXP='[data-act="exportview"],[data-act="exportviewcsv"],[data-r9x],[data-psx],[data-pis="export"],[data-act="exportxlsx"],[data-act="exportjson"],[data-act="exportcsv"],[data-act="rowreport"],[data-act="tocsv"]';
+window.addEventListener("click",e=>{if(can("export"))return;const b=e.target.closest?.(R2_EXP);if(!b)return;e.preventDefault();e.stopImmediatePropagation();r2Blocked("Download / Export","export")},true);
+const r2Save0=saveBlob;saveBlob=async function(){if(!can("export")){r2Blocked("Download / Export","export");return false}return r2Save0.apply(this,arguments)};
+setInterval(()=>{try{if(typeof XLSX!=="undefined"&&XLSX.writeFile&&!XLSX.writeFile.r2){const w=XLSX.writeFile;XLSX.writeFile=function(){if(!can("export")){r2Blocked("Download / Export","export");return}return w.apply(this,arguments)};XLSX.writeFile.r2=1}}catch(_){}},1500);
+/* bring back from the Recycle Bin */
+window.addEventListener("click",e=>{const b=e.target.closest?.('[data-act="restore"]');if(!b||can("restore"))return;e.preventDefault();e.stopImmediatePropagation();r2Blocked("Bringing a record back","restore")},true);
+/* ---- "Ask the Owner" ---- */
+function r2AskBar(perm,what){try{document.getElementById("r2ask")?.remove();const d=document.createElement("div");d.id="r2ask";d.innerHTML=`<span>Need this? </span><button type="button" class="btn sm pri" data-r2ask="${esc(perm)}" data-what="${esc(what)}">Ask the Owner</button><button type="button" class="btn sm" data-r2askx>✕</button>`;document.body.appendChild(d);setTimeout(()=>d.remove(),12000)}catch(_){}}
+document.addEventListener("click",async e=>{if(e.target.closest("[data-r2askx]")){document.getElementById("r2ask")?.remove();return}const b=e.target.closest("[data-r2ask]");if(!b)return;e.preventDefault();document.getElementById("r2ask")?.remove();const su=curUser();const perm=b.dataset.r2ask;
+ const asks=(SET().accessAsks||[]).filter(a=>!(a.by===uid&&a.perm===perm));asks.push({by:uid,name:su?.name||uid,perm,what:b.dataset.what,at:nowIso()});
+ try{const id="ASK-"+Date.now().toString(36);await db.collection("log").doc(id).set({id,at:nowIso(),by:uid,byName:su?.name||uid,kind:"ask",col:"setup",ref:"access",perm,text:`${su?.name||uid} asks to be allowed: ${b.dataset.what}`});toast("Sent to the Owner — you will be able to do it once it is allowed")}catch(err){toast("Could not send it: "+(err.message||err))}},true);
+/* the Owner sees the asks on Home and answers with one tap */
+function r2Asks(){const cutoff=addDays(today(),-14);const seen=new Set();return(D.log||[]).filter(l=>l.kind==="ask"&&!l.done&&(l.at||"").slice(0,10)>=cutoff).filter(l=>{const k=l.by+"|"+l.perm;if(seen.has(k))return false;seen.add(k);const u=(SET().users||[]).find(x=>String(x.uid||"").toLowerCase()===String(l.by||"").toLowerCase());return u&&!userPerm(u,l.perm)})}
+const r2Home0=vHome;
+vHome=function(v){const r=r2Home0.apply(this,arguments);try{if(!S.isOwner)return r;const asks=r2Asks();if(!asks.length||v.querySelector("#r2asks"))return r;const d=document.createElement("div");d.className="card";d.id="r2asks";d.innerHTML=`<div class="card-h"><h2>Asking for access (${asks.length})</h2></div><div class="list">${asks.map(a=>`<div class="row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="flex:1;min-width:200px">${esc(a.text)}</span><button type="button" class="btn sm pri" data-r2ok="${esc(a.id)}">Allow</button><button type="button" class="btn sm" data-r2no="${esc(a.id)}">Not now</button></div>`).join("")}</div>`;v.prepend(d)}catch(e){console.warn(e)}return r};
+document.addEventListener("click",async e=>{const ok=e.target.closest("[data-r2ok]"),no=e.target.closest("[data-r2no]");const b=ok||no;if(!b||!S.isOwner)return;e.preventDefault();const id=b.dataset.r2ok||b.dataset.r2no;const a=(D.log||[]).find(l=>l.id===id);if(!a)return;
+ if(ok){const us=JSON.parse(JSON.stringify(SET().users||[]));const u=us.find(x=>String(x.uid||"").toLowerCase()===String(a.by||"").toLowerCase());if(u){u.perms={...(u.perms||{}),[a.perm]:true};if(await setupPatch(["users"],us,`${u.name||u.uid} allowed: ${a.perm}`)===false)return;toast(`${u.name||u.uid} can now: ${R2_PERMS.find(p=>p[0]===a.perm)?.[1]||a.perm}`)}}
+ const done={...a,done:true,answer:ok?"allowed":"not now",answeredAt:nowIso()};try{await db.collection("log").doc(id).set(done);Object.assign(a,done)}catch(_){}render()},true);
+(function(){try{const st=document.createElement("style");st.textContent=`.r2wrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:12px;padding:12px 14px}.r2card{border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}.r2card.arch{opacity:.6}.r2h{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.r2h select{min-height:34px}.r2grid{display:grid;grid-template-columns:1fr;gap:6px}.r2t{display:flex;gap:8px;align-items:center;font-weight:500;min-height:30px}.r2t input{width:18px;height:18px}.r2t.own{color:var(--accent)}.r2row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.r2row label{display:flex;gap:6px;align-items:center;font-size:13px}.r2say{background:var(--soft,#eef3f8);border-radius:10px;padding:8px 10px;font-size:13px;line-height:1.45}
+#r2ask{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:90;background:var(--card,#fff);border:1px solid var(--line);border-radius:12px;padding:8px 10px;display:flex;gap:8px;align-items:center;box-shadow:0 6px 24px rgba(0,0,0,.15)}`;document.head.appendChild(st)}catch(_){}})();
+document.addEventListener("change",e=>{if(e.target.matches?.('[data-sp^="users."]')&&/\.(perms\.\w+|approveLimit|until|active|role)$/.test(e.target.dataset.sp))setTimeout(()=>{try{if(document.querySelector(".r2wrap")){const y=window.scrollY;document.activeElement?.blur?.();const v=$("#view");if(v&&typeof vSetup==="function")vSetup(v);else render();window.scrollTo(0,y)}}catch(_){}},500)});
+
+/* ---------- Version history of every record — like Google Sheets (owner, 20 Nov 2026) ----------
+   Undo used to live only on the device that made the change (last 20 steps). Now every change a person saves keeps the
+   version from before it in the shared data ("versions"): who, when, what changed. Any record shows "🕘 History" with each
+   version and "Restore this version" (needs the "Bring back" tick). Deleted records stay 90 days in the Recycle Bin.
+   - automatic re-calculations are not versions (only what a person saved)
+   - several saves of the same record by the same person within 2 minutes are one version (the oldest "before" is kept)
+   - the last 15 versions of a record are kept, for 180 days; the Owner's app tidies older ones
+   - the gateway lets nobody change or remove a version (see tools/gateway.gs) */
+const HV_COLS=new Set(["parties","products","purchases","shipments","payments","inspections","receipts","credits","moves"]);
+const HV_SKIP=new Set(["updatedAt","updatedBy","rev","_rev","search","id"]);
+D.versions=D.versions||[];
+function hvList(col,id){return(D.versions||[]).filter(v=>v.col===col&&v.ref===id).sort((a,b)=>a.at<b.at?1:-1)}
+function hvSave(entry){if(!entry||!HV_COLS.has(entry.col)||!entry.before||!db)return;const col=entry.col,id=entry.id;const now=nowIso();const last=hvList(col,id)[0];
+ if(!hvForce&&last&&last.by===(uid||"local")&&Date.parse(now)-Date.parse(last.at)<120000)return;
+ const v={id:`${col}:${id}:${Date.now().toString(36)}`,col,ref:id,at:now,by:uid||"local",byName:SET().users?.find(u=>u.uid===uid)?.name||S.role,label:entry.label||"",before:JSON.parse(JSON.stringify(entry.before))};
+ hvForce=false;D.versions.push(v);db.collection("versions").doc(v.id).set(v).catch(()=>{})}
+let hvForce=false;
+const hvPush0=pushUndo;
+pushUndo=function(entry){try{hvSave(entry)}catch(e){console.warn("history",e)}return hvPush0.apply(this,arguments)};
+/* load + tidy */
+let hvOn=false;
+setInterval(()=>{try{if(hvOn||!S.ready||!db)return;hvOn=true;db.collection("versions").onSnapshot(s=>{D.versions=s.docs.map(d=>({...d.data(),id:d.id}));if(S.isOwner)hvTidy()})}catch(_){hvOn=false}},2500);
+let hvTidied=false;
+async function hvTidy(){if(hvTidied)return;hvTidied=true;try{const cut=new Date(Date.now()-180*864e5).toISOString();const by={};(D.versions||[]).forEach(v=>{(by[v.col+"|"+v.ref]=by[v.col+"|"+v.ref]||[]).push(v)});const drop=[];Object.values(by).forEach(a=>{a.sort((x,y)=>x.at<y.at?1:-1);a.forEach((v,i)=>{if(i>=15||v.at<cut)drop.push(v.id)})});
+ for(const id of drop.slice(0,400)){try{await db.collection("versions").doc(id).delete()}catch(_){}}}catch(e){console.warn(e)}}
+/* what changed between two states, in plain words */
+function hvDiff(a,b){const out=[];const ks=new Set([...Object.keys(a||{}),...Object.keys(b||{})]);ks.forEach(k=>{if(HV_SKIP.has(k)||k.startsWith("_"))return;const x=a?.[k],y=b?.[k];if(JSON.stringify(x??null)===JSON.stringify(y??null))return;
+  const show=v=>v==null||v===""?"empty":Array.isArray(v)?`${v.length} line${v.length===1?"":"s"}`:typeof v==="object"?"…":String(v).slice(0,40);out.push(k==="deletedAt"?(y?"deleted":"brought back"):`${k}: ${show(x)} → ${show(y)}`)});return out}
+function hvHtml(col,doc){const vs=hvList(col,doc.id||doc.no||doc.code||doc.sku);if(!vs.length)return`<details class="hvbox"><summary>🕘 History</summary><div class="status" style="padding:8px 2px">No earlier versions yet — from now on every saved change is kept here (who, when, what) and can be brought back.</div></details>`;
+ const rows=vs.map((v,i)=>{const next=i===0?doc:vs[i-1].before;const ch=hvDiff(v.before,next);return`<div class="hvrow"><div><b>${esc(fmtD(v.at.slice(0,10)))} ${esc(v.at.slice(11,16))}</b> · ${esc(v.byName||v.by)}<div class="status">${esc(ch.slice(0,6).join(" · ")||v.label||"saved")}${ch.length>6?` · +${ch.length-6} more`:""}</div></div>${can("restore")?`<button type="button" class="btn sm" data-hv="${esc(v.id)}">Restore to before this</button>`:""}</div>`}).join("");
+ return`<details class="hvbox"><summary>🕘 History — ${vs.length} earlier version${vs.length===1?"":"s"}</summary>${rows}<div class="status" style="padding:6px 2px">Restoring is itself a new version, so nothing is ever lost.</div></details>`}
+/* the record panel: every kind of record gets the History box */
+const HV_OPEN={openPO:"purchases",openPay:"payments",openShip:"shipments",openReceipt:"receipts",openParty:"parties",openProduct:"products",openInsp:"inspections"};
+function hvWrap(fn,col){return function(x){const r=fn.apply(this,arguments);try{if(!r||typeof r.body!=="string")return r;const key=x&&typeof x==="object"?(x.id||x.no||x.code||x.sku):x;const doc=(D[col]||[]).find(d=>d.id===key||d.no===key||d.code===key||d.sku===key);if(doc)r.body+=hvHtml(col,doc)}catch(e){console.warn("history box",e)}return r}}
+openPO=hvWrap(openPO,"purchases");openPay=hvWrap(openPay,"payments");openShip=hvWrap(openShip,"shipments");openReceipt=hvWrap(openReceipt,"receipts");openParty=hvWrap(openParty,"parties");openProduct=hvWrap(openProduct,"products");openInsp=hvWrap(openInsp,"inspections");
+document.addEventListener("click",async e=>{const b=e.target.closest("[data-hv]");if(!b)return;e.preventDefault();e.stopImmediatePropagation();if(!can("restore")){toast("Bringing back a version is not allowed for you");return}const v=(D.versions||[]).find(x=>x.id===b.dataset.hv);if(!v)return;
+ if(typeof alVerify==="function"&&!(await alVerify("Restore an earlier version")))return;if(!confirm(`Put ${v.ref} back to how it was on ${fmtD(v.at.slice(0,10))} ${v.at.slice(11,16)}?\nThe way it is now is kept as a version too.`))return;
+ hvForce=true;let ok;try{ok=await writeDoc(v.col,v.ref,{...v.before,id:v.ref},`${v.ref} restored to the version of ${fmtD(v.at.slice(0,10))} ${v.at.slice(11,16)}`)}finally{hvForce=false}if(ok!==false){toast(`${v.ref} restored`);render()}},true);
+(function(){try{const st=document.createElement("style");st.textContent=`.hvbox{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}.hvbox>summary{cursor:pointer;font-weight:600}.hvrow{display:flex;gap:10px;justify-content:space-between;align-items:flex-start;padding:8px 2px;border-bottom:1px solid var(--line)}.hvrow .status{margin-top:2px;word-break:break-word}`;document.head.appendChild(st)}catch(_){}})();
+
+/* ---------- Fine access: any area, any field — Edit · View only · Hidden (owner, 20 Nov 2026) ----------
+   On top of the ticks, the Owner can set for each person:
+   - every AREA (Buying, Shipments, Money, Stock, Products, Suppliers, QC, Credit notes): Edit · View only · Hidden
+   - every FIELD of every form, also the columns inside lines (unit price, amount …): Edit · View only · Hidden
+   The lists come from the forms themselves, so a new field or module appears here by itself.
+   Enforced twice: here (hidden things are not drawn, view-only is greyed, a save never changes them) and at the data
+   gateway (hidden areas / fields are not even sent to that person's device; changes to view-only ones are put back). */
+const A3_AREAS=[["purchases","Buying (orders)"],["shipments","Shipments"],["payments","Money (payments)"],["receipts","Stock (goods received)"],["moves","Stock (movements / counts)"],["products","Products"],["parties","Suppliers / parties"],["inspections","Quality checks"],["credits","Credit notes"]];
+const A3_PAGE={purchases:"purchases",shipments:"shipments",payments:"payments",products:"products",parties:"parties",stock:"receipts"};
+function a3User(){return S.isOwner||S.role!==S.realRole?null:curUser()}
+function a3Area(col,u){u=u===undefined?a3User():u;return u&&u.areas&&u.areas[col]||"edit"}
+function a3Field(col,key,u){u=u===undefined?a3User():u;return u&&u.fields&&u.fields[col+"."+key]||"edit"}
+/* forms: hidden fields are not drawn, view-only are greyed; values are kept on save */
+const a3Field0=fieldHtml;
+fieldHtml=function(f,v){try{const col=FORM_COL[S.drawer?.form];if(col&&f.t!=="rows"){const m=a3Field(col,f.k);if(m==="hide")return"";if(m==="view"){const h=a3Field0.apply(this,arguments);return h.replace(/<(input|select|textarea)(?![^>]*\bdisabled\b)/g,"<$1 disabled data-a3ro").replace(/<button[^>]*class="fadd"[\s\S]*?<\/button>/g,"").replace("</label>",' <span class="status">view only</span></label>')}}}catch(_){}return a3Field0.apply(this,arguments)};
+const a3Row0=rowCell;
+rowCell=function(k,c,r,i){try{const col=FORM_COL[S.drawer?.form];if(col){const m=a3Field(col,k+"."+c.k);if(m==="hide")return`<input disabled value="•••" aria-label="${esc(c.l)} (hidden)" title="${esc(c.l)} — hidden for you">`;if(m==="view")return a3Row0.apply(this,arguments).replace(/<(input|select|textarea)(?![^>]*\bdisabled\b)/g,"<$1 disabled data-a3ro")}}catch(_){}return a3Row0.apply(this,arguments)};
+const a3Collect0=collect;
+collect=function(form){const o=a3Collect0.apply(this,arguments);try{const u=a3User();const col=FORM_COL[form];if(!u||!u.fields||!col)return o;const old=S.drawer?.ctx?.edit||null;Object.entries(u.fields).forEach(([path,m])=>{if(!path.startsWith(col+".")||m==="edit")return;const ks=path.slice(col.length+1).split(".");
+  if(ks.length===1){if(old)o[ks[0]]=old[ks[0]];else delete o[ks[0]]}else if(Array.isArray(o[ks[0]])){const was=old&&Array.isArray(old[ks[0]])?old[ks[0]]:[];o[ks[0]].forEach((row,i)=>{const w=was.find(x=>x&&row&&x.sku&&x.sku===row.sku)||was[i];if(w)row[ks[1]]=w[ks[1]];else delete row[ks[1]]})}})}catch(e){console.warn("a3 collect",e)}return o};
+/* areas: no form, no save, no page for what is view-only / hidden */
+const a3Open0=openForm;
+openForm=function(form,ctx){try{const col=FORM_COL[form];const m=col?a3Area(col):"edit";if(m!=="edit"){toast(m==="hide"?"This area is not available for you":"This area is view-only for you — the Owner can allow editing");if(typeof r2AskBar==="function")r2AskBar("area:"+col,"edit "+(A3_AREAS.find(a=>a[0]===col)?.[1]||col));return}}catch(_){}return a3Open0.apply(this,arguments)};
+const a3Write0=writeDoc,a3Upd0=updateDoc;
+writeDoc=function(col,id,data,labelTxt,opts){if(!(opts&&(opts.derived||opts.noUndo))&&a3Area(col)!=="edit"){toast("Not saved — this area is view-only for you");return Promise.resolve(false)}return a3Write0.apply(this,arguments)};
+updateDoc=function(col,id,patch,labelTxt,opts){if(!(opts&&(opts.derived||opts.noUndo))&&a3Area(col)!=="edit"){toast("Not saved — this area is view-only for you");return Promise.resolve(false)}return a3Upd0.apply(this,arguments)};
+VIEWS=(o=>()=>{const m=o();const u=a3User();if(!u||!u.areas)return m;const out={...m};Object.entries(A3_PAGE).forEach(([page,col])=>{if(u.areas[col]==="hide"&&out[page])out[page]=v=>{v.innerHTML=`<div class="card empty">This area is not available for you. <button type="button" class="btn sm" data-r2ask="area:${col}" data-what="see ${esc(A3_AREAS.find(a=>a[0]===col)?.[1]||col)}">Ask the Owner</button></div>`}});return out})(VIEWS);
+nav=(function(orig){return function(){orig.apply(this,arguments);try{const u=a3User();if(!u||!u.areas)return;Object.entries(A3_PAGE).forEach(([page,col])=>{if(u.areas[col]==="hide")document.querySelectorAll(`[data-nav="${page}"]`).forEach(el=>{el.hidden=true;el.style.display="none"})})}catch(_){}}})(nav);
+/* ---- the Owner's screen: under each person's ticks ---- */
+function a3FieldList(){const out=[];Object.entries(FORM_COL).forEach(([form,col])=>{if(form==="count")return;let fs=[];try{fs=fields(form)}catch(_){}fs.forEach(f=>{if(f.t==="ro"||f.t==="calc"||!f.l)return;if(f.t==="rows"){const R=ROWS[f.rows]||{};(R.cols||[]).concat(R.more||[]).forEach(c=>{if(c.l)out.push({col,form,key:f.k+"."+c.k,label:`${f.l||f.k} › ${c.l}`})})}else out.push({col,form,key:f.k,label:f.l})})});return out}
+function a3Sel(path,cur,lab){return`<select data-a3="${esc(path)}" aria-label="${esc(lab)}" class="a3s a3-${cur}"><option value="edit" ${cur==="edit"?"selected":""}>Edit</option><option value="view" ${cur==="view"?"selected":""}>View only</option><option value="hide" ${cur==="hide"?"selected":""}>Hidden</option></select>`}
+function a3CardHtml(u,i){const areas=A3_AREAS.map(([c,l])=>`<label class="a3r"><span>${esc(l)}</span>${a3Sel(`${i}|areas|${c}`,a3Area(c,u),l)}</label>`).join("");const nA=Object.values(u.areas||{}).filter(x=>x!=="edit").length,nF=Object.values(u.fields||{}).filter(x=>x!=="edit").length;
+ const open=S.a3Open&&S.a3Open.i===i?S.a3Open:null;const fl=open?a3FieldList().filter(f=>f.col===open.col):[];const q=norm(open?.q||"");
+ return`<details class="a3box" ${open||S.a3Det===i?"open":""} data-a3det="${i}"><summary>Areas and fields ${nA||nF?`<span class="pill">${nA+nF} limit${nA+nF===1?"":"s"}</span>`:`<span class="status">— everything as the ticks say</span>`}</summary>
+  <div class="a3grid">${areas}</div>
+  <div class="a3r" style="margin-top:8px"><span><b>Fields of</b></span><select data-a3form="${i}" aria-label="Fields of which area"><option value="">— pick an area to set single fields —</option>${A3_AREAS.map(([c,l])=>`<option value="${c}" ${open?.col===c?"selected":""}>${esc(l)}</option>`).join("")}</select></div>
+  ${open?`<input data-a3q="${i}" placeholder="Find a field…" value="${esc(open.q||"")}" aria-label="Find a field" style="margin:6px 0"><div class="a3grid a3f">${fl.filter(f=>!q||norm(f.label).includes(q)).map(f=>`<label class="a3r"><span>${esc(f.label)}</span>${a3Sel(`${i}|fields|${f.col}.${f.key}`,a3Field(f.col,f.key,u),f.label)}</label>`).join("")||'<div class="status">No such field</div>'}</div>`:""}</details>`}
+const a3Users0=sUsers;
+sUsers=function(){let h=a3Users0.apply(this,arguments);try{if(!S.isOwner)return h;const us=SET().users||[];const admins=(window.MYTOOL?.cfg?.admins)||[];let n=-1;h=h.replace(/<div class="r2say">/g,m=>{n++;return m});
+ /* put each person's box before their plain-words line */let idx=0;const order=us.map((u,i)=>i).filter(i=>!admins.includes(String(us[i].uid||"").toLowerCase()));h=h.replace(/<div class="r2say">/g,m=>{const i=order[idx++];return(i==null?"":a3CardHtml(us[i],i))+m})}catch(e){console.warn("a3 users",e)}return h};
+const a3Says0=r2Says;
+r2Says=function(u){let s=a3Says0.apply(this,arguments);try{const hid=[],ro=[];A3_AREAS.forEach(([c,l])=>{const m=a3Area(c,u);if(m==="hide")hid.push(l);else if(m==="view")ro.push(l)});const fh=Object.values(u.fields||{}).filter(x=>x==="hide").length,fv=Object.values(u.fields||{}).filter(x=>x==="view").length;
+ if(hid.length)s+=` Does not see: ${hid.join(", ")}.`;if(ro.length)s+=` View only: ${ro.join(", ")}.`;if(fh||fv)s+=` ${fh?fh+" field"+(fh===1?"":"s")+" hidden":""}${fh&&fv?", ":""}${fv?fv+" view-only":""}.`}catch(_){}return s};
+function a3Redraw(){const y=window.scrollY;const v=$("#view");if(v&&typeof vSetup==="function")vSetup(v);window.scrollTo(0,y)}
+document.addEventListener("change",async e=>{const t=e.target;if(t.matches?.("[data-a3form]")){const i=+t.dataset.a3form;S.a3Open=t.value?{i,col:t.value,q:""}:null;S.a3Det=i;a3Redraw();return}
+ if(!t.matches?.("[data-a3]"))return;e.stopImmediatePropagation();const[i,kind,key]=t.dataset.a3.split("|");const us=JSON.parse(JSON.stringify(SET().users||[]));const u=us[+i];if(!u)return;u[kind]=u[kind]||{};if(t.value==="edit")delete u[kind][key];else u[kind][key]=t.value;if(!Object.keys(u[kind]).length)delete u[kind];S.a3Det=+i;
+ const ok=await setupPatch(["users"],us,`${u.name||u.uid}: ${key} → ${t.value==="edit"?"Edit":t.value==="view"?"View only":"Hidden"}`);a3Redraw();if(ok===false)return},true);
+document.addEventListener("input",e=>{const t=e.target;if(!t.matches?.("[data-a3q]")||!S.a3Open)return;S.a3Open.q=t.value;const q=norm(t.value);t.parentElement.querySelectorAll(".a3f .a3r").forEach(r=>{r.style.display=!q||norm(r.firstElementChild.textContent).includes(q)?"":"none"})});
+(function(){try{const st=document.createElement("style");st.textContent=`.a3box{border-top:1px dashed var(--line);padding-top:8px}.a3box>summary{cursor:pointer;font-weight:600;display:flex;gap:8px;align-items:center}.a3grid{display:grid;grid-template-columns:1fr;gap:4px;margin-top:8px}.a3f{max-height:300px;overflow:auto;padding-right:4px}.a3r{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:13px;font-weight:500}.a3r select{min-height:32px;width:128px;flex:none}.a3s.a3-view{border-color:#d9a400;background:#fff8dc}.a3s.a3-hide{border-color:#c0392b;background:#fdecea}`;document.head.appendChild(st)}catch(_){}})();
+/* someone who does not receive every number (a hidden area / field) must never re-calculate totals from what they have:
+   their device skips the automatic re-calculations — the next full user's app (or the Owner's) does them */
+function a3Partial(){const u=a3User();if(!u)return false;return Object.values(u.areas||{}).includes("hide")||Object.values(u.fields||{}).includes("hide")}
+const a3Rec0=reconcile;reconcile=async function(){if(a3Partial())return;return a3Rec0.apply(this,arguments)};
+if(typeof derivedUpdate==="function"){const a3Der0=derivedUpdate;derivedUpdate=async function(){if(a3Partial())return false;return a3Der0.apply(this,arguments)}}
+
+/* ---------- Import › From Google Drive: "Shared with me" by PERSON, and company (shared) drives (owner, 20 Nov 2026) ----------
+   Before: everything anyone ever shared came as one long list. Now:
+   - Drive: My Drive · Shared drives (company drives) · Shared with me
+   - Shared with me first shows the people ("joyce@… — 3 folders, 12 files"); tap one to see only what that person shared
+   Google only shows what was shared with you — never someone's whole Drive. */
+const dpWho=f=>{const o=(f.owners&&f.owners[0])||f.sharingUser||{};return{email:String(o.emailAddress||"unknown").toLowerCase(),name:o.displayName||""}};
+const dpLoad0=ixDriveLoad;
+ixDriveLoad=async function(){const d=ixDrv();if(!ixDriveOk())return dpLoad0.apply(this,arguments);const top=d.path[0];const inWho=d.root==="shared"&&top&&String(top.id).startsWith("who:");
+ if(d.root!=="shared"||(d.path.length>(inWho?1:0)))return dpLoad0.apply(this,arguments);
+ d.loading=true;d.err=null;ixDriveRender();try{const all=await MYTOOL.drive.list("shared",{});
+  if(inWho){const em=top.id.slice(4);d.items=all.filter(f=>dpWho(f).email===em).sort((a,b)=>(ixIsFolder(b)-ixIsFolder(a))||String(a.name).localeCompare(String(b.name)))}
+  else{const by={};all.forEach(f=>{const w=dpWho(f);const g=by[w.email]||(by[w.email]={...w,fo:0,fi:0,last:""});if(ixIsFolder(f))g.fo++;else g.fi++;if((f.modifiedTime||"")>g.last)g.last=f.modifiedTime||"";if(w.name&&!g.name)g.name=w.name});
+   d.items=Object.values(by).sort((a,b)=>a.last<b.last?1:-1).map(g=>({id:"who:"+g.email,name:`${g.name&&norm(g.name)!==norm(g.email)?g.name+" · ":""}${g.email} — ${g.fo} folder${g.fo===1?"":"s"}, ${g.fi} file${g.fi===1?"":"s"}`,mimeType:"application/vnd.google-apps.folder",person:true}))}}
+ catch(e){d.err=e.message||"Drive did not answer";d.items=[]}d.loading=false;ixDriveRender()};
+const dpHtml0=ixDriveHtml;
+ixDriveHtml=function(){let h=dpHtml0.apply(this,arguments);try{const d=ixDrv();if(!d.open||!h.includes('data-ixc="drvroot"'))return h;
+ h=h.replace('<option value="shared"',`<option value="drives" ${d.root==="drives"?"selected":""}>Shared drives (company)</option><option value="shared"`);
+ if(d.root==="drives")h=h.replace(/(data-ixa="drvroot" data-v="drives">)My Drive/,"$1Shared drives");
+ h=h.replace(/<input type="checkbox" data-ixc="drvself" data-id="who:[^>]*>/g,"").replace(/📁 ((?:[^<]*) — \d+ folders?, \d+ files?<)/g,"👤 $1");
+ if(d.root==="shared"&&d.path.length<=1||d.root==="drives"&&!d.path.length)h=h.replace(/<button[^>]*>[^<]*Import all new files here[^<]*<\/button>/,"");
+ if(d.root==="shared"&&!d.path.length)h=h.replace('<div class="ixbar"><label class="status">Drive',`<div class="status" style="color:var(--fg)">👥 People who shared something with you — tap a person to see only their folders and files.</div><div class="ixbar"><label class="status">Drive`)}catch(_){}return h};
+
 /* ===================== events & boot v3 ===================== */
 const FORM_FOR_COL={purchases:"purchase",shipments:"shipment",payments:"payment",inspections:"inspection",receipts:"receive",moves:"move",credits:"credit",products:"product",parties:"party"};
 function createMenu(date){const items_=CREATE_REG.map(c=>[c.k,c.l,c.hint]);/* one list: the same entries appear in + Create and in each module's menu */
@@ -7947,5 +8144,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='5d268f2e58';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='d438778ab1';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
 </body></html>

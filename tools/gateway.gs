@@ -15,7 +15,7 @@
    Nothing is stored here except a version counter. No Client Secret anywhere.                                                      */
 
 var CLIENT_ID = "605045779540-pjncsnms1af0s9al9k0de2om67fg0hce.apps.googleusercontent.com";
-var ADMINS = ["aemporio6@gmail.com", "maashiq123@gmail.com"];
+var ADMINS = ["aemporio6@gmail.com", "vartleaves.data@gmail.com"];   /* the Owner accounts (owner, 20 Nov 2026) */
 var OWNER = "aemporio6@gmail.com";   /* the account this script runs as */
 var FOLDER = "MY TOOL – DATA", FILE = "MYTOOL-DATA.json", FILES_FOLDER = "MY TOOL – FILES";
 var SENSITIVE = ["bank", "beneficiary", "account", "accountNo", "iban", "swift", "sortCode", "sort", "routing", "number"]; /* hidden from roles without "bank" */
@@ -84,8 +84,17 @@ function whoIs(email, json){
   if(ADMINS.indexOf(email) >= 0) return { admin: true, email: email, perms: { setup: true, approve: true, bank: true, deleteAny: true, edit: true, create: true, export: true }, user: { role: "owner" } };
   var main = json && json.data && json.data.setup && (json.data.setup.main || json.data.setup) || {};
   var users = main.users || [], roles = main.roles || {};
-  for(var i = 0; i < users.length; i++){ var u = users[i]; if(u && u.active !== false && String(u.uid || u.email || "").trim().toLowerCase() === email) return { admin: false, email: email, perms: roles[u.role] || (u.role === "owner" ? { setup: true, approve: true, bank: true, deleteAny: true, edit: true, create: true, export: true } : {}), user: u }; }
+  for(var i = 0; i < users.length; i++){ var u = users[i]; if(u && u.active !== false && String(u.uid || u.email || "").trim().toLowerCase() === email) return { admin: false, email: email, perms: userPerms(u, roles), user: u }; }
   return null;
+}
+/* a person's permissions (20 Nov 2026): the role's ticks, then their own ticks from Setup › Users › Access; nothing after the end date */
+function userPerms(u, roles){
+  var base = roles[u.role] || (u.role === "owner" ? { setup: true, approve: true, bank: true, deleteAny: true, edit: true, create: true, export: true, restore: true } : {});
+  var p = {}, k; for(k in base) p[k] = !!base[k];
+  if(p.restore === undefined) p.restore = !!(p.deleteAny || p.edit);
+  if(u.perms) for(k in u.perms) if(u.perms[k] !== undefined && u.perms[k] !== null) p[k] = !!u.perms[k];
+  if(u.until && String(u.until) < Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd")) return {};
+  return p;
 }
 function needAdmin(who){ if(!who || !who.admin) fail(403, "only an admin can do this"); }
 
@@ -131,7 +140,8 @@ function enforce(curJ, next, who){
   if(who.admin) return;
   var cd = curJ.data || {}, nd = next.data || {};
   var curMain = (cd.setup && (cd.setup.main || cd.setup)) || {}, nextMain = (nd.setup && (nd.setup.main || nd.setup)) || {};
-  if(!who.perms.bank) reattach(cd, nd);                                           // hidden bank details come back untouched, before anything is compared
+  if(!who.perms.bank) reattach(cd, nd);
+  var fine = fineOf(who); if(fine) fineReattach(cd, nd, fine);                                           // hidden bank details come back untouched, before anything is compared
   if(canon(curMain.users || []) !== canon(nextMain.users || []) || canon(curMain.roles || {}) !== canon(nextMain.roles || {})) fail(403, "only an admin can change users or roles");
   if(!who.perms.setup && canon(cd.setup || {}) !== canon(nd.setup || {})) fail(403, "your role cannot change Setup");
   approvalRules(cd, nd, nextMain, who);
@@ -139,13 +149,17 @@ function enforce(curJ, next, who){
   for(var i = 0; i < cols.length; i++){
     var c = cols[i]; if(c === "setup" || c === "log" || c === "errors" || c === "views" || c === "counters") continue;
     var a = cd[c] || {}, b = nd[c] || {}, ids = Object.keys(a);
+    if(fine && fine.areas[c] === "view" && canon(a) !== canon(b)) fail(403, "this area is view-only for you (" + c + ")");
     for(var k = 0; k < ids.length; k++){
       var id = ids[k];
-      if(!b[id]){ if(!who.perms.deleteAny) fail(403, "your role cannot delete " + c + "/" + id); continue; }
+      if(!b[id]){ if(c === "versions") fail(403, "the history cannot be removed"); if(!who.perms.deleteAny) fail(403, "your role cannot delete " + c + "/" + id); continue; }
+      if(c === "versions"){ if(canon(a[id]) !== canon(b[id])) fail(403, "the history cannot be changed"); continue; }
       var wasDel = !!a[id].deletedAt, isDel = !!b[id].deletedAt;
+      if(wasDel && !isDel && !who.perms.restore && !who.perms.deleteAny) fail(403, "your role cannot bring back " + id);
       if(!wasDel && isDel && !who.perms.deleteAny) fail(403, "your role cannot trash " + id);
       if(!who.perms.edit && canon(a[id]) !== canon(b[id]) && !ownTaskStep(c, a[id], b[id], who)) fail(403, "your role cannot change " + id);
     }
+    if(c === "versions") continue;   /* anyone who may save adds to the history */
     if(!who.perms.create){ var nids = Object.keys(b); for(var m = 0; m < nids.length; m++) if(!a[nids[m]]) fail(403, "your role cannot create " + c + "/" + nids[m]); }
   }
 }
@@ -158,6 +172,7 @@ function approvalRules(cd, nd, main, who){
     var asked = String(n.requestedBy || (o && o.requestedBy) || (o && o.createdBy) || "").toLowerCase();
     if(o && !o.approved && n.approved && o.needsApproval){
       if(!who.perms.approve) fail(403, "your role cannot approve " + id);
+      var lim = who.user && who.user.approveLimit; if(lim !== undefined && lim !== null && lim !== "" && +n.gbp > +lim) fail(403, id + " is above your approval limit (£" + lim + ")");
       if(asked && asked === me) fail(403, "you asked for " + id + " — someone else must approve it");
     }
     if(n.needsApproval && !n.approved && n.status === "paid") fail(403, id + " is waiting for approval — it cannot be marked paid");
@@ -221,13 +236,33 @@ function ownTaskStep(c, before, after, who){
 }
 /* roles without "bank" never receive bank details; on their saves the current values are put back */
 function redact(json, who){
-  if(who.admin || who.perms.bank) return json;
+  var fine = fineOf(who);
+  if(who.admin || (who.perms.bank && !fine)) return json;
   var j = JSON.parse(JSON.stringify(json)), d = j.data || {};
+  if(fine) fineRedact(d, fine);
+  if(who.perms.bank){ j.redacted = true; return j; }
   var main = d.setup && (d.setup.main || d.setup);
   if(main && main.banks) main.banks.forEach(function(b){ SENSITIVE.forEach(function(k){ if(k in b && k !== "number") delete b[k]; }); });
   if(d.payments) Object.keys(d.payments).forEach(function(id){ var p = d.payments[id]; ["bank", "beneficiary"].forEach(function(k){ if(k in p) delete p[k]; }); });
   if(d.parties) Object.keys(d.parties).forEach(function(id){ var p = d.parties[id]; ["bank", "iban", "swift", "account", "beneficiary", "sortCode", "beneficiaryPending"].forEach(function(k){ if(k in p) delete p[k]; }); });
   j.redacted = true; return j;
+}
+/* fine access (20 Nov 2026): areas and single fields the Owner set to Hidden / View only for one person.
+   Hidden: never sent to their device. Hidden or view-only: whatever they save, the stored value stays. */
+function fineOf(who){ var u = who && who.user; if(!u || who.admin) return null; var a = u.areas || {}, f = u.fields || {}; var has = false, k; for(k in a) if(a[k] === "hide" || a[k] === "view") has = true; for(k in f) if(f[k] === "hide" || f[k] === "view") has = true; return has ? { areas: a, fields: f } : null; }
+function finePath(path){ var p = String(path).split("."); return { col: p[0], k1: p[1], k2: p[2] }; }
+function fineRedact(d, fine){
+  var c, k; for(c in fine.areas) if(fine.areas[c] === "hide" && d[c]) d[c] = {};
+  for(k in fine.fields){ if(fine.fields[k] !== "hide") continue; var q = finePath(k), col = d[q.col]; if(!col) continue;
+    Object.keys(col).forEach(function(id){ var r = col[id]; if(!r) return; if(!q.k2){ if(q.k1 in r) delete r[q.k1]; } else if(Array.isArray(r[q.k1])) r[q.k1].forEach(function(row){ if(row && q.k2 in row) delete row[q.k2]; }); }); }
+}
+function fineReattach(cd, nd, fine){
+  var c, k; for(c in fine.areas) if(fine.areas[c] === "hide") nd[c] = cd[c] || {};
+  for(k in fine.fields){ var mode = fine.fields[k]; if(mode !== "hide" && mode !== "view") continue; var q = finePath(k), oc = cd[q.col] || {}, nc = nd[q.col]; if(!nc) continue;
+    Object.keys(nc).forEach(function(id){ var o = oc[id], n = nc[id]; if(!n) return;
+      if(!q.k2){ if(o){ if(q.k1 in o) n[q.k1] = o[q.k1]; else delete n[q.k1]; } else if(mode === "hide") delete n[q.k1]; return; }
+      if(!Array.isArray(n[q.k1])) return; var was = o && Array.isArray(o[q.k1]) ? o[q.k1] : [];
+      n[q.k1].forEach(function(row, i){ if(!row) return; var w = null; if(row.sku) for(var x = 0; x < was.length; x++) if(was[x] && was[x].sku === row.sku){ w = was[x]; break; } if(!w) w = was[i]; if(w){ if(q.k2 in w) row[q.k2] = w[q.k2]; else delete row[q.k2]; } else if(mode === "hide") delete row[q.k2]; }); }); }
 }
 function reattach(cd, nd){
   var cm = cd.setup && (cd.setup.main || cd.setup), nm = nd.setup && (nd.setup.main || nd.setup);

@@ -77,11 +77,11 @@ function mkRoute(ctx){
   await A.p.evaluate(() => setupPatch(["users", 0, "active"], false, "deactivate")); await A.p.waitForTimeout(2500);
   let T2 = await open("team1@gmail.com"); await T2.p.waitForSelector("#mt_signin"); await T2.p.click("#mt_signin"); await T2.p.waitForTimeout(3000);
   ok((await T2.p.textContent("#mt_gate").catch(() => "")).includes("not allowed"), "inactive user is blocked");
-  // 6. admin maashiq123 without being listed → owner
-  drive.perms.push({ file: dataFile.parent, email: "maashiq123@gmail.com", role: "writer" });
-  let M = await open("maashiq123@gmail.com"); await M.p.waitForSelector("#mt_signin"); await M.p.click("#mt_signin");
+  // 6. admin vartleaves.data without being listed → owner
+  drive.perms.push({ file: dataFile.parent, email: "vartleaves.data@gmail.com", role: "writer" });
+  let M = await open("vartleaves.data@gmail.com"); await M.p.waitForSelector("#mt_signin"); await M.p.click("#mt_signin");
   await M.p.waitForFunction(() => { try { return S.ready } catch (e) { return false } }, null, { timeout: 20000 });
-  ok(await M.p.evaluate(() => S.realRole) === "owner", "maashiq123 always Owner (never locked out)");
+  ok(await M.p.evaluate(() => S.realRole) === "owner", "vartleaves.data always Owner (never locked out)");
   // backup + restore, proven on the (fake) Drive: a daily copy exists, restoring it brings the old data back and makes a before-restore copy first
   await A.p.evaluate(() => { localStorage.removeItem("mt_bk"); return MYTOOL.syncNow(); }); await A.p.waitForTimeout(1500);
   const bk = Object.values(drive.files).filter(f => /MYTOOL-DATA backup/.test(f.name)); ok(bk.length === 1, "exactly one daily backup copy made in Drive, by whichever admin came first (" + bk.map(f => f.name).join(", ") + ")");
@@ -106,7 +106,7 @@ function mkRoute(ctx){
   const g = await A.p.evaluate(no => updateDoc("purchases", no, { note: "x" }, "t").then(r => "ok:" + r).catch(e => "err:" + e.message), arId);
   ok(!/ok:true/.test(g), "editing an archived record is refused (" + String(g).slice(0, 60) + ")");
   // a second device sees the archive too
-  const M2 = await open("maashiq123@gmail.com"); await M2.p.waitForSelector("#mt_signin"); await M2.p.click("#mt_signin"); await M2.p.waitForFunction(() => { try { return S.ready } catch (e) { return false } }, null, { timeout: 20000 }); await M2.p.waitForTimeout(2500);
+  const M2 = await open("vartleaves.data@gmail.com"); await M2.p.waitForSelector("#mt_signin"); await M2.p.click("#mt_signin"); await M2.p.waitForFunction(() => { try { return S.ready } catch (e) { return false } }, null, { timeout: 20000 }); await M2.p.waitForTimeout(2500);
   ok(await M2.p.evaluate(() => D.purchases.filter(p => p._arch === "2024").length) === can24.purchases && await M2.p.evaluate(() => D.purchases.length) === poBefore, "another device loads live + archive, nothing missing");
   const back = await A.p.evaluate(() => MYTOOL.unarchiveYear(2024).catch(e => ({ err: e.message }))); await A.p.waitForTimeout(3000);
   ok(back === n24 && await A.p.evaluate(() => D.purchases.filter(p => p._arch).length) === 0 && JSON.parse(drive.files[dataFile.id].content).data.purchases[arId], "bring back: records editable again and in the live file");

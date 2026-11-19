@@ -6,7 +6,7 @@ main.users = (main.users || []).concat([{ id: "u_fin", name: "Fin", uid: "financ
 main.roles.viewer = { setup: false, approve: false, bank: false, deleteAny: false, edit: false, create: false, export: false };
 main.users.push({ id: "u_view", name: "View", uid: "viewer@x.com", role: "viewer", active: true });
 const seed = { format: "mytool-1", schema: 1, savedBy: "aemporio6@gmail.com", data: seedData, tomb: {}, revs: {} };
-const tokens = { T_ADMIN: { email: "aemporio6@gmail.com" }, T_FIN: { email: "finance@x.com" }, T_VA: { email: "va@x.com" }, T_VIEW: { email: "viewer@x.com" }, T_OLD: { email: "old@x.com" }, T_FIN2: { email: "fin2@x.com" }, T_STRANGER: { email: "nobody@x.com" }, T_WRONGAUD: { email: "aemporio6@gmail.com", aud: "other-app" } };
+const tokens = { T_ADMIN: { email: "aemporio6@gmail.com" }, T_FIN: { email: "finance@x.com" }, T_VA: { email: "va@x.com" }, T_VIEW: { email: "viewer@x.com" }, T_OLD: { email: "old@x.com" }, T_FIN2: { email: "fin2@x.com" }, T_STRANGER: { email: "nobody@x.com" }, T_VDATA: { email: "vartleaves.data@gmail.com" }, T_M123: { email: "maashiq123@gmail.com" }, T_WRONGAUD: { email: "aemporio6@gmail.com", aud: "other-app" } };
 const G = makeGateway(seed, tokens);
 let fails = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if(!c) fails++; };
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -99,5 +99,37 @@ r = G.call({ op: "upload", token: "T_VA", name: "a/b:c.pdf", mime: "application/
   ok(G.call({ op: "read", token: "T_ADMIN" }).file.data.parties[sup].beneficiary === "NEW BANK 6222 9999 8888 7777", "details intact after the VA save");
   r = put("T_ADMIN", d => { d.parties[sup].note = "x"; }); ok(r.ok && raw0().includes("enc:v1:") && !raw0().includes("6222 9999 8888 7777"), "admin save keeps them encrypted");
   const e1 = raw0().match(/enc:v1:[^"]+/)[0]; r = put("T_ADMIN", d => { d.parties[sup].note = "y"; }); ok(raw0().includes(e1), "same value → same encrypted text"); }
+/* 20 Nov 2026: a person's own ticks, end date, approval limit, history that cannot be changed */
+{ const put = (tok, fn) => { const c = G.call({ op: "read", token: tok }); const nb = clone(c.file); fn(nb.data); return G.call({ op: "write", token: tok, base: c.version, body: nb }); };
+  const setU = fn => put("T_ADMIN", d => { const m = d.setup.main || d.setup; fn(m.users.find(u => u.uid === "finance@x.com"), m); });
+  const anyPo = Object.keys(G.call({ op: "read", token: "T_ADMIN" }).file.data.purchases)[0];
+  let r = put("T_FIN", d => { d.purchases[anyPo].notes = "fin edit 1"; }); ok(r.ok, "finance can edit (role tick)");
+  setU(u => { u.perms = { edit: false }; }); r = put("T_FIN", d => { d.purchases[anyPo].notes = "fin edit 2"; }); ok(r.status === 403 && /cannot change/.test(r.error), "Edit unticked for this one person → their edit is refused");
+  setU(u => { u.perms = { edit: true }; u.until = "2020-01-01"; }); r = put("T_FIN", d => { d.purchases[anyPo].notes = "fin edit 3"; }); ok(r.status === 403, "after the 'until' date nothing can be saved");
+  setU(u => { delete u.until; delete u.perms; });
+  r = put("T_FIN", d => { d.versions = d.versions || {}; d.versions["purchases:" + anyPo + ":a1"] = { id: "purchases:" + anyPo + ":a1", col: "purchases", ref: anyPo, at: "2026-11-20T00:00:00Z", by: "finance@x.com", before: { notes: "old" } }; d.purchases[anyPo].notes = "fin edit 4"; }); ok(r.ok, "a save adds its version to the history");
+  r = put("T_FIN", d => { d.versions["purchases:" + anyPo + ":a1"].before.notes = "tampered"; }); ok(r.status === 403 && /history cannot be changed/.test(r.error), "nobody can change a version");
+  r = put("T_FIN", d => { delete d.versions["purchases:" + anyPo + ":a1"]; }); ok(r.status === 403 && /history cannot be removed/.test(r.error), "nobody can remove a version");
+  r = put("T_ADMIN", d => { delete d.versions["purchases:" + anyPo + ":a1"]; }); ok(r.ok, "the Owner's app may tidy old versions");
+  r = put("T_ADMIN", d => { d.payments["PAY-26-9500"] = { id: "PAY-26-9500", no: "PAY-26-9500", party: "SUP-001", amount: 90000, cur: "RMB", gbp: 9000, date: "2026-11-20", direction: "out", allocations: [], status: "pending", needsApproval: true, approved: false, requestedBy: "va@x.com", createdBy: "va@x.com" }; }); ok(r.ok, "(setup) a payment waiting for approval");
+  setU(u => { u.approveLimit = 5000; }); r = put("T_FIN", d => { const x = d.payments["PAY-26-9500"]; x.approved = true; x.status = "paid"; x.approvedBy = "finance@x.com"; }); ok(r.status === 403 && /above your approval limit/.test(r.error), "approval above the person's limit is refused");
+  setU(u => { u.approveLimit = 10000; }); r = put("T_FIN", d => { const x = d.payments["PAY-26-9500"]; x.approved = true; x.status = "paid"; x.approvedBy = "finance@x.com"; }); ok(r.ok, "…and allowed within the limit");
+  ok(G.call({ op: "meta", token: "T_ADMIN" }).role === "owner" && G.call({ op: "meta", token: "T_VDATA" }).role === "owner", "Owners: aemporio6 and vartleaves.data");
+  r = G.call({ op: "revoke", token: "T_M123" }); ok(r.status === 403, "maashiq123 is no longer an Owner account (it gets the role the Owner gives it)"); }
+/* fine access: areas and single fields — Hidden / View only */
+{ const put = (tok, fn) => { const c = G.call({ op: "read", token: tok }); const nb = clone(c.file); fn(nb.data); return G.call({ op: "write", token: tok, base: c.version, body: nb }); };
+  const setU = fn => put("T_ADMIN", d => { const m = d.setup.main || d.setup; fn(m.users.find(u => u.uid === "finance@x.com")); });
+  const all = () => G.call({ op: "read", token: "T_ADMIN" }).file.data, mine = () => G.call({ op: "read", token: "T_FIN" }).file.data;
+  const po = Object.keys(all().purchases).find(k => (all().purchases[k].lines || []).some(l => l.u != null)); const u0 = all().purchases[po].lines[0].u, tot0 = all().purchases[po].total;
+  setU(u => { u.areas = { payments: "hide", shipments: "view" }; u.fields = { "purchases.lines.u": "hide", "purchases.total": "hide", "purchases.notes": "view" }; });
+  ok(Object.keys(mine().payments).length === 0 && Object.keys(all().payments).length > 0, "Hidden area: payments are not sent to that person at all");
+  ok(mine().purchases[po].lines.every(l => !("u" in l)) && !("total" in mine().purchases[po]) && mine().purchases[po].lines.length === all().purchases[po].lines.length, "Hidden fields: unit price and total are not sent (the rest of the order is)");
+  let r = put("T_FIN", d => { d.purchases[po].supplierRef = "edited by fin"; d.purchases[po].notes = "CHANGED"; d.purchases[po].lines[0].u = 0.01; });
+  ok(r.ok && all().purchases[po].supplierRef === "edited by fin", "they can still edit what they may");
+  ok(all().purchases[po].lines[0].u === u0 && all().purchases[po].total === tot0, "…the hidden values are untouched by their save");
+  ok(all().purchases[po].notes !== "CHANGED", "…and a view-only field keeps its value");
+  ok(Object.keys(all().payments).length > 0, "…and the hidden area is still complete");
+  const sh = Object.keys(all().shipments)[0]; r = put("T_FIN", d => { d.shipments[sh].notes = "x"; }); ok(r.status === 403 && /view-only/.test(r.error), "View-only area: a change is refused");
+  setU(u => { delete u.areas; delete u.fields; }); ok(Object.keys(mine().payments).length > 0 && mine().purchases[po].lines[0].u === u0, "limits removed → everything is back"); }
 ok(G.drive.files && Object.values(G.drive.files).some(f => f.name.startsWith("MYTOOL-GATEWAY-LOG") && /REFUSED/.test(f.content) && /ok write va@x.com/.test(f.content)), "gateway log has writes and refusals");
 console.log(fails ? fails + " FAILED" : "ALL PASS"); process.exit(fails ? 1 : 0);

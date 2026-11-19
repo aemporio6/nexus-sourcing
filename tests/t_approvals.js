@@ -3,7 +3,7 @@ const{chromium}=require("playwright");
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:950}});const errs=[];p.on("pageerror",e=>errs.push(e.message));let fails=0;const ok=(c,m)=>{console.log((c?"PASS ":"FAIL ")+m);if(!c)fails++};
  await p.goto("http://localhost:8093/index.html?demo");await p.waitForFunction(()=>{try{return S.ready}catch(e){return false}});await p.waitForTimeout(500);
  const me=await p.evaluate(()=>uid);console.log("uid",me);
- await p.evaluate(()=>{S.role="finance"});
+ await p.waitForFunction(()=>!!SET().roles2,null,{timeout:20000});await p.waitForTimeout(1500);await p.evaluate(()=>{S.role="finance"});
  const po=await p.evaluate(()=>{const x=live(D.purchases).find(p=>{try{return poState(p).outstandingCur>40000&&p.cur==="RMB"}catch(_){return false}});return{no:x.no,party:x.party}});
  await p.evaluate(()=>openForm("payment",{}));await p.waitForTimeout(1000);
  await p.evaluate(po=>{setv("party",po.party);syncPayParty();const r=S.drawer.rows.allocations;if(!r.length)r.push({});r[0].ref=po.no;redrawRows("allocations");setv("amount",30000);setv("cur","RMB");setv("type","deposit");setv("bank",(SET().banks||[])[0]?.id||"");syncPay()},po);

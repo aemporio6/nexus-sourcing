@@ -6,7 +6,7 @@
 const CFG = {
   clientId: "605045779540-pjncsnms1af0s9al9k0de2om67fg0hce.apps.googleusercontent.com",
   scopes: "openid email profile https://www.googleapis.com/auth/drive",
-  admins: ["aemporio6@gmail.com", "maashiq123@gmail.com"], // can never be locked out
+  admins: ["aemporio6@gmail.com", "vartleaves.data@gmail.com"], // the Owner accounts — can never be locked out (owner, 20 Nov 2026)
   dataOwner: "aemporio6@gmail.com",           // the account whose Drive holds the data
   folderName: "MY TOOL – DATA",
   fileName: "MYTOOL-DATA.json",
@@ -584,6 +584,14 @@ async function start(){
     }
     gate('<p>Connecting…</p>');
     await signIn();
+    /* owner, 20 Nov 2026: someone the Owner added to the company (Setup › Users) always works in the company data — "My own Drive"
+       is not offered to them, so nothing they enter can end up in a separate, empty copy. Owners and outsiders can use their own Drive. */
+    if(WS === "own" && !DEMO && !CFG.admins.includes(me.email) && CFG.gateway){
+      let member = false;
+      try{ const r = await fetch(CFG.gateway, { method: "POST", body: JSON.stringify({ op: "meta", token }), headers: { "Content-Type": "text/plain;charset=utf-8" } }); const j = await r.json(); member = !!(j && j.ok && j.role); }catch(_){ member = false; }
+      if(member){ pickWorkspace(""); try{ sessionStorage.setItem("mt_sess", JSON.stringify({ at: Date.now(), ws: "" })); }catch(_){}
+        gate('<p>Signed in as <b>' + esc(me.email) + '</b>.</p><p>You are a member of the company workspace, so MY TOOL opens the <b>company data</b> for you (not a separate Drive).</p><p class="mt_small">Opening…</p>'); await new Promise(z => setTimeout(z, 1800)); }
+    }
     if(WS === "own"){ CFG.dataOwner = me.email; if(!CFG.admins.includes(me.email)) CFG.admins.push(me.email); }
     gate('<p>Opening ' + (WS === "own" ? "your own data (" + esc(me.email) + ")" : "your data") + '…</p>');
     const c = await kvGet(cacheKey());
@@ -845,6 +853,9 @@ window.MYTOOL = {
     async list(parentId, opts){
       opts = opts || {};
       if(DEMO) return (window.__DEMO_DRIVE && window.__DEMO_DRIVE.list(parentId, opts)) || [];
+      if(parentId === "drives"){ /* company (shared) drives the person is a member of — shown as folders */
+        let ds = [], t = ""; do{ const j = await gjson(API + "/drive/v3/drives?pageSize=100&fields=nextPageToken,drives(id,name)" + (t ? "&pageToken=" + t : "")); ds = ds.concat(j.drives || []); t = j.nextPageToken || ""; }while(t && ds.length < 500);
+        return ds.map(d => ({ id: d.id, name: d.name, mimeType: "application/vnd.google-apps.folder", sharedDrive: true })); }
       const q = [];
       if(parentId === "shared") q.push("sharedWithMe=true"); else q.push("'" + (parentId || "root") + "' in parents");
       q.push("trashed=false");
@@ -852,7 +863,7 @@ window.MYTOOL = {
       if(opts.since) q.push("modifiedTime > '" + opts.since + "'");
       let out = [], pt = "";
       do{
-        const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent(q.join(" and ")) + "&fields=nextPageToken,files(id,name,mimeType,modifiedTime,size,parents)&pageSize=200&orderBy=folder,name" + (pt ? "&pageToken=" + pt : "") + "&supportsAllDrives=true&includeItemsFromAllDrives=true");
+        const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent(q.join(" and ")) + "&fields=nextPageToken,files(id,name,mimeType,modifiedTime,size,parents,owners(emailAddress,displayName),sharingUser(emailAddress,displayName))&pageSize=200&orderBy=folder,name" + (pt ? "&pageToken=" + pt : "") + "&supportsAllDrives=true&includeItemsFromAllDrives=true");
         out = out.concat(j.files || []); pt = j.nextPageToken || "";
       }while(pt && out.length < 2000);
       return out;
