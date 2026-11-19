@@ -32,7 +32,7 @@ const EMPTY_SET={companies:[],banks:[],emails:[],people:[],locations:[],lists:{}
 const SET=()=>D.setup||EMPTY_SET;
 const DEF=()=>{const s=SET();const d={...EMPTY_SET.defaults,...(s.defaults||{})};const c=(s.companies||[]).find(x=>x.default&&!x.archived);if(c)d.company=c.id;const lf=k=>(s.locations||[]).find(l=>l.default&&l.default[k]&&!l.archived)?.id;d.receiveLoc=lf("receive")||d.receiveLoc;d.sellLoc=lf("sell")||d.sellLoc;d.shipTo=lf("ship")||d.shipTo;return d};
 const FEES=()=>({...EMPTY_SET.fees,...(SET().fees||{})});
-const listDef=k=>SET().lists?.[k]||{label:k,items:[]};
+const listDef=k=>SET().lists?.[k]||(typeof STARTER_SETUP!=="undefined"&&STARTER_SETUP.lists[k])||{label:k,items:[]};
 const items=(k,o={})=>listDef(k).items.filter(i=>(o.all||!i.archived)&&(o.parent===undefined||(i.parent||"")===(o.parent||""))&&(!o.group||i.group===o.group));
 const item=(k,id)=>listDef(k).items.find(i=>i.id===id);
 const L=(k,id)=>{if(id==null||id==="")return"";const it=item(k,id);if(!it)return String(id);return it.parent?`${L(k,it.parent)} › ${it.label}`:it.label};

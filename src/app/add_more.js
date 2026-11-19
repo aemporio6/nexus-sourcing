@@ -9,7 +9,7 @@
    - Tags: "＋ Add tag" adds a new tag and ticks it
    - text fields with suggestions show "▾" to open them; Material starts with a standard list; a typed new value is
      remembered for next time */
-const AM_DOC={poref:["purchase","order"],payref:["payment","payment"],recvref:["shipment","shipment"]};
+const AM_DOC={poref:["purchase","order"],ownref:["purchase","order"],payref:["payment","payment"],recvref:["shipment","shipment"],rcref:["receive","goods received"]};
 const AM_MAT=["Cotton","Polyester","Linen","Wool","Silk","Plastic","PP","PET","ABS","Silicone","Rubber","Wood","Bamboo","MDF","Paper","Cardboard","Glass","Ceramic","Porcelain","Stainless steel","Iron","Aluminium","Brass","Soy wax","Paraffin wax","Beeswax","Resin","Stone","Leather","PU leather"];
 /* 1) pickers of other records get "＋ New …" inside the dropdown too (fields and lines) */
 const amInput0=inputFor;
@@ -46,3 +46,6 @@ document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target?.id==="amta
 const amSug0=fnSuggest;
 fnSuggest=function(form,k){if(k==="material"||k==="x_material"){const seen=new Map();(D.products||[]).filter(x=>!x.deletedAt).forEach(x=>{const t=String(x.material||"").trim();if(t&&t.length<=80)seen.set(t.toLowerCase(),t)});AM_MAT.forEach(t=>{if(!seen.has(t.toLowerCase()))seen.set(t.toLowerCase(),t)});return[...seen.values()].slice(0,60)}return amSug0.apply(this,arguments)};
 (function(){try{const st=document.createElement("style");st.textContent=`.fadd{margin-left:auto;float:right;border:0;background:none;color:var(--accent);font:inherit;font-size:12px;font-weight:600;padding:0 2px;cursor:pointer;line-height:1.4}.fadd:hover{text-decoration:underline}.fadd[data-how="__pick"]{font-size:11px;color:var(--muted)}`;document.head.appendChild(st)}catch(_){}})();
+/* "For (order / company / client)" inside extra lines / allocations: ＋ New order… too */
+const amOwnRef0=ownerRefOptsHtml;
+ownerRefOptsHtml=function(v,bt){let h=amOwnRef0.apply(this,arguments);try{if(!/__newdoc/.test(h)){const opt=`<option value="__newdoc">＋ New order…</option>`;h=/<option value="">[^<]*<\/option>/.test(h)?h.replace(/(<option value="">[^<]*<\/option>)/,"$1"+opt):opt+h}}catch(_){}return h};

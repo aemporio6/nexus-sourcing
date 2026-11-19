@@ -1,0 +1,102 @@
+/* ---------- Importer that never gets stuck — also on a brand-new, empty workspace (owner, 20 Nov 2026) ----------
+   What was wrong (seen on an empty Drive): every value had to be decided by hand, "Values for the whole file" dropdowns were
+   empty with no way to add (Supplier / Forwarder / Paid to / Bank / Service …), a CI needed an order that did not exist,
+   the product info sheet needed Brand + Category + Create for every product one by one, and the Import button was simply
+   grey without saying why. Now:
+   1. every dropdown in "Values for the whole file" has "＋ New …" right there (name filled in from the file) — created once,
+      it is in MY TOOL everywhere (Suppliers, Setup lists …) and picked here at once
+   2. values with no match at all are set to "create as new" by themselves (a green "new" badge, one tap to change) —
+      a matching value is suggested, never auto-created; numbers / amounts are never turned into suppliers
+   3. a supplier invoice (CI) with no order to belong to → "New order from this invoice" is chosen by itself
+   4. a grey Import button says WHY, with the button that fixes it right next to it
+   5. product info sheet: "Create all N products" with brand / category guessed (＋ New brand / category in the same place)
+   6. several files / a whole folder are taken in the right order: parties → products → orders → invoices / packing →
+      shipments → payments → the rest */
+const IXA_LIST={brand:"brand",category:"category",mode:"mode",channel:"marketplace",incoterm:"incoterm",cur:"currency",ptype:"partyType"};
+function ixaPartyType(lab){return/forwarder/i.test(lab)?"forwarder":/customs/i.test(lab)?"customs":/inspector/i.test(lab)?"inspector":"supplier"}
+function ixaGuessName(I,k){try{const m=I.fixed?.meta||{};if(k==="party")return m.partyRaw||m.partyName||(m.party&&!party(m.party)?m.party:"")||Object.values(I.preview?.unk||{}).find(u=>u.type==="party"&&!u.dec)?.raw||"";return""}catch(_){return""}}
+/* 1) "＋ New …" in every whole-file dropdown */
+const ixaDef0=ixDefHtml;
+ixDefHtml=function(I,sh,P){let h=ixaDef0.apply(this,arguments);try{
+ h=h.replace(/<label>([^<]*)<select data-ixc="def" data-k="([a-zA-Z]+)"([^>]*)>([\s\S]*?)<\/select>/g,(all,lab,k,rest,opts)=>{
+  if(/value="__(?!newparty)/.test(opts)&&k!=="party")return all;const what=k==="party"?ixaPartyType(lab):k==="bank"?"bank":k==="loc"?"location":IXA_LIST[k];if(!what)return all;
+  if(what!=="bank"&&what!=="location"&&k!=="party"&&!can("setup"))return all;
+  const nice=k==="party"?(what==="forwarder"?"forwarder":what==="customs"?"customs agent":what==="inspector"?"inspector":"supplier"):what==="marketplace"?"channel":what==="partyType"?"party type":what;
+  opts=opts.replace(/<option value="__newparty">[^<]*<\/option>/,"").replace(/<option value="__addlist">[^<]*<\/option>/,"");
+  const box=I.ixaNew&&I.ixaNew.k===k?`<span class="ixaddl ixanew"><input id="ixa_name" value="${esc(I.ixaNew.name||"")}" placeholder="Name of the new ${esc(nice)}" aria-label="Name of the new ${esc(nice)}">${what==="bank"?`<select id="ixa_cur" aria-label="Currency">${items("currency").map(c=>`<option value="${esc(c.id)}">${esc(c.id)}</option>`).join("")}</select>`:""}<button type="button" class="btn sm pri" data-ixa-make="${esc(k)}" data-what="${esc(what)}">Create</button><button type="button" class="btn sm" data-ixa-cancel>✕</button></span>`:"";
+  return`<label>${lab}<select data-ixc="def" data-k="${k}"${rest}>${opts}<option value="__ixanew">＋ New ${esc(nice)}…</option></select>${box}`});
+ }catch(e){console.warn("ixa def",e)}return h};
+document.addEventListener("change",e=>{const t=e.target;if(!t.matches?.('select[data-ixc="def"]')||t.value!=="__ixanew")return;e.stopImmediatePropagation();const I=S.imp;if(!I)return;const k=t.dataset.k;t.value=I.def[k]||"";I.ixaNew={k,name:ixaGuessName(I,k)};renderImportPreview();setTimeout(()=>{const i=$("#ixa_name");i?.focus();i?.select()},40)},true);
+document.addEventListener("click",async e=>{if(e.target.closest("[data-ixa-cancel]")){e.preventDefault();if(S.imp){if(S.imp.ixaNew?.k==="party")S.imp.ixaNoParty=1;S.imp.ixaNew=null;renderImportPreview()}return}
+ const b=e.target.closest("[data-ixa-make]");if(!b||!S.imp)return;e.preventDefault();e.stopImmediatePropagation();const I=S.imp,k=b.dataset.ixaMake,what=b.dataset.what;const name=($("#ixa_name")?.value||"").trim();if(!name){toast("Type the name first");return}
+ try{const id=await ixaCreate(what,name,{cur:$("#ixa_cur")?.value,file:I.file});if(!id)return;I.def[k]=id;I.ixaNew=null;if(k==="po")I.def.poAuto=false;buildPreview();renderImportPreview();toast(`${name} created — it is in MY TOOL now and picked here`)}catch(err){toast("Could not create it: "+(err.message||err))}},true);
+document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target?.id==="ixa_name"){e.preventDefault();$("[data-ixa-make]")?.click()}},true);
+/* one place that creates a new supplier / list value / location / bank — used by the importer and the product sheet */
+async function ixaCreate(what,name,o={}){const n=norm(name);
+ if(["supplier","forwarder","customs","inspector"].includes(what)){const ex=live(D.parties).find(p=>norm(p.name)===n);if(ex)return ex.code;const type=what;const code=partyCode(type);const td=partyTypeDef(type);
+  await writeDoc("parties",code,{code,type,name,status:"active",cur:td.defaultCur||DEF().cur||"RMB",country:td.defaultCountry?findListItem("country",td.defaultCountry):null,leadDays:type==="supplier"?DEF().leadDays:null,tags:[],links:[],docs:{},notes:o.file?`Created while importing ${o.file}`:""},`${name} added as ${type}`);return code}
+ if(what==="location"){const locs=SET().locations||[];const ex=locs.find(l=>norm(l.name)===n);if(ex)return ex.id;const id=slugId(name,locs);await setupPatch(["locations"],locs.concat([{id,name,kind:"own"}]),`${name} added to locations`);return id}
+ if(what==="bank"){const bs=SET().banks||[];const ex=bs.find(x=>norm(x.name)===n);if(ex)return ex.id;const id=slugId(name,bs);await setupPatch(["banks"],bs.concat([{id,name,cur:o.cur||"GBP"}]),`${name} added to banks`);return id}
+ const def=listDef(what);const its=def.items||[];const ex=its.find(i=>norm(i.label)===n||norm(i.id)===n);if(ex)return ex.id;const id=what==="currency"?name.toUpperCase().slice(0,3):slugId(name,its);
+ const item_={id,label:name};if(what==="category"&&o.parent)item_.parent=o.parent;if(what==="category")item_.code=name.replace(/[^A-Za-z0-9]/g,"").slice(0,3).toUpperCase()||"NEW";
+ await setupPatch(["lists",what],{...def,label:def.label||what,items:its.concat([item_])},`${name} added to ${def.label||what}`);return id}
+/* 2) + 3) auto decisions after every preview build */
+function ixaLooksLikeName(s){s=String(s||"").trim();if(s.length<2||!/[A-Za-z一-鿿]/.test(s))return false;const d=(s.match(/\d/g)||[]).length;if(/[=]/.test(s)||d/s.length>.4)return false;if(/^[\d\s.,£$¥€]+(rmb|usd|gbp|pound|yuan)?$/i.test(s))return false;return true}
+const ixaBuild0=buildPreview;let ixaBusy=false;
+buildPreview=function(){const r=ixaBuild0.apply(this,arguments);if(ixaBusy)return r;try{const I=S.imp,P=I?.preview;if(!P)return r;I.ixaNo=I.ixaNo||{};I.ixaAuto=I.ixaAuto||{};let changed=false;
+ Object.values(P.unk||{}).forEach(u=>{if(u.dec||I.dec[u.key]||I.ixaNo[u.key])return;if(!["sku","party"].includes(u.type)&&!u.type.startsWith("list:"))return;const best=u.cands?.[0]?.s||0;if(best>=.5)return;
+  if(u.type==="party"&&!ixaLooksLikeName(u.raw))return;if(u.type==="sku"&&!(u.ctx?.name||u.ctx?.asin||ixaLooksLikeName(u.raw)))return;ixDecide(I,u.key,"new");if(I.dec[u.key]){I.ixaAuto[u.key]=1;changed=true}});
+ if(I.kind==="cipart"&&!I.def.po&&I.def.poAuto!==false&&!(P.poCands||[]).length){I.def.po="__new";I.ixaPoAuto=1;changed=true}
+ /* heading / section rows inside a sheet ("( 1st LIST_12/22/2024) …") are not payments — left out, not errors */
+ let moved=0;(P.rows||[]).forEach(x=>{if(x.st!=="err")return;const es=(x.why||[]).filter(w=>w.l==="err");const amt=+String(x.v?.amount??x.v?.amt??"").replace(/[^0-9.\-]/g,"");if(es.length&&es.every(w=>/is not a date|unknown — decide above|No party/.test(w.t))&&!(amt>0)){x.st="skip";x.why=[{l:"info",t:"Looks like a heading / note row, not a record — left out"}].concat(x.why);moved++}});if(moved&&P.counts){P.counts.err-=moved;P.counts.skip=(P.counts.skip||0)+moved}
+ if(changed){ixaBusy=true;try{ixaBuild0.apply(this,arguments)}finally{ixaBusy=false}}
+ const P2=S.imp?.preview;if(P2&&(P2.missing||[]).some(m=>/supplier/i.test(m))&&!I.ixaNew&&!I.ixaNoParty){const nm=ixaGuessName(I,"party");if(nm)I.ixaNew={k:"party",name:nm}}}catch(e){console.warn("ixa auto",e)}return S.imp?.preview?r:r};
+const ixaDecide0=ixDecide;
+ixDecide=function(I,key,act){if(act!=="new"&&I){I.ixaNo=I.ixaNo||{};I.ixaNo[key]=1;if(I.ixaAuto)delete I.ixaAuto[key]}return ixaDecide0.apply(this,arguments)};
+/* 4) the reason a grey Import button is grey — with the fix next to it */
+const ixaRender0=renderImportPreview;
+renderImportPreview=function(){const r=ixaRender0.apply(this,arguments);try{const I=S.imp,P=I?.preview;const btn=document.querySelector('#imp_out [data-act="runimport"]');if(!P||!btn)return r;
+ const auto=Object.keys(I.ixaAuto||{}).filter(k=>I.dec[k]?.act==="new"||I.dec[k]?.act==="add");const dec=$("#ix_dec");
+ if(auto.length&&dec&&!dec.querySelector(".ixa_auto")){const nP=auto.filter(k=>k.startsWith("party|")).length,nS=auto.filter(k=>k.startsWith("sku|")).length,nL=auto.length-nP-nS;
+  dec.querySelector(".card-h")?.insertAdjacentHTML("afterend",`<div class="okbox ixa_auto" style="margin:8px 14px">✨ Not in MY TOOL yet, so they will be <b>created as new</b>: ${[nP?`${nP} part${nP===1?"y":"ies"}`:"",nS?`${nS} product${nS===1?"":"s"}`:"",nL?`${nL} list value${nL===1?"":"s"}`:""].filter(Boolean).join(" · ")}. Each card below shows it — change any of them if it should be something that already exists.</div>`)}
+ if(I.ixaPoAuto&&I.def.po==="__new"){const s=document.querySelector('#imp_out select[data-ixc="def"][data-k="po"]');s?.closest("label")?.insertAdjacentHTML("beforeend",`<span class="status ixa_po">No order has this invoice yet, so a <b>new order</b> will be made from it.</span>`)}
+ document.querySelector("#imp_out .ixa_why")?.remove();if(!btn.disabled)return r;const why=[];const open=Object.values(P.unk||{}).filter(u=>!u.dec).length;const errRows=(P.rows||[]).filter(x=>x.st==="err");
+ const pn=(P.missing||[]).some(m=>/supplier|forwarder|party/i.test(m))?ixaGuessName(I,"party"):"";
+ if(pn)why.push(`<li>The supplier <b>${esc(pn)}</b> (from the file) is not in MY TOOL yet <button type="button" class="btn sm pri" data-ixa-fix="mkparty" data-name="${esc(pn)}">＋ Create it and use it</button></li>`);
+ else if((P.missing||[]).length)why.push(`<li>${esc(P.missing.join("; "))} <button type="button" class="btn sm" data-ixa-go="${/order|po\b/i.test(P.missing.join(" "))?"def":"cols"}">Show me</button></li>`);
+ if(open)why.push(`<li>${open} value${open===1?"":"s"} not decided yet <button type="button" class="btn sm pri" data-ixa-fix="newall">Create all as new</button>${Object.values(P.unk).some(u=>!u.dec&&u.cands?.[0]?.s>=.5)?` <button type="button" class="btn sm" data-ixa-fix="accept">Accept suggestions</button>`:""}</li>`);
+ const rateErr=errRows.find(x=>(x.why||[]).some(w=>/exchange rate/i.test(w.t)));if(rateErr)why.push(`<li>Exchange rates are missing for some currencies <button type="button" class="btn sm pri" data-ixa-fix="rates">Get today's rates</button> <button type="button" class="btn sm" data-ixa-go="rates">Type them in Setup</button></li>`);
+ if(errRows.length&&!open&&!(P.missing||[]).length&&!rateErr){const m=(errRows[0].why||[]).find(w=>w.l==="err")?.t||"see the table";why.push(`<li>${errRows.length} row${errRows.length===1?"":"s"} with errors — first: ${esc(String(m))}</li>`)}
+ if(!why.length)why.push(`<li>Nothing new to import in this file — everything in it is already in MY TOOL, or every row is skipped.</li>`);
+ btn.closest(".ixbar")?.insertAdjacentHTML("beforebegin",`<div class="warnbox ixa_why"><b>Why Import is not possible yet:</b><ul style="margin:6px 0 0;padding-left:18px">${why.join("")}</ul></div>`)}catch(e){console.warn("ixa why",e)}return r};
+document.addEventListener("click",e=>{const g=e.target.closest("[data-ixa-go]");if(g){e.preventDefault();if(g.dataset.ixaGo==="rates"){go("setup");return}const t=g.dataset.ixaGo==="def"?document.querySelector('#imp_out select[data-ixc="def"]'):document.querySelector("#imp_out details.card");if(t){t.scrollIntoView({behavior:"smooth",block:"center"});if(t.tagName==="DETAILS")t.open=true;t.focus?.()}return}
+ const f=e.target.closest("[data-ixa-fix]");if(!f||!S.imp)return;e.preventDefault();e.stopImmediatePropagation();const I=S.imp;
+ if(f.dataset.ixaFix==="mkparty"){f.disabled=true;(async()=>{try{const id=await ixaCreate("supplier",f.dataset.name,{file:I.file});I.def.party=id;I.ixaNew=null;toast(`${f.dataset.name} created in Suppliers and picked here`)}catch(err){toast("Could not create it: "+(err.message||err))}buildPreview();renderImportPreview()})();return}
+ if(f.dataset.ixaFix==="rates"){f.disabled=true;f.textContent="Getting rates…";(async()=>{try{await autoRates(true)}catch(err){toast("Could not get the rates: "+(err.message||err))}buildPreview();renderImportPreview()})();return}
+ if(f.dataset.ixaFix==="accept"){ixAcceptAll(I,.5)}else{Object.values(I.preview.unk).filter(u=>!u.dec).forEach(u=>{if(u.type==="owner")return;ixDecide(I,u.key,"new")})}buildPreview();renderImportPreview()},true);
+/* 5) product info sheet: Create all, ＋ New brand / category */
+function ixaPisBrandGuess(P){for(const x of P.rows){const raw=x.r?.raw||{};const k=Object.keys(raw).find(h=>/brand/i.test(h));if(k&&String(raw[k]).trim())return String(raw[k]).trim()}return""}
+const ixaPisShow0=pisShow;
+pisShow=function(){const r=ixaPisShow0.apply(this,arguments);try{const P=S.pis,box=$("#pisbox");if(!P||!box)return r;const miss=P.rows.map((x,i)=>({x,i})).filter(o=>!o.x.m);
+ box.querySelectorAll("select[data-pis-nb],select[data-pis-nc]").forEach(s=>{if(!s.querySelector('option[value="__new"]'))s.insertAdjacentHTML("beforeend",`<option value="__new">＋ New ${s.dataset.pisNb!=null?"brand":"category"}…</option>`)});
+ if(!miss.length||!can("create"))return r;const bg=P.allBrand||(()=>{const g=ixaPisBrandGuess(P);const it=g&&items("brand").find(b=>norm(b.label)===norm(g));return it?.id||(items("brand").length===1?items("brand")[0].id:"")})();
+ const cg=P.allCat||(paGuess(miss[0].x.r.name||"")?.cat)||"";const brandNew=!bg&&ixaPisBrandGuess(P);
+ const html=`<div class="okbox ixa_pisall" style="margin:8px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${miss.length} product${miss.length===1?"":"s"} not in MY TOOL yet.</b> Create them all with
+  <select id="ixa_pb" aria-label="Brand for all"><option value="">Brand…</option>${items("brand").map(b=>`<option value="${esc(b.id)}" ${b.id===bg?"selected":""}>${esc(b.label)}</option>`).join("")}${brandNew?`<option value="__file" selected>＋ ${esc(brandNew)} (from the sheet)</option>`:""}<option value="__new">＋ New brand…</option></select>
+  <select id="ixa_pc" aria-label="Category for all"><option value="">Category…</option>${items("category").map(c=>`<option value="${esc(c.id)}" ${c.id===cg?"selected":""}>${esc(L("category",c.id))}</option>`).join("")}<option value="__new">＋ New category…</option></select>
+  <button type="button" class="btn sm pri" data-ixa-pisall>＋ Create all ${miss.length}</button><span class="status">Name, ASIN, pack size come from the sheet; you can change any product later.</span></div>`;
+ (box.querySelector(".db>p.status")||box.querySelector(".db"))?.insertAdjacentHTML("afterend",html)}catch(e){console.warn("ixa pis",e)}return r};
+async function ixaPickNew(sel,what){const name=prompt(`Name of the new ${what}`);if(!name||!name.trim()){sel.value="";return null}const id=await ixaCreate(what,name.trim(),{file:S.pis?.file});return id}
+document.addEventListener("change",async e=>{const s=e.target;if(!s.matches?.("#pisbox select")||s.value!=="__new")return;e.stopImmediatePropagation();const what=s.id==="ixa_pb"||s.dataset.pisNb!=null?"brand":"category";const id=await ixaPickNew(s,what);if(!id)return;
+ if(s.id==="ixa_pb")S.pis.allBrand=id;if(s.id==="ixa_pc")S.pis.allCat=id;const keep=[...document.querySelectorAll("#pisbox select[data-pis-nb],#pisbox select[data-pis-nc]")].map(x=>[x.dataset.pisNb!=null?"b"+x.dataset.pisNb:"c"+x.dataset.pisNc,x===s?id:x.value]);pisShow();
+ keep.forEach(([k,v])=>{const x=document.querySelector(k[0]==="b"?`[data-pis-nb="${k.slice(1)}"]`:`[data-pis-nc="${k.slice(1)}"]`);if(x&&v&&v!=="__new")x.value=v});toast(`New ${what} added — it is in the ${what} list everywhere now`)},true);
+document.addEventListener("click",async e=>{const b=e.target.closest("[data-ixa-pisall]");if(!b||!S.pis)return;e.preventDefault();e.stopImmediatePropagation();const P=S.pis;let brand=$("#ixa_pb")?.value,category=$("#ixa_pc")?.value;
+ if(brand==="__file")brand=await ixaCreate("brand",ixaPisBrandGuess(P));if(!brand||!category||brand==="__new"||category==="__new"){toast("Pick the brand and the category (or ＋ New) first");return}
+ b.disabled=true;const made=new Set();let n=0;for(const x of P.rows){if(x.m)continue;const g=paGuess(x.r.name||"");const cat=g?.cat||category;const sku=ixSkuForR(brand,cat,made);made.add(sku);const pk=+((norm(x.r.name).match(/pack of (\d+)/)||[])[1]||1);
+  await writeDoc("products",sku,{sku,name:x.r.name||sku,brand,category:cat,packOf:pk,unit:"pack",status:"active",isNew:true,asin:x.r.asin||null,ean:[],source:"Product info sheet "+P.file},null);x.m={p:product(sku)||{sku},how:"made from the sheet"};n++}
+ pisMatchAll(P);P.cands=pisOrderCands(P);pisShow();toast(`${n} products created — now press Apply to fill their sizes, cartons and HS codes`)},true);
+/* 6) several files: the right order */
+function ixaRank(name){const n=" "+String(name||"").toLowerCase().replace(/[_\-.]+/g," ")+" ";return/supplier list|owner list|part(y|ies)|contacts/.test(n)?0:/product ?info|products? |catalog|sku list/.test(n)?1:/freight|shipment|shipping| awb | bl /.test(n)?4:/payment|statement|bank|wise|transaction/.test(n)?5:/ pi |proforma|purchase/.test(n)?2:/ ci |commercial|invoice|packing/.test(n)?3:6}
+const ixaQ0=ixQStart;
+ixQStart=function(items){try{if(Array.isArray(items)&&items.length>1){items=items.map((x,i)=>({x,i,r:ixaRank(x.name||x.file?.name||x.title)})).sort((a,b)=>a.r-b.r||a.i-b.i).map(o=>o.x)}}catch(_){}return ixaQ0.call(this,items)};
+(function(){try{const st=document.createElement("style");st.textContent=`.ixanew{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.ixanew input{flex:1;min-width:160px}.ixa_po{display:block;margin-top:4px}.ixa_why ul li{margin:4px 0}`;document.head.appendChild(st)}catch(_){}})();
