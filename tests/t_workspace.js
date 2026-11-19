@@ -10,6 +10,9 @@ const{chromium}=require("playwright");const fs=require("fs");const{drive,mkRoute
  await p.click("#mt_ownws");await p.waitForSelector("#mt_signin_own,#mt_empty",{timeout:20000});if(await p.$("#mt_signin_own"))await p.click("#mt_signin_own");
  await p.waitForSelector("#mt_empty",{timeout:20000});ok(/your own Drive/.test(await p.textContent("body")),"first run in own Drive");await p.click("#mt_empty");
  await p.waitForFunction(()=>{try{return S.ready}catch(e){return false}},null,{timeout:30000});await p.waitForTimeout(1500);
+ /* 20 Nov 2026: a reload in the same tab does not ask again; a fresh tab does */
+ await p.reload();await p.waitForFunction(()=>{try{return S.ready}catch(e){return false}},null,{timeout:30000});ok(await p.$("#mt_signin")===null&&await p.evaluate(()=>MYTOOL.workspace==="own"),"reload in the same tab: same data opens, no question");
+ {const p9=await ctx.newPage();await p9.goto("http://localhost:8098/index.html");await p9.waitForSelector("#mt_signin",{timeout:20000});ok(true,"a fresh tab asks which data and which account");await p9.close()}await p.waitForTimeout(800);
  ok(await p.evaluate(()=>S.role==="owner"&&MYTOOL.workspace==="own"),"they are Owner of their own data");
  const own=Object.values(drive.files).filter(f=>f.name==="MYTOOL-DATA.json"&&f.owner==="team@x.com");ok(own.length===1,"own data file made in their Drive");
  ok(await p.evaluate(()=>live(D.purchases).length===0),"their data is empty (no company data)");

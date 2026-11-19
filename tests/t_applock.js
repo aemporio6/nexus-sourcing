@@ -12,11 +12,26 @@ const{chromium}=require("playwright");
  ok(await p.evaluate(()=>getComputedStyle(document.querySelector("#view")).visibility==="hidden"),"data hidden behind the lock");
  await p.fill("#al_pw","wrong");await p.press("#al_pw","Enter");await p.waitForTimeout(500);ok(/Wrong password/.test(await p.textContent("#al_msg")),"wrong password refused");
  await p.fill("#al_pw","secret123");await p.press("#al_pw","Enter");await p.waitForTimeout(600);ok(await p.evaluate(()=>document.getElementById("alov").hidden),"right password unlocks");
- /* reload: locked at start */
- await p.reload();await p.waitForTimeout(1500);ok(await p.evaluate(()=>!!document.getElementById("alov")&&!document.getElementById("alov").hidden),"opening the app starts locked");
+ /* 20 Nov 2026: reload in the same tab within 10 min of use → not asked; a fresh tab → asked */
+ await p.mouse.click(5,5);await p.reload();await p.waitForFunction(()=>{try{return S.ready}catch(e){return false}});await p.waitForTimeout(800);ok(await p.evaluate(()=>!document.getElementById("alov")||document.getElementById("alov").hidden),"reload while working: not asked again");
+ {const p2=await ctx.newPage();await p2.route(/fonts\.(googleapis|gstatic)/,r=>r.abort());await p2.goto("http://localhost:8093/index.html?demo");await p2.waitForTimeout(1500);ok(await p2.evaluate(()=>!!document.getElementById("alov")&&!document.getElementById("alov").hidden),"opening the app fresh (new tab) starts locked");await p2.close()}
+ await p.addInitScript(()=>{try{if(sessionStorage.getItem("t_old")){sessionStorage.removeItem("t_old");sessionStorage.setItem("mt_lock_hidden",String(Date.now()-6*60000))}}catch(_){}});await p.evaluate(()=>sessionStorage.setItem("t_old","1"));await p.reload();await p.waitForTimeout(1500);ok(await p.evaluate(()=>!document.getElementById("alov").hidden),"reload after 6 min in the background: asked");
  await p.fill("#al_pw","secret123");await p.press("#al_pw","Enter");await p.waitForTimeout(600);
- /* idle */
- await p.evaluate(()=>{alLast=Date.now()-11*60000});await p.waitForTimeout(16000);ok(await p.evaluate(()=>!document.getElementById("alov").hidden),"locks itself after 10 min without use");
+ /* PIN */
+ await p.click("#alb");await p.click('[data-al="setup"]');await p.waitForTimeout(300);await p.fill("#als_pin","123456");await p.fill("#als_pin2","123456");await p.click('[data-als="save"]');ok(/harder to guess/.test(await p.textContent("#als_msg")),"easy PIN refused");
+ await p.fill("#als_pin","482915");await p.fill("#als_pin2","482915");await p.click('[data-als="save"]');await p.waitForTimeout(1500);ok(await p.evaluate(()=>{const c=JSON.parse(localStorage.getItem("mt_lock"));return!!c.pin?.hash&&!JSON.stringify(c).includes("482915")}),"PIN set, stored only as a hash");
+ await p.click("#alb");await p.click('[data-al="lock"]');await p.waitForTimeout(300);await p.fill("#al_pin","111111");await p.waitForTimeout(1200);ok(/Wrong PIN — 4 tries left/.test(await p.textContent("#al_msg")),"wrong PIN counted");
+ await p.fill("#al_pin","482915");await p.waitForTimeout(1200);ok(await p.evaluate(()=>document.getElementById("alov").hidden),"6 digits unlock by themselves (no Enter)");
+ /* step-up on a sensitive action */
+ ok(await p.evaluate(async()=>{alVerAt=Date.now()-6*60000;const pr=alVerify("Approve a payment");await new Promise(r=>setTimeout(r,300));const shown=!document.getElementById("alov").hidden&&/Confirm it is you/.test(document.getElementById("alov").innerText);document.querySelector('[data-al="stepcancel"]').click();return shown&&(await pr)===false}),"sensitive action asks again after 5 min; Cancel stops it");
+ ok(await p.evaluate(async()=>{alVerAt=Date.now();return(await alVerify("x"))===true}),"…and does not ask within 5 min of the last check");
+ await p.evaluate(()=>{alVerAt=0;const b=document.createElement("button");b.dataset.act="trash";b.id="t_sens";b.onclick=()=>{window.__sens=(window.__sens||0)+1};document.body.appendChild(b);b.click()});await p.waitForTimeout(400);
+ ok(await p.evaluate(()=>!window.__sens&&!document.getElementById("alov").hidden),"a Delete button is held until confirmed");await p.fill("#al_pin","482915");await p.waitForTimeout(1500);ok(await p.evaluate(()=>window.__sens===1),"after the PIN the same button goes through once");
+ /* 5 wrong PINs → PIN off, password still works */
+ await p.click("#alb");await p.click('[data-al="lock"]');await p.waitForTimeout(300);for(let i=0;i<5;i++){if(await p.$("#al_pin")){await p.fill("#al_pin","000000");await p.waitForTimeout(1100)}}
+ ok(await p.evaluate(()=>!document.getElementById("al_pin")&&/PIN is off/.test(document.getElementById("alov").innerText)),"5 wrong PINs → PIN is off");await p.fill("#al_pw","secret123");await p.press("#al_pw","Enter");await p.waitForTimeout(800);ok(await p.evaluate(()=>document.getElementById("alov").hidden&&JSON.parse(localStorage.getItem("mt_lock")).pinFails===0),"password still unlocks and the PIN works again");
+ /* background / idle */
+ await p.evaluate(()=>{alLast=Date.now()-16*60000});await p.waitForTimeout(16000);ok(await p.evaluate(()=>!document.getElementById("alov").hidden),"locks itself after 15 min untouched");
  /* forgot → lock removed, signed out (demo: reload) */
  await p.click('[data-al="forgot"]');await p.waitForTimeout(2000);ok(await p.evaluate(()=>!localStorage.getItem("mt_lock")),"Forgot removes the lock (sign in with Google again)");
  /* fingerprint / face with a virtual authenticator */
@@ -31,5 +46,5 @@ const{chromium}=require("playwright");
   ok(await q.evaluate(()=>!!document.querySelector("#alov #alset")&&/Protect MY TOOL/.test(document.body.innerText)&&!document.querySelector('[data-als="close"]')),"real app: device-lock setup comes first and cannot be closed");
   await q.fill("#als_pw","secret123");await q.fill("#als_pw2","secret123");await q.click('[data-als="save"]');await q.waitForTimeout(800);
   ok(await q.evaluate(()=>!!document.getElementById("mt_signin")&&!!document.getElementById("mt_signin_own")),"then it asks which data: company or own Drive");
-  await q.reload();await q.waitForTimeout(1500);ok(await q.evaluate(()=>!document.getElementById("alov").hidden&&/locked/.test(document.body.innerText)),"next open: locked until the device lock / password");await c3.close()}
+  const q2=await c3.newPage();await q2.goto("http://localhost:8098/index.html");await q2.waitForTimeout(1500);ok(await q2.evaluate(()=>!document.getElementById("alov").hidden&&/locked/.test(document.body.innerText)),"next open: locked until the device lock / PIN / password");await c3.close()}
  ok(!errs.length,"no page errors "+errs.join(" | "));await b.close();process.exit(fails?1:0)})();

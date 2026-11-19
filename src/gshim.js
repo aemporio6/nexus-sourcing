@@ -130,14 +130,19 @@ async function signIn(){
   await loadGis();
   tokenClient = google.accounts.oauth2.initTokenClient({ client_id: CFG.clientId, scope: CFG.scopes, callback: () => {} });
   /* owner, 18 Nov 2026: every time MY TOOL opens it asks WHICH data (company / own Drive) and Google asks WHICH account — never opens by itself */
-  token = null; try{ sessionStorage.removeItem("mt_tok"); }catch(_){}
-  await new Promise((res) => {
+  /* owner, 20 Nov 2026 (the way banking apps do it): a RELOAD in the same tab (new version, Chrome re-loading the page) within 12 hours
+     of the full sign-in does not ask again — opening MY TOOL fresh (new tab / app closed) always asks which data and which account */
+  let resumed = false;
+  try{ const ss = JSON.parse(sessionStorage.getItem("mt_sess") || "null"), tk = JSON.parse(sessionStorage.getItem("mt_tok") || "null");
+    if(ss && Date.now() - ss.at < 12 * 3600e3 && tk && tk.token && tk.tokenExp > Date.now() + 60000){ pickWorkspace(ss.ws); token = tk.token; tokenExp = tk.tokenExp; resumed = true; } }catch(_){}
+  if(!resumed){ token = null; try{ sessionStorage.removeItem("mt_tok"); sessionStorage.removeItem("mt_sess"); }catch(_){} }
+  if(!resumed) await new Promise((res) => {
     const own = WS === "own";
     const g = gate('<p><b>Which data do you want to open?</b></p>' +
       '<button type="button" class="mt_btn' + (own ? ' ghost' : '') + '" id="mt_signin">🏢 Company data — Vartleaves</button><p class="mt_small">The business data in ' + esc(CFG.dataOwner) + '\'s Drive (roles and approvals apply).</p>' +
       '<button type="button" class="mt_btn' + (own ? '' : ' ghost') + '" id="mt_signin_own">📁 My own Drive (my own data)</button><p class="mt_small">Your own MY TOOL in your own Google Drive — nothing of the company data.</p>' +
       '<p class="mt_small">Google then asks which account to use.</p><p class="mt_small" id="mt_err"></p>');
-    const go = async (ws) => { try{ pickWorkspace(ws); await requestToken("select_account"); res(); }catch(e){ g.querySelector("#mt_err").textContent = e.message; } };
+    const go = async (ws) => { try{ pickWorkspace(ws); await requestToken("select_account"); try{ sessionStorage.setItem("mt_sess", JSON.stringify({ at: Date.now(), ws: WS })); }catch(_){} res(); }catch(e){ g.querySelector("#mt_err").textContent = e.message; } };
     g.querySelector("#mt_signin").onclick = () => go("");
     g.querySelector("#mt_signin_own").onclick = () => go("own");
   });
@@ -147,7 +152,7 @@ async function signIn(){
 }
 async function signOut(){
   try{ if(token && google && google.accounts) google.accounts.oauth2.revoke(token, () => {}); }catch(_){}
-  try{ sessionStorage.removeItem("mt_tok"); localStorage.removeItem("mt_hint"); }catch(_){}
+  try{ sessionStorage.removeItem("mt_tok"); sessionStorage.removeItem("mt_sess"); localStorage.removeItem("mt_hint"); }catch(_){}
   /* a shared computer must not keep the business data after sign-out: the on-device cache goes too (only when nothing is unsaved) */
   try{ if(!Object.keys(dirty).length){ await kvDel(cacheKey()); for(const y of Object.keys(archMeta)) await kvDel("arch:" + y); } }catch(_){}
   location.reload();
@@ -614,7 +619,7 @@ async function start(){
   }
 }
 /* someone the company data is not shared with can still use MY TOOL – with their own Drive */
-function mtOwnBtn(){ try{ const g = document.getElementById("mt_out"); if(!g || document.getElementById("mt_ownws")) return; g.insertAdjacentHTML("afterend", ' <button type="button" class="mt_btn" id="mt_ownws">Use MY TOOL with my own Drive (my own data)</button><p class="mt_small">Your own empty MY TOOL in your Google Drive — nothing of the company data, and you are its Owner. You can switch back any time.</p>'); document.getElementById("mt_ownws").onclick = () => { try{ localStorage.setItem("mt_ws", "own"); }catch(_){} location.reload(); }; }catch(_){} }
+function mtOwnBtn(){ try{ const g = document.getElementById("mt_out"); if(!g || document.getElementById("mt_ownws")) return; g.insertAdjacentHTML("afterend", ' <button type="button" class="mt_btn" id="mt_ownws">Use MY TOOL with my own Drive (my own data)</button><p class="mt_small">Your own empty MY TOOL in your Google Drive — nothing of the company data, and you are its Owner. You can switch back any time.</p>'); document.getElementById("mt_ownws").onclick = () => { try{ localStorage.setItem("mt_ws", "own"); sessionStorage.removeItem("mt_sess"); sessionStorage.removeItem("mt_tok"); }catch(_){} location.reload(); }; }catch(_){} }
 async function firstRun(){
   const g = gate('<p>Welcome, <b>' + esc(me.name) + '</b>. This is the first time MY TOOL opens on ' + esc(CFG.dataOwner) + (WS === "own" ? ' (your own Drive)' : '') + '.</p>' +
     '<p>Choose how to start. Your data will be kept in your Google Drive, folder <b>' + esc(CFG.folderName) + '</b>.</p>' +
@@ -724,7 +729,7 @@ const userApi = {
 };
 window.MYTOOL = {
   get workspace(){ return WS; },
-  setWorkspace(ws){ try{ if(ws === "own") localStorage.setItem("mt_ws", "own"); else localStorage.removeItem("mt_ws"); }catch(_){} location.reload(); },
+  setWorkspace(ws){ try{ if(ws === "own") localStorage.setItem("mt_ws", "own"); else localStorage.removeItem("mt_ws"); sessionStorage.removeItem("mt_sess"); sessionStorage.removeItem("mt_tok"); }catch(_){} location.reload(); },
   get me(){ return me; }, get st(){ return lastSt; },
   async reauth(){ await requestToken(""); await push(); }, demo: DEMO, signOut, cfg: CFG,
   async syncNow(){ await push(); await poll(); },
