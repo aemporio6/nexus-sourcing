@@ -12,7 +12,8 @@ const CFG = {
   fileName: "MYTOOL-DATA.json",
   filesFolder: "MY TOOL – FILES",
   pollMs: 45000,
-  gateway: "https://script.google.com/macros/s/AKfycby2Gxcqs4YbxJTLmthkCjVToVWbmAaXyiea4lRp-wMhJsuDfmQnIFZzaIroQh8l4bZFUA/exec",   // Apps Script data gateway URL (tools/gateway.gs). Empty = direct Drive. Admins can set one per device with MYTOOL.setGateway(url)
+  gateway: "https://script.google.com/macros/s/AKfycbz-u5DF_FLlebBVGM0Wb1rsWPsFMEhit3c5DsxGtc9SIIu9jgX5smzux02x0fEx_Cui/exec",   // company account vartleaves.data since 20 Nov 2026 (before: aemporio6, …AKfycby2Gxcqs4…, now a frozen backup that points here)
+  //   // Apps Script data gateway URL (tools/gateway.gs). Empty = direct Drive. Admins can set one per device with MYTOOL.setGateway(url)
 };
 window.MYTOOL_CFG = CFG;
 const DEMO = /[?&]demo\b/.test(location.search) || location.protocol === "file:";
@@ -164,7 +165,7 @@ async function signIn(){
   if(!resumed) await new Promise((res) => {
     const own = WS === "own";
     const g = gate('<p><b>Which data do you want to open?</b></p>' +
-      '<button type="button" class="mt_btn' + (own ? ' ghost' : '') + '" id="mt_signin">🏢 Company data — Vartleaves</button><p class="mt_small">The business data in ' + esc(CFG.dataOwner) + '\'s Drive (roles and approvals apply).</p>' +
+      '<button type="button" class="mt_btn' + (own ? ' ghost' : '') + '" id="mt_signin">🏢 Company data — Vartleaves</button><p class="mt_small">The business data of the company (roles and approvals apply).</p>' +
       '<button type="button" class="mt_btn' + (own ? '' : ' ghost') + '" id="mt_signin_own">📁 My own Drive (my own data)</button><p class="mt_small">Your own MY TOOL in your own Google Drive — nothing of the company data.</p>' +
       '<p class="mt_small">Google then asks which account to use.</p><p class="mt_small" id="mt_err"></p>');
     const go = async (ws) => { try{ pickWorkspace(ws); await requestToken("select_account"); try{ sessionStorage.setItem("mt_sess", JSON.stringify({ at: Date.now(), ws: WS })); }catch(_){} res(); }catch(e){ g.querySelector("#mt_err").textContent = e.message; } };
