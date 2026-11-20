@@ -14,7 +14,7 @@ const calls = [];
 (async () => {
   const b = await chromium.launch(); let fails = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if(!c) fails++; };
   const open = async (who, gwId, ls) => { const ctx = await b.newContext({ viewport: { width: 1280, height: 800 } });
-    await ctx.addInitScript(([w, g, extra]) => { window.__who = w; try{ if(!sessionStorage.getItem("t_init")){ sessionStorage.setItem("t_init", "1"); if(g) localStorage.setItem("mt_gw", g); Object.entries(extra || {}).forEach(([k, v]) => localStorage.setItem(k, v)); } }catch(_){} }, [who, gwId ? U(gwId) : "", ls || {}]);
+    await ctx.addInitScript(([w, g, extra]) => { window.__who = w; try{ if(/^(aemporio6|vartleaves\.data)@gmail\.com$/.test(w))localStorage.setItem("mt_owner","1"); if(!sessionStorage.getItem("t_init")){ sessionStorage.setItem("t_init", "1"); if(g) localStorage.setItem("mt_gw", g); Object.entries(extra || {}).forEach(([k, v]) => localStorage.setItem(k, v)); } }catch(_){} }, [who, gwId ? U(gwId) : "", ls || {}]);
     await ctx.route(/fonts\.(googleapis|gstatic)/, r => r.abort());
     await ctx.route(/accounts\.google\.com|googleapis\.com|script\.google\.com/, async route => { const req = route.request(); const url = new URL(req.url());
       if(url.hostname === "accounts.google.com") return route.fulfill({ status: 200, contentType: "text/javascript", body: fakeGis });
@@ -59,9 +59,9 @@ const calls = [];
   ok(NEW.call({ op: "supplierUpload", tok, name: "CI-1.pdf", mime: "application/pdf", b64: Buffer.from("%PDF x").toString("base64"), kind: "Invoice (PI / CI)", note: "n1" }).ok, "(a supplier sends a file)");
   await A.p.evaluate(() => { go("home"); return slLoad(true); }); await A.p.waitForTimeout(800); await A.p.evaluate(() => render()); await A.p.waitForTimeout(500);
   ok(await A.p.evaluate(() => /From suppliers \(1\)/.test(document.querySelector("#slin")?.innerText || "") && /CI-1\.pdf/.test(document.querySelector("#slin").innerText)), "the Partner sees it on Home (real app, through the gateway)");
-  /* 6. a member who picks "My own Drive" lands in the company data */
-  let M = await open("partner@x.com", NEWID); await M.p.waitForSelector("#mt_signin_own"); await M.p.click("#mt_signin_own"); await ready(M.p);
-  ok(await M.p.evaluate(() => MYTOOL.workspace === "" && live(D.purchases).length > 10), "a member who taps “My own Drive” still gets the company data (no separate empty copy)");
+  /* 6. (21 Nov 2026) a member is never offered "My own Drive": one button, company data */
+  let M = await open("partner@x.com", NEWID); await M.p.waitForSelector("#mt_signin"); const noOwn = await M.p.evaluate(() => !document.getElementById("mt_signin_own")); await M.p.click("#mt_signin"); await ready(M.p);
+  ok(noOwn && await M.p.evaluate(() => MYTOOL.workspace === "" && live(D.purchases).length > 10), "a member is not offered “My own Drive” and gets the company data (no separate empty copy)");
   [A, O, L, M].forEach(x => allErrs.push(...x.errs)); ok(!allErrs.length, "no page errors " + allErrs.join(" | "));
   await b.close(); console.log(fails ? fails + " FAILED" : "ALL PASS"); process.exit(fails ? 1 : 0);
 })();

@@ -49,7 +49,7 @@ document.addEventListener("input",e=>{const t=e.target;if(!t.matches?.("[data-a3
 (function(){try{const st=document.createElement("style");st.textContent=`.a3box{border-top:1px dashed var(--line);padding-top:8px}.a3box>summary{cursor:pointer;font-weight:600;display:flex;gap:8px;align-items:center}.a3grid{display:grid;grid-template-columns:1fr;gap:4px;margin-top:8px}.a3f{max-height:300px;overflow:auto;padding-right:4px}.a3r{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:13px;font-weight:500}.a3r select{min-height:32px;width:128px;flex:none}.a3s.a3-view{border-color:#d9a400;background:#fff8dc}.a3s.a3-hide{border-color:#c0392b;background:#fdecea}`;document.head.appendChild(st)}catch(_){}})();
 /* someone who does not receive every number (a hidden area / field) must never re-calculate totals from what they have:
    their device skips the automatic re-calculations — the next full user's app (or the Owner's) does them */
-function a3Partial(){const u=a3User();if(!u)return false;return Object.values(u.areas||{}).includes("hide")||Object.values(u.fields||{}).includes("hide")}
+function a3Partial(){const u=a3User();if(!u)return false;return Array.isArray(u.companies)||Object.values(u.areas||{}).includes("hide")||Object.values(u.fields||{}).includes("hide")}
 const a3Rec0=reconcile;reconcile=async function(){if(a3Partial())return;return a3Rec0.apply(this,arguments)};
 if(typeof derivedUpdate==="function"){const a3Der0=derivedUpdate;derivedUpdate=async function(){if(a3Partial())return false;return a3Der0.apply(this,arguments)}}
 /* catch-up: when someone with full access opens MY TOOL, the totals of records changed by a limited person (whose device

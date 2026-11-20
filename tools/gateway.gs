@@ -47,6 +47,9 @@ function handle(req){
   var email = verifyToken(req.token);
   var cur = readCurrent();                                   // { json, text, file } or null
   var who = whoIs(email, cur && cur.json);                   // { admin, perms, user } or null
+  /* someone who is not in Setup › Users can do exactly two things: ask for access, and see what became of the request (21 Nov 2026) */
+  if(req.op === "accessState"){ if(who){ accessForget(email); return { ok: true, state: "member", email: email }; } var as = accessState(email); as.email = email; return as; }
+  if(req.op === "accessAsk"){ if(who){ accessForget(email); return { ok: true, state: "member", email: email }; } var ak = accessAsk(email, req); ak.email = email; return ak; }
   if(!who && req.op !== "meta") fail(403, "This account is not allowed to use MY TOOL. Ask the admin to add you in Setup › Users.");
   var v = version();
   switch(req.op){
@@ -78,6 +81,9 @@ function handle(req){
           if(!okP){ miss.push(id); return; } var own = ""; try{ own = f.getOwner().getEmail().toLowerCase(); }catch(_){}
           if(own === me2){ map[id] = id; return; } var c2 = f.makeCopy(f.getName(), dest); try{ c2.setDescription("copied from " + own + " when the data moved"); }catch(_){} map[id] = c2.getId(); }catch(e){ miss.push(id); } });
       return { ok: true, map: map, missing: miss, email: email }; }
+    /* ---- access requests: only an Owner sees and decides them ---- */
+    case "accessList": needAdmin(who); return { ok: true, list: accessList(), email: email };
+    case "accessDecide": needAdmin(who); return { ok: true, list: accessDecide(req, email), email: email };
     case "whoami": return { ok: true, account: selfEmail(), exists: !!cur, admin: !!who.admin, you: email, email: email };
     /* ---- files suppliers sent through their upload link ---- */
     case "inboxList": if(!(who.admin || who.perms.create || who.perms.edit)) fail(403, "your role cannot see the supplier inbox"); return { ok: true, list: inboxList(), email: email };
@@ -174,6 +180,7 @@ function enforce(curJ, next, who){
   var cd = curJ.data || {}, nd = next.data || {};
   var curMain = (cd.setup && (cd.setup.main || cd.setup)) || {}, nextMain = (nd.setup && (nd.setup.main || nd.setup)) || {};
   if(!who.perms.bank) reattach(cd, nd);
+  var co = coOf(who); if(co) coReattach(cd, nd, co);
   var fine = fineOf(who); if(fine) fineReattach(cd, nd, fine);                                           // hidden bank details come back untouched, before anything is compared
   if(canon(curMain.users || []) !== canon(nextMain.users || []) || canon(curMain.roles || {}) !== canon(nextMain.roles || {})) fail(403, "only an admin can change users or roles");
   if(!who.perms.setup && canon(cd.setup || {}) !== canon(nd.setup || {})) fail(403, "your role cannot change Setup");
@@ -269,9 +276,10 @@ function ownTaskStep(c, before, after, who){
 }
 /* roles without "bank" never receive bank details; on their saves the current values are put back */
 function redact(json, who){
-  var fine = fineOf(who);
-  if(who.admin || (who.perms.bank && !fine)) return json;
+  var fine = fineOf(who), co = coOf(who);
+  if(who.admin || (who.perms.bank && !fine && !co)) return json;
   var j = JSON.parse(JSON.stringify(json)), d = j.data || {};
+  if(co){ var hid = coHidden(d, co), hc; for(hc in hid) Object.keys(hid[hc]).forEach(function(id){ delete d[hc][id]; }); }
   if(fine) fineRedact(d, fine);
   if(who.perms.bank){ j.redacted = true; return j; }
   var main = d.setup && (d.setup.main || d.setup);
@@ -279,6 +287,29 @@ function redact(json, who){
   if(d.payments) Object.keys(d.payments).forEach(function(id){ var p = d.payments[id]; ["bank", "beneficiary"].forEach(function(k){ if(k in p) delete p[k]; }); });
   if(d.parties) Object.keys(d.parties).forEach(function(id){ var p = d.parties[id]; ["bank", "iban", "swift", "account", "beneficiary", "sortCode", "beneficiaryPending"].forEach(function(k){ if(k in p) delete p[k]; }); });
   j.redacted = true; return j;
+}
+/* companies (21 Nov 2026): Setup › Users › "Companies this person sees". A list = only those companies' orders, shipments and
+   payments (and what hangs on them: inspections, receipts, credits) are ever sent to that person. Whatever they save, the
+   records of the other companies stay exactly as they are, and they cannot make or move a record into another company. */
+function coOf(who){ var u = who && who.user; if(!u || who.admin || !Array.isArray(u.companies)) return null; var m = {}; u.companies.forEach(function(c){ m[String(c)] = true; }); return m; }
+function coHidden(d, co){
+  var out = { purchases: {}, shipments: {}, payments: {}, inspections: {}, receipts: {}, credits: {} }, nos = {};
+  var main = d.setup && (d.setup.main || d.setup) || {}, bankCo = {}; (main.banks || []).forEach(function(b){ if(b && b.id) bankCo[b.id] = b.company || ""; });
+  var each = function(c, fn){ var col = d[c] || {}; Object.keys(col).forEach(function(id){ var r = col[id]; if(r && fn(r)){ out[c][id] = true; nos[String(r.no || id)] = true; } }); };
+  each("purchases", function(r){ return r.account && !co[r.account]; });
+  each("shipments", function(r){ return r.company && !co[r.company]; });
+  each("payments", function(r){ var c = r.company || bankCo[r.bank] || ""; return c && !co[c]; });
+  each("inspections", function(r){ return r.po && nos[String(r.po)]; });
+  each("receipts", function(r){ return (r.src && nos[String(r.src)]) || (r.po && nos[String(r.po)]); });
+  each("credits", function(r){ return (r.po && nos[String(r.po)]) || (r.receipt && nos[String(r.receipt)]); });
+  return out;
+}
+function coReattach(cd, nd, co){
+  var hid = coHidden(cd, co), c;
+  for(c in hid){ nd[c] = nd[c] || {}; Object.keys(hid[c]).forEach(function(id){ nd[c][id] = cd[c][id]; }); }
+  var main = nd.setup && (nd.setup.main || nd.setup) || {}, bankCo = {}; (main.banks || []).forEach(function(b){ if(b && b.id) bankCo[b.id] = b.company || ""; });
+  var chk = function(col, coOfRec){ var n = nd[col] || {}, o = cd[col] || {}; Object.keys(n).forEach(function(id){ if(hid[col][id]) return; var r = n[id]; if(!r || canon(r) === canon(o[id])) return; var x = coOfRec(r); if(x && !co[x]) fail(403, "this record belongs to a company you do not work for — not saved"); }); };
+  chk("purchases", function(r){ return r.account; }); chk("shipments", function(r){ return r.company; }); chk("payments", function(r){ return r.company || bankCo[r.bank] || ""; });
 }
 /* fine access (20 Nov 2026): areas and single fields the Owner set to Hidden / View only for one person.
    Hidden: never sent to their device. Hidden or view-only: whatever they save, the stored value stays. */
@@ -301,6 +332,40 @@ function reattach(cd, nd){
   var cm = cd.setup && (cd.setup.main || cd.setup), nm = nd.setup && (nd.setup.main || nd.setup);
   if(cm && nm && cm.banks && nm.banks) nm.banks.forEach(function(b){ var o = cm.banks.filter(function(x){ return x.id === b.id; })[0]; if(o) SENSITIVE.forEach(function(k){ if(k in o && !(k in b)) b[k] = o[k]; }); });
   ["payments", "parties"].forEach(function(c){ if(!cd[c] || !nd[c]) return; Object.keys(nd[c]).forEach(function(id){ var o = cd[c][id], n = nd[c][id]; if(o && n) ["bank", "beneficiary", "iban", "swift", "account", "sortCode", "beneficiaryPending"].forEach(function(k){ if(k in o && !(k in n)) n[k] = o[k]; }); }); });
+}
+
+/* ================= access requests (21 Nov 2026) =================
+   A Google account that is not in Setup › Users can only ask. The request is kept in its own small file beside the data
+   (never inside the data), one per account, at most 20 waiting. Only an Owner sees them, approves (by adding the person in
+   Setup › Users), rejects or blocks. Nothing of the data is ever sent to an account that is only asking. */
+var REQ_FILE = "MYTOOL-ACCESS-REQUESTS.json", REQ_MAX = 20;
+function reqLoad(){ var fo = findDataFolder(); if(!fo) fail(500, "the data folder is not set up yet"); var it = fo.getFilesByName(REQ_FILE), f = it.hasNext() ? it.next() : null, j = {};
+  if(f){ try{ j = JSON.parse(f.getBlob().getDataAsString()) || {}; }catch(_){ j = {}; } } return { file: f, folder: fo, list: j }; }
+function reqSave(st){ var txt = JSON.stringify(st.list); if(st.file) st.file.setContent(txt); else st.folder.createFile(REQ_FILE, txt, "application/json"); }
+function reqClean(s, n){ return String(s || "").replace(/[\u0000-\u001f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, n); }
+function accessState(email){ var r = reqLoad().list[email]; return { ok: true, state: r ? r.state : "none", at: r && r.at || "" }; }
+function accessAsk(email, req){
+  var lock = LockService.getScriptLock(); if(!lock.tryLock(10000)) fail(503, "busy — try again");
+  try{ var st = reqLoad(), r = st.list[email], now = new Date().toISOString();
+    if(r && r.state === "blocked") return { ok: false, state: "blocked" };
+    if(r && (r.state === "pending" || r.state === "approved")) return { ok: true, state: r.state, at: r.at };
+    if(r && r.state === "rejected" && Date.now() - Date.parse(r.decidedAt || r.at) < 24 * 3600e3) return { ok: false, state: "rejected", at: r.at };
+    var waiting = Object.keys(st.list).filter(function(k){ return st.list[k].state === "pending"; }).length;
+    if(waiting >= REQ_MAX) fail(429, "Too many requests are waiting. Please contact the Owner directly.");
+    st.list[email] = { email: email, name: reqClean(req.name, 80), note: reqClean(req.note, 300), at: now, state: "pending" }; reqSave(st);
+    return { ok: true, state: "pending", at: now };
+  }finally{ lock.releaseLock(); }
+}
+function accessForget(email){ try{ var st = reqLoad(); if(!st.list[email]) return; var lock = LockService.getScriptLock(); if(!lock.tryLock(5000)) return; try{ st = reqLoad(); if(st.list[email]){ delete st.list[email]; reqSave(st); } }finally{ lock.releaseLock(); } }catch(_){} }
+function accessList(){ var l = reqLoad().list; return Object.keys(l).map(function(k){ return l[k]; }).sort(function(a, b){ return a.at < b.at ? 1 : -1; }); }
+function accessDecide(req, by){
+  var em = String(req.email || "").trim().toLowerCase(), d = String(req.decision || ""); if(!em || ["approved", "rejected", "blocked", "clear"].indexOf(d) < 0) fail(400, "decision?");
+  var lock = LockService.getScriptLock(); if(!lock.tryLock(10000)) fail(503, "busy — try again");
+  try{ var st = reqLoad();
+    if(d === "clear") delete st.list[em];   /* "approved" stays (so the person sees "approved, opening…") until they are in Setup › Users and open MY TOOL */
+    else { var r = st.list[em] || { email: em, name: "", note: "", at: new Date().toISOString() }; r.state = d; r.decidedBy = by; r.decidedAt = new Date().toISOString(); st.list[em] = r; }
+    reqSave(st); return Object.keys(st.list).map(function(k){ return st.list[k]; }).sort(function(a, b){ return a.at < b.at ? 1 : -1; });
+  }finally{ lock.releaseLock(); }
 }
 
 /* ================= attachments: the FILES folder is shared, the data is not ================= */

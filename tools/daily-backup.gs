@@ -10,7 +10,7 @@
    (their late / due tasks; for those who approve: payments and bank-detail changes waiting; for Owner / Finance: today's alerts,
    shipments arriving, landed cost changed after FINAL). Nothing to say = no email. A user with "digest: off" gets none. */
 var FOLDER = "MY TOOL – DATA", FILE = "MYTOOL-DATA.json", ALERT_TO = "aemporio6@gmail.com";
-var ADMINS = ["aemporio6@gmail.com", "vartleaves.data@gmail.com"], APP = "https://aemporio6.github.io/nexus-sourcing/";
+var ADMINS = ["aemporio6@gmail.com", "vartleaves.data@gmail.com"], APP = "https://mytool.vartleaves.com/";
 var OWNER_MAIL = "aemporio6@gmail.com";   /* the owner's morning email goes here — aemporio6 only (owner, 18 Nov 2026) */
 
 function setup(){
@@ -29,7 +29,7 @@ function weeklyHealthMail(force){
     if(!h){ MailApp.sendEmail(ALERT_TO, "MY TOOL weekly: no health summary yet", "Open MY TOOL as an admin once so Data health can run; the summary is then saved daily."); return; }
     var lines = ["MY TOOL — weekly Data health (" + h.day + ")", "", "Score: " + h.score + "%", "Issues: " + h.issues + " (serious: " + h.serious + ") · Alerts: " + h.alerts, "", "Top problems:"];
     (h.top || []).forEach(function(t){ lines.push(" - " + t.l + ": " + t.n); });
-    lines.push("", "Records: " + Object.keys(h.records || {}).map(function(k){ return k + " " + h.records[k]; }).join(" · "), "", "Open: https://aemporio6.github.io/nexus-sourcing/#/health");
+    lines.push("", "Records: " + Object.keys(h.records || {}).map(function(k){ return k + " " + h.records[k]; }).join(" · "), "", "Open: https://mytool.vartleaves.com/#/health");
     MailApp.sendEmail(ALERT_TO, "MY TOOL weekly health: " + h.score + "% · " + h.serious + " serious", lines.join("\n"));
   }catch(e){ MailApp.sendEmail(ALERT_TO, "MY TOOL weekly health mail FAILED", String(e && e.message || e)); }
 }
@@ -77,6 +77,9 @@ function thin(bk){
 }
 
 /* ---------- morning email: one per person, only their own things ---------- */
+function accessWaiting(){ try{ var it = DriveApp.getFilesByName("MYTOOL-ACCESS-REQUESTS.json"), me = ""; try{ me = String(DriveApp.getRootFolder().getOwner().getEmail() || "").toLowerCase(); }catch(_){}
+  while(it.hasNext()){ var f = it.next(), own = ""; try{ own = String(f.getOwner().getEmail() || "").toLowerCase(); }catch(_){} if(me && own !== me) continue; var l = JSON.parse(f.getBlob().getDataAsString() || "{}") || {};
+    return Object.keys(l).map(function(k){ return l[k]; }).filter(function(x){ return x && x.state === "pending"; }); } }catch(_){} return []; }
 function morningDigest(j, day, dry){
   var d = (j && j.data) || {}, main = (d.setup && (d.setup.main || d.setup)) || {}, roles = main.roles || {}, out = [];
   var vals = function(c){ var o = d[c] || {}; return Object.keys(o).map(function(k){ return o[k]; }).filter(function(x){ return x && !x.deletedAt; }); };
@@ -98,6 +101,9 @@ function morningDigest(j, day, dry){
       if(wait.length) sec.push(["Waiting for your approval", wait.map(function(x){ return x.no + " · " + x.amount + " " + x.cur + " (£" + Math.round(+x.gbp || 0) + ")\n  " + link("payments", x.no); })]);
       var bank = parts.filter(function(x){ return x.beneficiaryPending && lc(x.beneficiaryPending.by) !== e; });
       if(bank.length) sec.push(["New supplier bank details waiting for approval", bank.map(function(x){ return (x.name || x.code) + " — call the supplier before approving\n  " + link("parties", x.code); })]);
+    }
+    if(p.admin){ /* people who signed in and pressed "Send request" (21 Nov 2026) — kept by the gateway beside the data */
+      var rq = accessWaiting(); if(rq.length) sec.push(["People asking for access to MY TOOL — approve, reject or block on Home", rq.map(function(x){ return (x.name || x.email) + " <" + x.email + ">" + (x.note ? " — “" + x.note + "”" : "") + "\n  " + APP; })]);
     }
     if(money){
       var arr = ships.filter(function(s){ return s.eta && s.eta >= day && s.eta <= in3 && ["delivered", "cancelled", "received"].indexOf(s.status) < 0; });

@@ -6,6 +6,7 @@
 const CFG = {
   clientId: "605045779540-pjncsnms1af0s9al9k0de2om67fg0hce.apps.googleusercontent.com",
   scopes: "openid email profile https://www.googleapis.com/auth/drive",
+  scopeBasic: "openid email profile",   // the team signs in with name + email only (owner, 21 Nov 2026) — Drive is asked for only by Owners or when a person uses a Drive feature
   admins: ["aemporio6@gmail.com", "vartleaves.data@gmail.com"], // the Owner accounts — can never be locked out (owner, 20 Nov 2026)
   dataOwner: "aemporio6@gmail.com",           // the account whose Drive holds the data
   folderName: "MY TOOL – DATA",
@@ -124,14 +125,18 @@ function loadGis(){
     document.head.appendChild(s);
   });
 }
-function requestToken(prompt){
+/* which permission this device asks Google for: Drive only for Owners, for "my own Drive", or after a Drive feature was used */
+let scopeFull = false, wantFull = false;
+const ownerDevice = () => { try{ return localStorage.getItem("mt_owner") === "1"; }catch(_){ return false; } };
+function requestToken(prompt, full){
+  if(full === undefined) full = wantFull || WS === "own";
   return new Promise((res, rej) => {
     tokenClient.callback = r => {
-      if(r && r.access_token){ token = r.access_token; tokenExp = Date.now() + (Number(r.expires_in || 3500) - 120) * 1000; try{ sessionStorage.setItem("mt_tok", JSON.stringify({ token, tokenExp })); }catch(_){} res(token); }
+      if(r && r.access_token){ token = r.access_token; tokenExp = Date.now() + (Number(r.expires_in || 3500) - 120) * 1000; scopeFull = /auth\/drive(\s|$)/.test(String(r.scope || "")) || (full && !r.scope); if(scopeFull) wantFull = true; try{ sessionStorage.setItem("mt_tok", JSON.stringify({ token, tokenExp, full: scopeFull })); }catch(_){} res(token); }
       else rej(new Error((r && (r.error_description || r.error)) || "Sign-in was cancelled"));
     };
     tokenClient.error_callback = e => rej(new Error((e && (e.message || e.type)) || "Sign-in window closed"));
-    try{ tokenClient.requestAccessToken({ prompt: prompt == null ? "" : prompt, hint: localStorage.getItem("mt_hint") || undefined }); }catch(e){ rej(e); }
+    try{ tokenClient.requestAccessToken({ prompt: prompt == null ? "" : prompt, hint: localStorage.getItem("mt_hint") || undefined, scope: full ? CFG.scopes : CFG.scopeBasic }); }catch(e){ rej(e); }
   });
 }
 async function getToken(){
@@ -141,6 +146,7 @@ async function getToken(){
 }
 async function gfetch(url, opt){
   opt = opt || {};
+  if(!scopeFull && !DEMO && /googleapis\.com\/(upload\/)?drive\//.test(String(url))){ try{ await requestToken("", true); }catch(e){ throw new Error("This needs your permission to use Google Drive — tap again and choose Allow (" + (e.message || e) + ")"); } }
   for(let attempt = 0; attempt < 3; attempt++){
     const t = await getToken();
     const r = await fetch(url, { ...opt, headers: { ...(opt.headers || {}), Authorization: "Bearer " + t } });
@@ -160,21 +166,35 @@ async function signIn(){
      of the full sign-in does not ask again — opening MY TOOL fresh (new tab / app closed) always asks which data and which account */
   let resumed = false;
   try{ const ss = JSON.parse(sessionStorage.getItem("mt_sess") || "null"), tk = JSON.parse(sessionStorage.getItem("mt_tok") || "null");
-    if(ss && Date.now() - ss.at < 12 * 3600e3 && tk && tk.token && tk.tokenExp > Date.now() + 60000){ pickWorkspace(ss.ws); token = tk.token; tokenExp = tk.tokenExp; resumed = true; } }catch(_){}
+    if(ss && Date.now() - ss.at < 12 * 3600e3 && tk && tk.token && tk.tokenExp > Date.now() + 60000){ pickWorkspace(ss.ws); token = tk.token; tokenExp = tk.tokenExp; scopeFull = !!tk.full; wantFull = scopeFull; resumed = true; } }catch(_){}
   if(!resumed){ token = null; try{ sessionStorage.removeItem("mt_tok"); sessionStorage.removeItem("mt_sess"); }catch(_){} }
   if(!resumed) await new Promise((res) => {
-    const own = WS === "own";
+    /* owner, 21 Nov 2026: "my own Drive" is only for the Owners. Everybody else gets one button, and Google is asked for name + email only. */
+    if(!ownerDevice()){
+      pickWorkspace(""); wantFull = false;
+      const g1 = gate('<p><b>MY TOOL — Vartleaves</b></p><button type="button" class="mt_btn" id="mt_signin">Sign in with Google</button><p class="mt_small">Google asks which account to use. MY TOOL only receives your name and email address.</p><p class="mt_small" id="mt_err"></p>');
+      g1.querySelector("#mt_signin").onclick = async () => { try{ await requestToken("select_account", false); try{ sessionStorage.setItem("mt_sess", JSON.stringify({ at: Date.now(), ws: "" })); }catch(_){} res(); }catch(e){ g1.querySelector("#mt_err").textContent = e.message; } };
+      return;
+    }
+    const own = WS === "own"; wantFull = true;
     const g = gate('<p><b>Which data do you want to open?</b></p>' +
       '<button type="button" class="mt_btn' + (own ? ' ghost' : '') + '" id="mt_signin">🏢 Company data — Vartleaves</button><p class="mt_small">The business data of the company (roles and approvals apply).</p>' +
       '<button type="button" class="mt_btn' + (own ? '' : ' ghost') + '" id="mt_signin_own">📁 My own Drive (my own data)</button><p class="mt_small">Your own MY TOOL in your own Google Drive — nothing of the company data.</p>' +
       '<p class="mt_small">Google then asks which account to use.</p><p class="mt_small" id="mt_err"></p>');
-    const go = async (ws) => { try{ pickWorkspace(ws); await requestToken("select_account"); try{ sessionStorage.setItem("mt_sess", JSON.stringify({ at: Date.now(), ws: WS })); }catch(_){} res(); }catch(e){ g.querySelector("#mt_err").textContent = e.message; } };
+    const go = async (ws) => { try{ pickWorkspace(ws); await requestToken("select_account", true); try{ sessionStorage.setItem("mt_sess", JSON.stringify({ at: Date.now(), ws: WS })); }catch(_){} res(); }catch(e){ g.querySelector("#mt_err").textContent = e.message; } };
     g.querySelector("#mt_signin").onclick = () => go("");
     g.querySelector("#mt_signin_own").onclick = () => go("own");
   });
   const u = await gjson("https://www.googleapis.com/oauth2/v3/userinfo");
   me = { email: lc(u.email), name: u.name || u.email, picture: u.picture || "" };
   try{ localStorage.setItem("mt_hint", me.email); }catch(_){}
+  /* an Owner on a device that did not know it yet: remember it, and get the Drive permission once (Owners use Drive for backups, moving data, the Drive picker) */
+  const isAdm = CFG.admins.includes(me.email);
+  try{ if(isAdm) localStorage.setItem("mt_owner", "1"); else if(WS !== "own") localStorage.removeItem("mt_owner"); }catch(_){}
+  if(isAdm && !scopeFull && !DEMO){
+    await new Promise(res => { const g2 = gate('<p>Signed in as <b>' + esc(me.email) + '</b> — an <b>Owner</b> account.</p><p>Owners also use Google Drive (backups, moving the data, picking files). Allow it once on this device.</p><button type="button" class="mt_btn" id="mt_full">Continue as Owner</button><p class="mt_small" id="mt_err"></p>');
+      g2.querySelector("#mt_full").onclick = async () => { try{ await requestToken("", true); res(); }catch(e){ g2.querySelector("#mt_err").textContent = e.message; } }; });
+  }
 }
 async function signOut(){
   try{ if(token && google && google.accounts) google.accounts.oauth2.revoke(token, () => {}); }catch(_){}
@@ -633,14 +653,14 @@ async function start(){
     }else if(!c){
       if(me.email !== CFG.dataOwner){
         gate('<p>Signed in as <b>' + esc(me.email) + '</b>.</p><p>The data has not been shared with this account yet. Ask the admin (' + esc(CFG.dataOwner) + ') to add you in <b>Setup › Users</b> and share the Drive folder <b>' + esc(CFG.folderName) + '</b> with you.</p><button type="button" class="mt_btn ghost" id="mt_out">Use another account</button>');
-        document.getElementById("mt_out").onclick = signOut; mtOwnBtn(); return;
+        document.getElementById("mt_out").onclick = signOut; if(viaGw()) askGate(); return;
       }
       await firstRun(); return;
     }
     const ok = allowedUser();
     if(!ok){
       gate('<p>Signed in as <b>' + esc(me.email) + '</b>.</p><p>This account is not allowed to use MY TOOL. Ask the admin to add you in <b>Setup › Users</b>.</p><button type="button" class="mt_btn ghost" id="mt_out">Use another account</button>');
-      document.getElementById("mt_out").onclick = signOut; mtOwnBtn(); return;
+      document.getElementById("mt_out").onclick = signOut; if(viaGw()) askGate(); return;
     }
     await saveCache();
     ungate(); readyRes(); poll(); loadArchives();
@@ -650,11 +670,36 @@ async function start(){
     gate('<p class="mt_bad">' + esc(e.message || e) + '</p><button type="button" class="mt_btn" id="mt_retry">Try again</button> <button type="button" class="mt_btn ghost" id="mt_out">Use another account</button>');
     document.getElementById("mt_retry").onclick = () => location.reload();
     document.getElementById("mt_out").onclick = signOut;
-    if(/not allowed|not shared|403/i.test(String(e && e.message || e)) && WS !== "own") mtOwnBtn();
+    if((e && e.status === 403 || /not allowed/i.test(String(e && e.message || e))) && WS !== "own" && CFG.gateway && me && !CFG.admins.includes(me.email)) askGate();
   }
 }
-/* someone the company data is not shared with can still use MY TOOL – with their own Drive */
-function mtOwnBtn(){ try{ const g = document.getElementById("mt_out"); if(!g || document.getElementById("mt_ownws")) return; g.insertAdjacentHTML("afterend", ' <button type="button" class="mt_btn" id="mt_ownws">Use MY TOOL with my own Drive (my own data)</button><p class="mt_small">Your own empty MY TOOL in your Google Drive — nothing of the company data, and you are its Owner. You can switch back any time.</p>'); document.getElementById("mt_ownws").onclick = () => { try{ localStorage.setItem("mt_ws", "own"); sessionStorage.removeItem("mt_sess"); sessionStorage.removeItem("mt_tok"); }catch(_){} location.reload(); }; }catch(_){} }
+/* ---------------- no access yet → ask the Owner (owner, 21 Nov 2026) ----------------
+   An account that is not in Setup › Users sees nothing of MY TOOL: only this screen. "Send request" tells the Owner (a card on
+   their Home). Nothing opens until the Owner approves; then this page opens by itself. No "use your own Drive" for outsiders. */
+async function askCall(op, extra){ const t = await getToken(); const r = await fetch(CFG.gateway && GW || CFG.gateway, { method: "POST", redirect: "follow", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ op, token: t, ...(extra || {}) }) }); return r.json(); }
+let askT = null;
+async function askGate(){
+  if(askT){ clearInterval(askT); askT = null; }
+  const who = '<p>Signed in as <b>' + esc(me.name || "") + '</b> (' + esc(me.email) + ').</p>';
+  const out = '<button type="button" class="mt_btn ghost" id="mt_out">Use another account</button>';
+  const draw = (st) => {
+    let h = who;
+    if(st.state === "member"){ gate(who + '<p>Access approved — opening MY TOOL…</p>'); setTimeout(() => location.reload(), 1200); return; }
+    if(st.state === "pending") h += '<p><b>Your request was sent' + (st.at ? ' on ' + esc(String(st.at).slice(0, 10)) : '') + '.</b></p><p>The Owner has to approve it. This page opens by itself as soon as that happens — you do not need to do anything.</p>' + out;
+    else if(st.state === "blocked") h += '<p class="mt_bad">This account cannot ask for access to MY TOOL.</p>' + out;
+    else if(st.state === "rejected") h += '<p><b>The Owner did not approve this request.</b></p><p class="mt_small">If this is a mistake, contact the Owner directly. You can ask again tomorrow.</p>' + out;
+    else h += '<p><b>You do not have access to MY TOOL yet.</b></p><p>Nothing can be opened until the Owner approves you. Say who you are, then send the request:</p>' +
+      '<textarea id="mt_asknote" maxlength="300" rows="3" style="width:100%;box-sizing:border-box;font:inherit;padding:8px;border-radius:8px;border:1px solid #ccd" placeholder="Who you are and what you need it for (e.g. Ali, new VA for eBay orders)"></textarea>' +
+      '<button type="button" class="mt_btn" id="mt_asksend">Send request</button> ' + out + '<p class="mt_small" id="mt_err"></p>';
+    const g = gate(h); const o = g.querySelector("#mt_out"); if(o) o.onclick = signOut;
+    const b = g.querySelector("#mt_asksend"); if(b) b.onclick = async () => { b.disabled = true; try{ const j = await askCall("accessAsk", { name: me.name || "", note: (g.querySelector("#mt_asknote").value || "").trim() }); if(j.error) throw new Error(j.error); draw(j); }catch(e){ b.disabled = false; g.querySelector("#mt_err").textContent = e.message || String(e); } };
+  };
+  let st = { state: "none" };
+  try{ const j = await askCall("accessState"); if(j && j.state) st = j; else if(j && j.error) st = { state: "old" }; /* a gateway from before 21 Nov 2026 does not know requests yet */ }catch(_){ st = { state: "old" }; }
+  if(st.state === "old"){ const g = gate(who + '<p>This account is not allowed to use MY TOOL. Ask the Owner to add you in <b>Setup › Users</b>.</p>' + out); g.querySelector("#mt_out").onclick = signOut; return; }
+  draw(st);
+  askT = setInterval(async () => { try{ const j = await askCall("accessState"); if(j && j.state && j.state !== st.state){ st = j; draw(j); } }catch(_){} }, 25000);
+}
 async function firstRun(){
   const g = gate('<p>Welcome, <b>' + esc(me.name) + '</b>. This is the first time MY TOOL opens on ' + esc(CFG.dataOwner) + (WS === "own" ? ' (your own Drive)' : '') + '.</p>' +
     '<p>Choose how to start. Your data will be kept in your Google Drive, folder <b>' + esc(CFG.folderName) + '</b>.</p>' +
@@ -764,6 +809,7 @@ const userApi = {
 };
 window.MYTOOL = {
   get workspace(){ return WS; },
+  get driveOk(){ return DEMO || scopeFull; },   /* false = this person signed in with name + email only; Drive is asked for when they use a Drive feature */
   setWorkspace(ws){ try{ if(ws === "own") localStorage.setItem("mt_ws", "own"); else localStorage.removeItem("mt_ws"); sessionStorage.removeItem("mt_sess"); sessionStorage.removeItem("mt_tok"); }catch(_){} location.reload(); },
   get me(){ return me; }, get st(){ return lastSt; },
   async reauth(){ await requestToken(""); await push(); }, demo: DEMO, signOut, cfg: CFG,

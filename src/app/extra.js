@@ -90,7 +90,7 @@ if(typeof openPO==="function"){const _o2=openPO;openPO=function(p){const r=_o2(p
 
 /* ---------- Drive inbox: files dropped in "MY TOOL – INBOX" (any Drive folder with that name) show as a task ---------- */
 S.inbox=S.inbox||{n:0,files:[]};
-async function checkInbox(){try{if(!window.MYTOOL||MYTOOL.demo||!MYTOOL.drive||!can("create"))return;
+async function checkInbox(){try{if(!window.MYTOOL||MYTOOL.demo||!MYTOOL.drive||!can("create"))return;if(!MYTOOL.driveOk)return;/* never ask a team member for Drive by itself (21 Nov 2026) */
  let folders=[];for(const root of ["root","shared"]){try{folders=folders.concat((await MYTOOL.drive.list(root,{foldersOnly:true})).filter(f=>/^MY TOOL\s*[–-]\s*INBOX$/i.test(f.name)))}catch(_){}}
  if(!folders.length)return;const since=ls.get("inboxSeen","2000-01-01T00:00:00Z");let files=[];
  for(const f of folders){const fs=await MYTOOL.drive.list(f.id,{since});files=files.concat(fs.filter(x=>x.mimeType!=="application/vnd.google-apps.folder"))}
