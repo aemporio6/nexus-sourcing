@@ -2,7 +2,7 @@
 
 Sourcing, purchase orders, payments, shipments, stock and planning for Vartleaves.
 
-- Web app (GitHub Pages): `https://aemporio6.github.io/nexus-sourcing/`
+- Web app (GitHub Pages): `https://mytool.vartleaves.com` (old address `https://aemporio6.github.io/nexus-sourcing/` forwards to it; remove the CNAME file / Pages custom domain to go back)
 - Sign in with Google. Data lives in the admin's Google Drive (folder **MY TOOL – DATA**), never in this repository.
 - Works on Windows, Mac, Android and iPhone; can be installed ("Add to Home Screen").
 
