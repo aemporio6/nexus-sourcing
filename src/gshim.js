@@ -173,7 +173,10 @@ async function signIn(){
     if(!ownerDevice()){
       pickWorkspace(""); wantFull = false;
       const g1 = gate('<p><b>MY TOOL — Vartleaves</b></p><button type="button" class="mt_btn" id="mt_signin">Sign in with Google</button><p class="mt_small">Google asks which account to use. MY TOOL only receives your name and email address.</p><p class="mt_small" id="mt_err"></p>');
-      g1.querySelector("#mt_signin").onclick = async () => { try{ await requestToken("select_account", false); try{ sessionStorage.setItem("mt_sess", JSON.stringify({ at: Date.now(), ws: "" })); }catch(_){} res(); }catch(e){ g1.querySelector("#mt_err").textContent = e.message; } };
+      g1.querySelector("#mt_signin").onclick = async () => { try{ await requestToken("select_account", false); try{ sessionStorage.setItem("mt_sess", JSON.stringify({ at: Date.now(), ws: "" })); }catch(_){} res(); }catch(e){ g1.querySelector("#mt_err").textContent = e.message;
+          /* safety net: if the short sign-in ever fails on a device, the older (full) sign-in is one tap away */
+          if(!g1.querySelector("#mt_signin_full")){ g1.querySelector("#mt_err").insertAdjacentHTML("afterend", '<button type="button" class="mt_btn ghost" id="mt_signin_full">Sign-in did not work? Try the older sign-in</button>');
+            g1.querySelector("#mt_signin_full").onclick = async () => { try{ await requestToken("select_account", true); try{ sessionStorage.setItem("mt_sess", JSON.stringify({ at: Date.now(), ws: "" })); }catch(_){} res(); }catch(e2){ g1.querySelector("#mt_err").textContent = e2.message; } }; } } };
       return;
     }
     const own = WS === "own"; wantFull = true;
