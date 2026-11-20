@@ -2,7 +2,7 @@
 """Build MY TOOL: index.html (app) + manifest + service worker. Run: python3 build.py [--demo-seed DIR --out FILE]"""
 import json, os, re, sys, glob, subprocess, hashlib
 R = os.path.dirname(os.path.abspath(__file__))
-MODS = ["icons", "starter_data", "applock", "core", "forms", "forms2", "views", "drawers", "setup", "importer", "readers", "icc", "extra", "export_ps", "help_view", "health", "rates_auto", "nav2", "home_flow", "datafix", "alloc_multi", "packing", "landing", "prodsheet", "connect", "helpmode", "brand", "guard_links", "sync_ui", "calc_trace", "daily", "imp_report", "archive_ui", "scan", "ebay", "drive_link", "form_nav", "create_hub", "tasks_links", "mo_link", "product_add", "guards", "approvals", "landed_final", "bank_safe", "qc", "samples", "ideas", "menu9", "listcols", "reports9", "ui_polish", "ship_status", "add_more", "view_as", "starter", "importer_auto", "roles2", "history2", "access3", "drive_people", "move_data", "supplier_link", "create_more", "events"]
+MODS = ["icons", "starter_data", "applock", "core", "forms", "forms2", "views", "drawers", "setup", "importer", "readers", "icc", "extra", "export_ps", "help_view", "health", "rates_auto", "nav2", "home_flow", "datafix", "alloc_multi", "packing", "landing", "prodsheet", "connect", "helpmode", "brand", "guard_links", "sync_ui", "calc_trace", "daily", "imp_report", "archive_ui", "scan", "ebay", "drive_link", "form_nav", "create_hub", "tasks_links", "mo_link", "product_add", "guards", "approvals", "landed_final", "bank_safe", "qc", "samples", "ideas", "menu9", "listcols", "reports9", "ui_polish", "ship_status", "add_more", "view_as", "starter", "importer_auto", "roles2", "history2", "access3", "drive_people", "move_data", "supplier_link", "pick", "create_more", "events"]
 
 def read(p): return open(os.path.join(R, p), encoding="utf-8").read()
 
@@ -14,6 +14,17 @@ def build(seed_dir=None, out="index.html"):
     missing = [m for m in MODS if m not in CREATE_BASELINE and os.path.exists(os.path.join(R, f"src/app/{m}.js")) and not any(t in read(f"src/app/{m}.js") for t in ("chRegister(", "CREATE_REG.push", "/* create:"))]
     if missing:
         sys.exit("BUILD STOPPED - these modules are not in Create yet (add chRegister(...) or a /* create: reason */): " + ", ".join(missing))
+    # The owner's rule (21 Nov 2026): a dropdown is never built loose. Every <select written after that day must say what it
+    # chooses (data-src="company" / "list:role" ...) or why its list is fixed (data-fixed="reason") - pick.js does the rest.
+    PICK_BASELINE = CREATE_BASELINE | {"ship_status", "add_more", "view_as", "starter", "importer_auto", "roles2", "history2", "access3", "drive_people", "move_data", "supplier_link", "create_more", "pick"}
+    loose = []
+    for m in MODS:
+        fp = os.path.join(R, f"src/app/{m}.js")
+        if m in PICK_BASELINE or not os.path.exists(fp): continue
+        for tag in re.findall(r"<select\b[^>]*>", read(f"src/app/{m}.js")):
+            if "data-src" not in tag and "data-fixed" not in tag: loose.append(m + ": " + tag[:80])
+    if loose:
+        sys.exit("BUILD STOPPED - a dropdown without data-src / data-fixed (use the centre, src/app/pick.js):\n  " + "\n  ".join(loose))
     js = "\n".join(read(f"src/app/{m}.js") for m in MODS if os.path.exists(os.path.join(R, f"src/app/{m}.js")))
     js = js.replace("/* ---------- Help page", "const HELP=" + read("src/app/help.json") + ";\n/* ---------- Help page", 1)
     # syntax check
