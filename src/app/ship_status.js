@@ -25,3 +25,4 @@ openShip=function(x){const r=ssOpen0.apply(this,arguments);try{const s=x&&typeof
 const ssValRc0=validateReceive;
 validateReceive=function(o){const r=ssValRc0.apply(this,arguments);try{const s=o.src&&docOf("shipments",o.src);if(s&&!S.drawer?.ctx?.edit?.no){const onWay=["booked","in_transit","shipped","open","ready"].includes(s.status)||(s.eta&&s.eta>addDays(today(),2));
   if(onWay)r.warnings.push(`${s.no} is ${L("shipStatus",s.status)||s.status}${s.eta?`, ETA ${fmtD(s.eta)}`:""} — are these goods really here? Receiving them puts them in stock and marks the shipment Delivered.`)}}catch(_){}return r};
+/* create: no new thing to create — it guards the shipment and receive forms that are already in Create */

@@ -19,3 +19,5 @@ ixDriveHtml=function(){let h=dpHtml0.apply(this,arguments);try{const d=ixDrv();i
  h=h.replace(/<input type="checkbox" data-ixc="drvself" data-id="who:[^>]*>/g,"").replace(/📁 ((?:[^<]*) — \d+ folders?, \d+ files?<)/g,"👤 $1");
  if(d.root==="shared"&&d.path.length<=1||d.root==="drives"&&!d.path.length)h=h.replace(/<button[^>]*>[^<]*Import all new files here[^<]*<\/button>/,"");
  if(d.root==="shared"&&!d.path.length)h=h.replace('<div class="ixbar"><label class="status">Drive',`<div class="status" style="color:var(--fg)">👥 People who shared something with you — tap a person to see only their folders and files.</div><div class="ixbar"><label class="status">Drive`)}catch(_){}return h};
+/* Create */
+chRegister({k:"drvshared",title:"Import from files shared with me (by person)",hint:"Pick the person, then their folder",page:"import",words:"drive shared with me person folder import company drive shared drives",when:()=>can("create"),run:()=>{go("import");setTimeout(async()=>{try{const d=ixDrv();d.open=true;d.root="shared";d.path=[];await ixDriveLoad()}catch(_){}},350)}});

@@ -59,3 +59,5 @@ async function a3CatchUp(){try{if(!S.ready||a3Partial()||!can("edit")||S.batch)r
  pick("purchases",t.po);pick("shipments",t.sh);pick("credits",t.cn);pick("receipts",t.rc);live(D.payments||[]).forEach(x=>{if(x.updatedAt&&x.updatedAt>since&&lim.has(String(x.updatedBy||"").toLowerCase())){(x.allocations||[]).forEach(a=>{if(a.ref&&docOf("purchases",a.ref))t.po.add(a.ref);if(a.ref&&docOf("shipments",a.ref))t.sh.add(a.ref)});n++;if(x.updatedAt>latest)latest=x.updatedAt}});
  if(!n)return;await a3Rec0({touch:t,label:"re-calculated after a change by a person with limited access"});try{localStorage.setItem("mt_a3swept",latest)}catch(_){}}catch(e){console.warn("a3 catch-up",e)}}
 setTimeout(()=>a3CatchUp(),15000);setInterval(()=>a3CatchUp(),5*60000);
+/* Create */
+chRegister({k:"fineaccess",title:"Hide or lock an area / field for a person",hint:"Edit · View only · Hidden — any area, any field, also columns in lines",page:"setup",words:"hide hidden view only field column area restrict access permission lock price",when:()=>S.isOwner,run:()=>{chGoUsers(".a3box");toast("Open “Areas and fields” under the person")}});

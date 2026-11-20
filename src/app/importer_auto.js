@@ -45,7 +45,12 @@ function ixaLooksLikeName(s){s=String(s||"").trim();if(s.length<2||!/[A-Za-z一-
 const ixaBuild0=buildPreview;let ixaBusy=false;
 buildPreview=function(){const r=ixaBuild0.apply(this,arguments);if(ixaBusy)return r;try{const I=S.imp,P=I?.preview;if(!P)return r;I.ixaNo=I.ixaNo||{};I.ixaAuto=I.ixaAuto||{};let changed=false;
  Object.values(P.unk||{}).forEach(u=>{if(u.dec||I.dec[u.key]||I.ixaNo[u.key])return;if(!["sku","party"].includes(u.type)&&!u.type.startsWith("list:"))return;const best=u.cands?.[0]?.s||0;if(best>=.5)return;
-  if(u.type==="party"&&!ixaLooksLikeName(u.raw))return;if(u.type==="sku"&&!(u.ctx?.name||u.ctx?.asin||ixaLooksLikeName(u.raw)))return;ixDecide(I,u.key,"new");if(I.dec[u.key]){I.ixaAuto[u.key]=1;changed=true}});
+  if(u.type==="party"&&!ixaLooksLikeName(u.raw))return;if(u.type==="sku"&&!(u.ctx?.name||u.ctx?.asin||ixaLooksLikeName(u.raw)))return;
+  /* in a workspace that already has data, only files that DEFINE things create them by themselves (a supplier's invoice / PI / packing /
+     product list). A sales or stock report with an unknown SKU, or a payment list with an unknown name, is asked as before — so no
+     junk products / suppliers appear. A new, nearly empty workspace creates freely (that is what setting up means). */
+  if(u.type==="sku"&&live(D.products).length>=5&&!["cipart","purchases","pilines","orders","shipments","packinfo","products"].includes(I.kind))return;
+  if(u.type==="party"&&live(D.parties).length>=5&&!I.fixed&&!["parties","orders","purchases"].includes(I.kind))return;ixDecide(I,u.key,"new");if(I.dec[u.key]){I.ixaAuto[u.key]=1;changed=true}});
  if(I.kind==="cipart"&&!I.def.po&&I.def.poAuto!==false&&!(P.poCands||[]).length){I.def.po="__new";I.ixaPoAuto=1;changed=true}
  /* heading / section rows inside a sheet ("( 1st LIST_12/22/2024) …") are not payments — left out, not errors */
  let moved=0;(P.rows||[]).forEach(x=>{if(x.st!=="err")return;const es=(x.why||[]).filter(w=>w.l==="err");const amt=+String(x.v?.amount??x.v?.amt??"").replace(/[^0-9.\-]/g,"");if(es.length&&es.every(w=>/is not a date|unknown — decide above|No party/.test(w.t))&&!(amt>0)){x.st="skip";x.why=[{l:"info",t:"Looks like a heading / note row, not a record — left out"}].concat(x.why);moved++}});if(moved&&P.counts){P.counts.err-=moved;P.counts.skip=(P.counts.skip||0)+moved}
@@ -116,3 +121,5 @@ const ixaQPlan0=ixQStart;
 ixQStart=function(items){try{if(Array.isArray(items)&&items.length>1&&!items._planned){const sorted=items.map((x,i)=>({x,i,r:ixaRank(x.name||x.file?.name||x.title)})).sort((a,b)=>a.r-b.r||a.i-b.i);S.impPlan={items:sorted.map(o=>({name:o.x.name||o.x.file?.name||o.x.title||"file",rank:o.r,from:o.x.path||o.x.folder||"",item:o.x,off:false}))};S.impQ=null;S.imp=null;const o=$("#imp_out");if(o)o.innerHTML="";ixaPlanRender();$("#ix_qbox")?.scrollIntoView({behavior:"smooth",block:"start"});return}}catch(e){console.warn("ixa plan",e)}return ixaQPlan0.call(this,items)};
 document.addEventListener("change",e=>{const t=e.target;if(!t.matches?.("[data-ixa-planx]")||!S.impPlan)return;S.impPlan.items[+t.dataset.ixaPlanx].off=!t.checked;ixaPlanRender()});
 document.addEventListener("click",e=>{const b=e.target.closest("[data-ixa-plan]");if(!b||!S.impPlan)return;e.preventDefault();e.stopImmediatePropagation();const P=S.impPlan;S.impPlan=null;if(b.dataset.ixaPlan==="cancel"){const q=$("#ix_qbox");if(q)q.innerHTML="";return}const items=P.items.filter(x=>!x.off).map(x=>x.item);items._planned=true;ixaQPlan0.call(null,items)},true);
+/* Create */
+chRegister({k:"impmany",title:"Import several files or a whole folder",hint:"One plan first: order, what each file is, where it goes",page:"import",words:"import folder many files several bulk plan batch new setup",when:()=>can("create"),run:()=>{go("import");toast("Choose several files (or a Drive folder) — the plan shows before anything starts",{ms:6000})}});

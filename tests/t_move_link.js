@@ -47,4 +47,8 @@ NEW.drive.n=100;NEW.ctx.DriveApp.createFolder("MY TOOL – FILES");[a1,a2].forEa
  ok(await p.evaluate(s=>(docOf("parties",s.id).links||[]).some(l=>/WAP-CI-247\.pdf/.test(l.label)&&/drive\.google\.com/.test(l.url))&&!document.querySelector("#slin"),sup),"Attach: the file is linked on the supplier’s record and leaves the list");
  ok(NEW.call({op:"inboxList",token:"T"}).list.length===0,"the inbox on the server is empty again");
  await p.evaluate(s=>openDoc("parties",s.id),sup);await p.waitForTimeout(600);await p.evaluate(()=>{document.querySelector(".drawer .slbox").open=true});await p.click('.drawer [data-sl="off"]');await p.waitForTimeout(800);ok(await p.evaluate(s=>docOf("parties",s.id).upload.on===false,sup),"Switch off works");
+ /* after a move: a file attached THROUGH MY TOOL in the old account is fetched by the Owner's device and stored in the new one */
+ const fx=await p.evaluate(async()=>{const OLDID="1oldOLDoldOLDoldOLDoldOLD_xyz";const pa=live(D.parties)[0];await rawSet("parties",pa.id,{...pa,docs:{ci:"drive:"+OLDID}});window.__DEMO_DRIVE={meta:id=>({id,name:"old CI.pdf",mimeType:"application/pdf"}),download:id=>new Blob(["%PDF old"],{type:"application/pdf"}),list:()=>[]};
+  const r=await mvFixFiles();const now=docOf("parties",pa.id).docs.ci;return{r,now,gone:!JSON.stringify(D.parties).includes(OLDID)}});
+ ok(fx.r.done===1&&fx.r.left===0&&fx.gone&&fx.now&&fx.now!=="drive:1oldOLDoldOLDoldOLDoldOLD_xyz","an attachment kept in the old account is copied into the new one and the record re-pointed ("+JSON.stringify(fx.r)+")");
  ok(!errs.length,"no page errors "+errs.join(" | "));await b.close();process.exit(fails?1:0)})();

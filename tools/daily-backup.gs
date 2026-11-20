@@ -23,7 +23,7 @@ function setup(){
 function weeklyHealthMail(force){
   try{
     var d = new Date(); if(!force && d.getDay() !== 1) return;          // 1 = Monday
-    var folder = DriveApp.getFoldersByName(FOLDER); if(!folder.hasNext()) return; folder = folder.next();
+    var folder = ownFolders(); if(!folder.hasNext()) return; folder = folder.next();
     var src = folder.getFilesByName(FILE); if(!src.hasNext()) return;
     var j = JSON.parse(src.next().getBlob().getDataAsString()); var main = j.data && j.data.setup && (j.data.setup.main || j.data.setup) || {}; var h = main.healthSummary;
     if(!h){ MailApp.sendEmail(ALERT_TO, "MY TOOL weekly: no health summary yet", "Open MY TOOL as an admin once so Data health can run; the summary is then saved daily."); return; }
@@ -33,10 +33,17 @@ function weeklyHealthMail(force){
     MailApp.sendEmail(ALERT_TO, "MY TOOL weekly health: " + h.score + "% · " + h.serious + " serious", lines.join("\n"));
   }catch(e){ MailApp.sendEmail(ALERT_TO, "MY TOOL weekly health mail FAILED", String(e && e.message || e)); }
 }
+/* the data folder OWNED by the account this script runs in (a folder of the same name shared from another account is never used) */
+function ownFolders(){ var it = DriveApp.getFoldersByName(FOLDER), out = [], me = ""; try{ me = String(DriveApp.getRootFolder().getOwner().getEmail()).toLowerCase(); }catch(_){}
+  while(it.hasNext()){ var f = it.next(); try{ if(!me || String(f.getOwner().getEmail()).toLowerCase() === me) out.push(f); }catch(_){} }
+  var i = 0; return { hasNext: function(){ return i < out.length; }, next: function(){ return out[i++]; } }; }
+/* the data moved to another account? then this account's copy is frozen: no backup, no emails from here any more */
+function movedAway(){ try{ var fo = ownFolders(); if(!fo.hasNext()) return false; var it = fo.next().getFilesByName(FILE); if(!it.hasNext()) return false; var j = JSON.parse(it.next().getBlob().getDataAsString()); var m = j.data && j.data.setup && (j.data.setup.main || j.data.setup); return !!(m && m.movedTo); }catch(_){ return false; } }
 function dailyBackup(){
+  if(movedAway()) return;
   weeklyHealthMail(false);
   try{
-    var folder = DriveApp.getFoldersByName(FOLDER); if(!folder.hasNext()) throw new Error("folder not found: " + FOLDER);
+    var folder = ownFolders(); if(!folder.hasNext()) throw new Error("folder not found: " + FOLDER);
     folder = folder.next();
     var src = folder.getFilesByName(FILE); if(!src.hasNext()) throw new Error("data file not found: " + FILE);
     src = src.next();
@@ -111,4 +118,4 @@ function morningDigest(j, day, dry){
 }
 function colOf(ref){ var m = /^(PO|SH|PAY|IN|RC|CR|MV)-/.exec(String(ref || "")); return m ? { PO: "purchases", SH: "shipments", PAY: "payments", IN: "inspections", RC: "receipts", CR: "credits", MV: "moves" }[m[1]] : null; }
 /* run by hand to see today's emails without sending them (View › Logs) */
-function previewDigest(){ var f = DriveApp.getFoldersByName(FOLDER).next().getFilesByName(FILE).next(); var j = JSON.parse(f.getBlob().getDataAsString()); var day = Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd"); morningDigest(j, day, true).forEach(function(m){ Logger.log(m.to + " — " + m.subject + "\n" + m.body); }); }
+function previewDigest(){ var f = ownFolders().next().getFilesByName(FILE).next(); var j = JSON.parse(f.getBlob().getDataAsString()); var day = Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd"); morningDigest(j, day, true).forEach(function(m){ Logger.log(m.to + " — " + m.subject + "\n" + m.body); }); }

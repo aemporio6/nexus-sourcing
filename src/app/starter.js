@@ -11,3 +11,4 @@ upgradeSetup=async function(){try{if(!D.setup&&can("setup")){const pairs=Object.
 /* users and roles are changed only after the person has just proved it is them (fingerprint / PIN), see applock.js */
 const stPatch0=setupPatchMany;
 setupPatchMany=async function(pairs,labelTxt,o){try{if(!(o&&(o.derived||o.quiet))&&(pairs||[]).some(([p])=>p&&(p[0]==="users"||p[0]==="roles"))&&typeof alVerify==="function"){if(!(await alVerify("Change who can use MY TOOL and what they can do"))){toast("Not changed — it was not confirmed");try{render()}catch(_){}return false}}}catch(_){}return stPatch0.apply(this,arguments)};
+/* create: nothing to start by hand — the starter lists are written by themselves the first time an empty workspace opens */

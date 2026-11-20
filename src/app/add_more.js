@@ -49,3 +49,4 @@ fnSuggest=function(form,k){if(k==="material"||k==="x_material"){const seen=new M
 /* "For (order / company / client)" inside extra lines / allocations: ＋ New order… too */
 const amOwnRef0=ownerRefOptsHtml;
 ownerRefOptsHtml=function(v,bt){let h=amOwnRef0.apply(this,arguments);try{if(!/__newdoc/.test(h)){const opt=`<option value="__newdoc">＋ New order…</option>`;h=/<option value="">[^<]*<\/option>/.test(h)?h.replace(/(<option value="">[^<]*<\/option>)/,"$1"+opt):opt+h}}catch(_){}return h};
+/* create: no entry of its own — it puts “＋ Add / ＋ New” on the fields of every form in Create */

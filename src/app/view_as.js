@@ -19,3 +19,4 @@ const vaToast0=toast;
 toast=function(msg,o){if(typeof msg==="string"&&/role|Only the Owner/i.test(msg)&&!/Back to|now/.test(msg)&&vaIsReal()&&S.realRole&&S.role!==S.realRole)msg=`${msg} — because you are viewing as ${item("role",S.role)?.label||S.role}. Tap "Back to Owner" at the top.`;return vaToast0.call(this,msg,o)};
 document.addEventListener("click",e=>{if(!e.target.closest("[data-va-back]"))return;e.preventDefault();e.stopImmediatePropagation();vaBack()},true);
 (function(){try{const st=document.createElement("style");st.textContent=`#vabar{position:sticky;top:0;z-index:60;display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;padding:8px 14px;background:#fff4d6;color:#5a4300;border-bottom:1px solid #f0d28a;font-size:13px}`;document.head.appendChild(st)}catch(_){}})();
+/* create: nothing to create — a safety bar for “View as” */

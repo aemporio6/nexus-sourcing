@@ -53,3 +53,18 @@ document.addEventListener("click",async e=>{const b=e.target.closest("[data-mv]"
  try{const r=await mvRun(url,say);S.mv.busy=false;S.mv.done=true;mvRedraw();toast(`Moved — MY TOOL now opens the data in ${r.account}`,{ms:8000});setTimeout(()=>{try{MYTOOL.useGateway(r.url)}catch(_){location.reload()}},2500)}
  catch(err){S.mv.busy=false;S.mv.err=(err&&err.message)||String(err);mvRedraw()}},true);
 (function(){try{const st=document.createElement("style");st.textContent=`.mvsteps{margin:0;padding-left:20px;line-height:1.7}.mvsteps li{color:var(--muted)}.mvsteps li.run{color:var(--fg);font-weight:600}.mvsteps li.ok{color:#1b7a3d}.mvsteps li.ok::marker{content:"✓  "}`;document.head.appendChild(st)}catch(_){}})();
+/* ---- after a move: files that were attached THROUGH MY TOOL (kept in the old account's "MY TOOL – FILES") ----
+   They are stored as "drive:<id>" and opened through the gateway, so the new account must hold its own copy. An Owner's device
+   that can still read the old file (signed in as the old account) fetches each one and stores it in the new account, then
+   re-points the records. Runs by itself once after the move; safe to run again (files already in the new account are left). */
+function mvDriveRefs(){const s=new Set();const re=/"drive:([A-Za-z0-9_-]{15,})"/g;COLS.concat(["versions"]).forEach(c=>{const t=JSON.stringify(D[c]||[]);let m;while((m=re.exec(t)))s.add(m[1])});return[...s]}
+async function mvFixFiles(say){say=say||(()=>{});if(!S.ready||!S.isOwner||!window.MYTOOL||MYTOOL.demo&&!window.__DEMO_GW)return{done:0,left:0};if(!MYTOOL.demo&&!MYTOOL.gateway)return{done:0,left:0};const ids=mvDriveRefs();const map={},left=[];
+ for(const id of ids){try{await MYTOOL.gwCall("file",{id});continue}catch(e){/* the data account cannot open it → fetch it with this person's own Drive access and store a copy there */}
+  try{say(`Copying attachment ${Object.keys(map).length+left.length+1}…`);const meta=await MYTOOL.drive.meta(id);const blob=await MYTOOL.drive.download(id,meta.mimeType);if(!blob)throw new Error("no file");const f=blob instanceof File?blob:new File([blob],meta.name||"file",{type:blob.type||meta.mimeType||""});if(f.size>20*1024*1024)throw new Error("bigger than 20 MB");const up=await assets.upload(f,{name:f.name,contentType:f.type});const nid=String(up&&(up.id||up.url)||"");if(!nid)throw new Error("not stored");map[id]=nid}catch(e){console.warn("attachment not copied",id,e);left.push(id)}}
+ const pairs=Object.entries(map);if(pairs.length){for(const c of COLS){for(const doc of (D[c]||[]).slice()){let t=JSON.stringify(doc);if(!pairs.some(([o])=>t.includes(o)))continue;pairs.forEach(([o,n])=>{t=t.split("drive:"+o).join(n);if(n.startsWith("drive:"))t=t.split(o).join(n.slice(6))});await rawSet(c,doc.id,JSON.parse(t))}}
+  logEv("setup","setup","main",`${pairs.length} attachment${pairs.length===1?"":"s"} copied into the company account after the move${left.length?`; ${left.length} could not be copied (open MY TOOL signed in as the old account)`:""}`)}
+ return{done:pairs.length,left:left.length}}
+let mvFixRan=false;
+setInterval(async()=>{try{if(mvFixRan||!S.ready||!S.isOwner||!SET().movedFrom||SET().filesMoved||S.mv?.busy)return;mvFixRan=true;const r=await mvFixFiles();if(!r.left)await setupPatchMany([[["filesMoved"],nowIso()]],null,{noUndo:true,quiet:true,derived:true});if(r.done)toast(`${r.done} attachment${r.done===1?"":"s"} copied into the company account`)}catch(e){console.warn("mv fix",e)}},9000);
+/* Create */
+chRegister({k:"movedata",title:"Move the data to another Google account",hint:"Checked copy, then every device switches — Owner only",page:"setup",words:"move data account drive company migrate transfer gateway",when:()=>S.isOwner,run:()=>chGoUsers("#mv_url")});

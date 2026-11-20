@@ -6,7 +6,12 @@
    - Never locked out: "Forgot? Sign in with Google again" signs out, clears this device's copy and the lock; after a fresh Google
      sign-in the data loads again from Drive. Nothing in the business data changes. */
 const AL_KEY="mt_lock";
-function alCfg(){try{return JSON.parse(localStorage.getItem(AL_KEY)||"null")}catch(_){return null}}
+/* v2 (owner, 20 Nov 2026 — "it stands in the way every 5–10 minutes"): the lock is for a device that was LEFT, not for someone at
+   work. Now: away from MY TOOL (other tab / app / closed) for longer than "bgMin" (30) → asked; open but untouched for "idleMin"
+   (60) → asked; coming back sooner, a reload, or a new tab within that time → not asked. What protects the money is the second
+   check on sensitive actions (approve, bank details, delete, users), not a frequent lock. Older settings are moved to these once. */
+const AL_BG=30,AL_IDLE=60;
+function alCfg(){try{const c=JSON.parse(localStorage.getItem(AL_KEY)||"null");if(c&&c.v!==2){c.v=2;c.bgMin=AL_BG;c.idleMin=AL_IDLE;localStorage.setItem(AL_KEY,JSON.stringify(c))}return c}catch(_){return null}}
 function alSave(c){try{if(c)localStorage.setItem(AL_KEY,JSON.stringify(c));else localStorage.removeItem(AL_KEY)}catch(_){}}
 const alB64=buf=>btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
 const alUnB64=s=>Uint8Array.from(atob(String(s).replace(/-/g,"+").replace(/_/g,"/")+"===".slice((String(s).length+3)%4)),c=>c.charCodeAt(0));
@@ -20,9 +25,11 @@ let alLocked=false,alLast=Date.now(),alVerAt=0,alStep=null;
    · a reload / new version in the same tab within 10 minutes of use: not asked · opening the app fresh: asked
    · a 6-digit PIN for devices without fingerprint / face (5 wrong tries → PIN off, password or Google sign-in needed)
    · sensitive actions (approve, bank details, delete, users) ask once more if the last check is older than 5 minutes */
-const AL_SEEN="mt_lock_seen",AL_HID="mt_lock_hidden";
-function alMark(){try{sessionStorage.setItem(AL_SEEN,String(alLast))}catch(_){}}
-function alGrace(c){try{const seen=+sessionStorage.getItem(AL_SEEN)||0,hid=+sessionStorage.getItem(AL_HID)||0;const now=Date.now();if(!seen)return false;if(hid&&now-hid>(+c.bgMin||5)*60000)return false;return now-seen<10*60000}catch(_){return false}}
+const AL_SEEN="mt_lock_seen";
+/* last time MY TOOL was used on this device — shared by every tab (localStorage), so a new tab soon after is not asked again */
+function alMark(){try{localStorage.setItem(AL_SEEN,String(Date.now()))}catch(_){}}
+function alSeen(){try{return+localStorage.getItem(AL_SEEN)||0}catch(_){return 0}}
+function alGrace(c){const seen=alSeen();return!!seen&&Date.now()-seen<(+c.bgMin||AL_BG)*60000}
 function alPinOk(c){return!!(c&&c.pin&&(c.pinFails||0)<5)}
 function alShow(o_){const c=alCfg();if(!c||!c.on)return;const step=o_&&o_.step;if(!step)alLocked=true;let o=document.getElementById("alov");if(!o){o=document.createElement("div");o.id="alov";document.body.appendChild(o)}
  o.setAttribute("role","dialog");o.setAttribute("aria-modal","true");o.setAttribute("aria-label","MY TOOL is locked");
@@ -34,7 +41,7 @@ function alShow(o_){const c=alCfg();if(!c||!c.on)return;const step=o_&&o_.step;i
   ${step?`<button type="button" class="btn" data-al="stepcancel">Cancel</button>`:`<button type="button" class="lnk" data-al="forgot">Forgot? Sign in with Google again</button>`}</div>`;
  o.hidden=false;document.documentElement.classList.add("al-on");setTimeout(()=>{if(c.bio&&!c.noAuto)alTryBio();else(document.getElementById("al_pin")||document.getElementById("al_pw"))?.focus()},250)}
 const esc_al=s=>String(s).replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
-function alUnlock(){alLocked=false;alLast=Date.now();alVerAt=Date.now();alMark();try{sessionStorage.removeItem(AL_HID)}catch(_){}if(alStep){const r=alStep;alStep=null;setTimeout(()=>r(true),0)}const o=document.getElementById("alov");if(o){o.hidden=true;o.innerHTML=""}document.documentElement.classList.remove("al-on");const c=alCfg();if(c){c.fails=0;c.pinFails=0;alSave(c)}}
+function alUnlock(){alLocked=false;alLast=Date.now();alVerAt=Date.now();alMark();if(alStep){const r=alStep;alStep=null;setTimeout(()=>r(true),0)}const o=document.getElementById("alov");if(o){o.hidden=true;o.innerHTML=""}document.documentElement.classList.remove("al-on");const c=alCfg();if(c){c.fails=0;c.pinFails=0;alSave(c)}}
 /* sensitive action: resolve true when the person has just proved it is them */
 function alVerify(reason){const c=alCfg();if(!c||!c.on)return Promise.resolve(true);if(Date.now()-alVerAt<5*60000)return Promise.resolve(true);return new Promise(res=>{alStep=res;alShow({step:reason||"This action needs your fingerprint / PIN"})})}
 document.addEventListener("submit",async e=>{if(!e.target.matches?.('[data-al="pinf"]'))return;e.preventDefault();const c=alCfg();const m=document.getElementById("al_msg");const i=document.getElementById("al_pin");const pin=i?.value||"";if(!alPinOk(c))return;
@@ -54,13 +61,13 @@ document.addEventListener("click",async e=>{const b=e.target.closest("[data-al]"
   if(!confirm(want==="own"?"Switch this device to your OWN Drive?\nMY TOOL opens your own data (empty the first time, you are its Owner). The company data stays where it is — switch back any time from 🔒.":"Switch this device back to the company data (Vartleaves)?"))return;if(window.MYTOOL&&MYTOOL.setWorkspace)MYTOOL.setWorkspace(want);return}
  if(a==="setup"){alMenuClose();alSetup();return}},true);
 function confirmDirtyAl(){try{return confirm("Sign out of MY TOOL on this device and remove the lock?\nYour data stays safe in Drive — after signing in with Google it loads again.")}catch(_){return true}}
-/* working → never asked; background longer than bgMin, or untouched for idleMin → lock */
-let alHidAt=0,alMarkT=0;
+/* working → never asked; away longer than bgMin, or open but untouched for idleMin → lock */
+let alMarkT=0;
 ["pointerdown","keydown","wheel","touchstart"].forEach(ev=>document.addEventListener(ev,()=>{if(!alLocked){alLast=Date.now();if(alLast-alMarkT>15000){alMarkT=alLast;alMark()}}},{passive:true,capture:true}));
-setInterval(()=>{const c=alCfg();if(c&&c.on&&!alLocked&&!alStep&&Date.now()-alLast>(+c.idleMin||15)*60000)alShow()},15000);
-document.addEventListener("visibilitychange",()=>{const c=alCfg();if(document.visibilityState==="hidden"){alHidAt=Date.now();alMark();try{sessionStorage.setItem(AL_HID,String(alHidAt))}catch(_){}return}
- const away=alHidAt?Date.now()-alHidAt:0;alHidAt=0;if(c&&c.on&&!alLocked&&(away>(+c.bgMin||5)*60000||Date.now()-alLast>(+c.idleMin||15)*60000)){alShow();return}try{sessionStorage.removeItem(AL_HID)}catch(_){}});
-window.addEventListener("pagehide",()=>{alMark()});
+setInterval(()=>{const c=alCfg();if(!c||!c.on||alLocked||alStep)return;if(document.visibilityState==="visible"&&Date.now()-alLast>(+c.idleMin||AL_IDLE)*60000)alShow()},15000);
+document.addEventListener("visibilitychange",()=>{const c=alCfg();if(document.visibilityState==="hidden"){if(!alLocked)alMark();return}
+ if(!c||!c.on||alLocked)return;if(Date.now()-alSeen()>(+c.bgMin||AL_BG)*60000){alShow();return}alLast=Date.now();alMark()});
+window.addEventListener("pagehide",()=>{if(!alLocked)alMark()});
 /* sensitive buttons ask once more (window capture runs before every other handler) */
 const AL_SENS={'[data-act="approve"]':"Approve a payment",'[data-bs="approve"]':"Approve new bank details",'[data-bs="show"],[data-bs="showp"]':"Show full bank details",'[data-act="trash"],[data-act="trashcur"],[data-act="purge"],[data-ss-undo]':"Delete a record",'[data-act="bkrestore"]':"Restore a backup",'[data-act="shareuser"],[data-sadd="user"]':"Change who can use MY TOOL"};
 let alPass=null;
@@ -87,9 +94,9 @@ async function alSetup(){const c=alCfg()||{};const bio=await alBioOk();let o=doc
    <div class="f"><label for="als_pin2">PIN again</label><input id="als_pin2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></div>
    <div class="f"><label for="als_pw">Password ${c.pw?"(leave empty to keep the current one)":"(optional — the way in if the PIN is blocked)"}</label><input id="als_pw" type="password" autocomplete="new-password" minlength="6"></div>
    <div class="f"><label for="als_pw2">Password again</label><input id="als_pw2" type="password" autocomplete="new-password"></div>
-   <div class="f"><label for="als_bg">Lock when the app was in the background for (minutes)</label><select id="als_bg">${[1,2,5,10,15].map(n=>`<option value="${n}" ${(+c.bgMin||5)===n?"selected":""}>${n}</option>`).join("")}</select></div>
-   <div class="f"><label for="als_idle">Lock when open but untouched for (minutes)</label><select id="als_idle">${[5,10,15,30,60].map(n=>`<option value="${n}" ${(+c.idleMin||15)===n?"selected":""}>${n}</option>`).join("")}</select></div>
-   <p class="status">While you are working it never asks. A reload within 10 minutes does not ask. Approving, bank details, deleting and users ask once more.</p>
+   <div class="f"><label for="als_bg">Ask again when I was away from MY TOOL for</label><select id="als_bg">${[[5,"5 minutes"],[15,"15 minutes"],[30,"30 minutes"],[60,"1 hour"],[240,"4 hours"]].map(([n,t])=>`<option value="${n}" ${(+c.bgMin||AL_BG)===n?"selected":""}>${t}</option>`).join("")}</select></div>
+   <div class="f"><label for="als_idle">Ask again when it is open but untouched for</label><select id="als_idle">${[[15,"15 minutes"],[30,"30 minutes"],[60,"1 hour"],[120,"2 hours"],[480,"8 hours"]].map(([n,t])=>`<option value="${n}" ${(+c.idleMin||AL_IDLE)===n?"selected":""}>${t}</option>`).join("")}</select></div>
+   <p class="status">While you are working it never asks — also not when you switch to another tab or app and come back within that time. Approving, bank details, deleting and users always ask once more (if the last check is older than 5 minutes); that is what protects the money.</p>
    <div class="status" id="als_msg" aria-live="polite"></div>
    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"><button type="button" class="btn pri" data-als="save">${c.on?"Save":"Turn the lock on"}</button>${c.on&&(alIsDemo||alIsDev())?`<button type="button" class="btn" data-als="off">Turn the lock off</button>`:""}${alForced?`<button type="button" class="btn" data-al="forgot">Use another Google account</button>`:`<button type="button" class="btn" data-als="close">Cancel</button>`}</div></div></div>`;o.hidden=false;setTimeout(()=>document.getElementById(bio&&!c.bio?"als_bio":"als_pw")?.focus(),50)}
 document.addEventListener("click",async e=>{const b=e.target.closest("[data-als]");if(!b)return;e.preventDefault();e.stopImmediatePropagation();const o=document.getElementById("alset");const a=b.dataset.als;const msg=document.getElementById("als_msg");
@@ -99,13 +106,13 @@ document.addEventListener("click",async e=>{const b=e.target.closest("[data-als]
   const pin=document.getElementById("als_pin").value,pin2=document.getElementById("als_pin2").value;if(pin&&!/^\d{6}$/.test(pin)){msg.textContent="The PIN is 6 digits";return}if(pin&&pin!==pin2){msg.textContent="The two PINs are not the same";return}if(pin&&/^(\d)\1{5}$|^123456$|^654321$/.test(pin)){msg.textContent="Choose a PIN that is harder to guess";return}
   if(!c.pw&&!pw&&!c.pin&&!pin&&!(wantBio&&!c.bio)&&!c.bio){msg.textContent="Choose this device’s lock, a 6-digit PIN, or a password";return}
   if(pw&&pw.length<6){msg.textContent="Use 6 or more characters";return}if(pw&&pw!==pw2){msg.textContent="The two passwords are not the same";return}
-  const n={...c,on:true,idleMin:+document.getElementById("als_idle").value||15,bgMin:+document.getElementById("als_bg").value||5,email:(typeof uid!=="undefined"&&uid)||c.email||"",fails:0,waitUntil:0};
+  const n={...c,on:true,v:2,idleMin:+document.getElementById("als_idle").value||AL_IDLE,bgMin:+document.getElementById("als_bg").value||AL_BG,email:(typeof uid!=="undefined"&&uid)||c.email||"",fails:0,waitUntil:0};
   if(pw){const salt=alB64(crypto.getRandomValues(new Uint8Array(16)));n.pw={salt,iter:150000,hash:await alHash(pw,salt,150000)}}
   if(pin){const salt=alB64(crypto.getRandomValues(new Uint8Array(16)));n.pin={salt,iter:300000,hash:await alHash(pin,salt,300000)};n.pinFails=0}
   if(wantBio&&!c.bio){try{msg.textContent="Use the device lock now (fingerprint / face / PIN)…";n.bio=await alBioCreate()}catch(err){n.bio=null;if(!n.pw&&!n.pin){msg.textContent="The device lock was not set up ("+(err.name||err.message)+") — try again, or choose a PIN";return}msg.textContent="Device lock not set up — the PIN / password works"}}else if(!wantBio)n.bio=null;if(!n.bio&&!n.pw&&!n.pin){msg.textContent="Choose this device’s lock, a PIN, or a password";return}
   alSave(n);if(alForced){alForced=false;alUnlock()}else o.hidden=true;toast(`Lock is on — ${[n.bio?"fingerprint / face":"",n.pin?"PIN":"",n.pw?"password":""].filter(Boolean).join(" / ")}`)}},true);
 /* when the app opens: lock first (before anything is shown), and put the 🔒 in the top bar */
-(function(){const c=alCfg();const start=()=>{if(c&&c.on){if(alGrace(c)){alVerAt=0;alLast=Date.now();alMark();try{sessionStorage.removeItem(AL_HID)}catch(_){}}else alShow()}else if(!alIsDemo&&!alIsDev())alForce()};if(document.body)start();else document.addEventListener("DOMContentLoaded",start);const t=setInterval(()=>{alBtn();if(document.getElementById("alb"))clearInterval(t)},300)})();
+(function(){const c=alCfg();const start=()=>{if(c&&c.on){if(alGrace(c)){alVerAt=0;alLast=Date.now();alMark()}else alShow()}else if(!alIsDemo&&!alIsDev())alForce()};if(document.body)start();else document.addEventListener("DOMContentLoaded",start);const t=setInterval(()=>{alBtn();if(document.getElementById("alb"))clearInterval(t)},300)})();
 (function(){try{const st=document.createElement("style");st.textContent=`#alov{position:fixed;inset:0;z-index:1000;background:var(--bg,#f8fafb);display:flex;align-items:center;justify-content:center;padding:16px}#alov[hidden]{display:none}html.al-on body>*:not(#alov):not(script):not(style){visibility:hidden}
 .albox{width:min(380px,100%);text-align:center;display:flex;flex-direction:column;gap:12px;align-items:stretch}.albox h2{margin:4px 0 0}.albox .mt-logo{margin:0 auto}.albig{min-height:52px;font-size:16px}.albox .lnk{align-self:center}.alpw{display:flex;gap:8px}.alpw input{flex:1;min-height:44px}
-#almenu{position:absolute;right:0;top:44px;z-index:40;min-width:240px;background:var(--card,#fff);border:1px solid var(--line,#dde3ea);border-radius:10px;box-shadow:0 10px 28px rgba(20,40,60,.16);padding:6px}#almenu[hidden]{display:none}.alrow{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line,#dde3ea);border-radius:10px;line-height:1.4}.alrow input{margin-top:3px;width:18px;height:18px}.alform{display:flex;flex-direction:column;gap:14px;padding:16px 18px 18px}.alform .f{display:flex;flex-direction:column;gap:6px;margin:0}.alform .f input,.alform .f select{min-height:44px}#alov #alset .albox2,#alov .albox2{width:min(480px,100%);margin:auto;background:var(--card,#fff);border:1px solid var(--line,#dde3ea);border-radius:16px;box-shadow:0 18px 50px rgba(20,40,60,.12)}.albox2{max-width:480px}`;document.head.appendChild(st)}catch(_){}})();
+#almenu{position:absolute;right:0;top:44px;z-index:40;min-width:240px;background:var(--card,#fff);border:1px solid var(--line,#dde3ea);border-radius:10px;box-shadow:0 10px 28px rgba(20,40,60,.16);padding:6px}#almenu[hidden]{display:none}.alrow{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line,#dde3ea);border-radius:10px;line-height:1.4}.alrow input{margin-top:3px;width:18px;height:18px}.alform{display:flex;flex-direction:column;gap:14px;padding:16px 18px 18px}.alform .f{display:flex;flex-direction:column;gap:6px;margin:0}.alform .f input,.alform .f select{min-height:44px}#alov #alset .albox2,#alov .albox2{width:min(480px,100%);margin:auto;background:var(--card,#fff);border:1px solid var(--line,#dde3ea);border-radius:16px;box-shadow:0 18px 50px rgba(20,40,60,.12)}.albox2{max-width:480px;max-height:calc(100dvh - 32px);overflow-y:auto;-webkit-overflow-scrolling:touch}#alov{overflow-y:auto}#alov #alset{width:100%;margin:auto}`;document.head.appendChild(st)}catch(_){}})();

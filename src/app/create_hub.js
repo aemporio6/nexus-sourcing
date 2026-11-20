@@ -7,6 +7,13 @@ const CH_DEPT={purchases:"Buying",shipments:"Shipping",payments:"Money",stock:"S
 /* Create builds itself from the system (owner, 18 Nov 2026): every form MY TOOL has, every "+ New" line and every page of the menu
    come in by themselves, grouped under the menu button they belong to — a new module needs no Create code of its own. */
 function chGroupOf(page,newK){try{if(page&&!newK&&NAV_OF_PAGE[page]){const m=NAV_MODULES.find(m=>m.k===NAV_OF_PAGE[page]);if(m)return m.l}const g=NAV_MODULES.find(m=>m.items.some(i=>(newK&&i[3]===newK)||(page&&i[1]===page)));return g?g.l:null}catch(_){return null}}
+/* ---- the rule (owner): EVERYTHING new shows in Create by itself ----
+   A module adds its own entries with chRegister({k, title, hint, page, words, when, run}). "page" puts the entry under its own menu
+   group (so what you start from Create lands in its own module); "when" hides it for people who may not use it; "run" starts it.
+   build.py refuses to build when a module has neither a form / CREATE_REG entry / chRegister call nor a written reason. */
+const CH_EXTRA=[];
+function chRegister(it){if(!it||!it.k||!it.title)return;const i=CH_EXTRA.findIndex(x=>x.k===it.k);if(i>=0)CH_EXTRA[i]=it;else CH_EXTRA.push(it)}
+function chExtraItems(){return CH_EXTRA.filter(x=>{try{return!x.when||x.when()}catch(_){return false}}).map(x=>({key:"x:"+x.k,title:x.title,hint:x.hint||"",dept:chGroupOf(x.page||null,null)||x.dept||"Other",page:x.page||"",extra:x.k,words:(x.title+" "+(x.words||"")+" "+(x.hint||"")).toLowerCase()}))}
 function chItems(){const seen=new Set();const forms=[];
  CREATE_REG.forEach(c=>{seen.add(c.k);forms.push({key:"f:"+c.k,title:c.menu||c.l,hint:c.hint,dept:chGroupOf(null,c.k)||CH_DEPT[c.mod]||"Other",form:c.k,words:(c.l+" "+(c.menu||"")+" "+(c.hint||"")).toLowerCase()})});
  /* any form the forms engine knows that is not listed yet */try{Object.keys(SAVE).forEach(k=>{if(seen.has(k))return;seen.add(k);const col=FORM_COL[k];const t=FORM_TITLE[k]||k;forms.push({key:"f:"+k,title:"New "+t.toLowerCase(),hint:(fields(k).filter(f=>f.req).map(f=>f.l.replace(/\s*\(.*$/,"")).slice(0,4).join(" · ")),dept:chGroupOf(col&&NAV_OF_PAGE[col]===col?col:col,null)||"Other",form:k,words:(t+" "+k+" "+(col||"")).toLowerCase()})})}catch(_){}
@@ -22,11 +29,12 @@ function chItems(){const seen=new Set();const forms=[];
   {key:"v:task",title:"New task",hint:"For you or someone in the team, with a due date",dept:"Planning",page:"tasks",focus:"#tk_title",words:"task todo reminder follow up job assign"},
   {key:"v:pis",title:"Product information sheet",hint:"Read a supplier's sheet into its order and products",dept:"Data",page:"import",pis:1,words:"product information sheet packing carton supplier sheet"},
   {key:"v:views",title:"Saved view of a list",hint:"Open a list, set filters / columns, then “Save view”",dept:"Reports",page:"purchases",words:"view saved list filter columns table"}];
- return forms.concat(more.filter(m=>m.page!=="import"||can("create")).map(m=>({...m,dept:chGroupOf(m.page,null)||m.dept})),pages.filter(p=>!more.some(m=>m.page===p.page&&!m.focus&&!m.pis&&!m.drive&&!Object.keys(p.f).length)))}
+ return forms.concat(chExtraItems(),more.filter(m=>m.page!=="import"||can("create")).map(m=>({...m,dept:chGroupOf(m.page,null)||m.dept})),pages.filter(p=>!more.some(m=>m.page===p.page&&!m.focus&&!m.pis&&!m.drive&&!Object.keys(p.f).length)))}
 /* a word matches when it is inside the text, or the text has a word that starts it ("importer" finds "import", "payments" finds "payment") */
 function chHas(text,w){text=String(text).toLowerCase();if(text.includes(w))return true;return w.length>=4&&text.split(/[^a-z0-9]+/).some(tok=>tok.length>=4&&w.startsWith(tok))}
 function chMatch(it,t){if(!t)return true;return t.split(/\s+/).every(w=>chHas(it.title,w)||chHas(it.words,w)||chHas(it.dept,w))}
 function chRun(key,q){const it=chItems().find(x=>x.key===key);if(!it)return;chClose();
+ if(it.extra){const x=CH_EXTRA.find(e=>e.k===it.extra);try{if(x&&x.run)x.run(q||"");else if(it.page)go(it.page)}catch(e){console.warn("create",e);toast("Could not start that: "+(e.message||e))}return}
  if(it.form){S._chFrom=q||"";try{openNew(it.form)}finally{S._chFrom=null}return}
  if(it.nav){goHref(it.page,it.f||{});return}go(it.page);if(it.focus)setTimeout(()=>$(it.focus)?.focus(),300);if(it.pis)setTimeout(()=>{try{document.querySelector(".pis_file")?.click()}catch(_){}},350);if(it.drive)setTimeout(()=>{try{ixDrv().open=true;ixDriveRender();$("#ix_drive_link")?.focus()}catch(_){}},300)}
 function chClose(){const o=$("#chub");if(o)o.remove()}
@@ -47,7 +55,7 @@ document.addEventListener("click",e=>{const t=e.target.closest("[data-act]");if(
  if(a==="chback"){e.preventDefault();e.stopPropagation();const q=S.drawer?.ctx?._fromCreate||"";if(closeDrawer())openCreateHub(q);return}
  if(a==="sgo"){e.preventDefault();e.stopPropagation();hideSugg();$("#q").value="";let f={};try{f=JSON.parse(t.dataset.f||"{}")}catch(_){}go(t.dataset.page,Object.keys(f).length?{f}:{});return}
  if(a==="snew"){e.preventDefault();e.stopPropagation();hideSugg();$("#q").value="";chRun(t.dataset.key,"");return}},true);
-document.addEventListener("keydown",e=>{if(e.key.toLowerCase()!=="n"||e.ctrlKey||e.metaKey||e.altKey||S.drawer||$("#chub"))return;const el=e.target;if(/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)||el.isContentEditable)return;e.preventDefault();e.stopImmediatePropagation();openCreateHub()},true);
+document.addEventListener("keydown",e=>{if(String(e.key||"").toLowerCase()!=="n"||e.ctrlKey||e.metaKey||e.altKey||S.drawer||$("#chub"))return;const el=e.target;if(/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)||el.isContentEditable)return;e.preventDefault();e.stopImmediatePropagation();openCreateHub()},true);
 /* ---- search everything: pages and "create" actions on top of the records ---- */
 function chNavHits(q){const t=norm(q);if(t.length<2)return[];const out=[];NAV_MODULES.forEach(m=>m.items.forEach(([l,page,f,ck])=>{if(ck)return;const s=norm(m.l+" "+l);if(t.split(/\s+/).every(w=>chHas(s,w)))out.push({l:(m.l===l?l:m.l+" › "+l),page,f:f||{}})}));return out.slice(0,5)}
 const chShowSugg0=showSugg;

@@ -891,11 +891,15 @@ window.MYTOOL = {
       q.push("trashed=false");
       if(opts.foldersOnly) q.push("mimeType='application/vnd.google-apps.folder'");
       if(opts.since) q.push("modifiedTime > '" + opts.since + "'");
-      let out = [], pt = "";
-      do{
-        const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent(q.join(" and ")) + "&fields=nextPageToken,files(id,name,mimeType,modifiedTime,size,parents,owners(emailAddress,displayName),sharingUser(emailAddress,displayName))&pageSize=200&orderBy=folder,name" + (pt ? "&pageToken=" + pt : "") + "&supportsAllDrives=true&includeItemsFromAllDrives=true");
-        out = out.concat(j.files || []); pt = j.nextPageToken || "";
-      }while(pt && out.length < 2000);
+      const run = async (extra) => { let out = [], pt = "";
+        do{
+          const j = await gjson(API + "/drive/v3/files?q=" + encodeURIComponent(q.join(" and ")) + "&fields=nextPageToken,files(id,name,mimeType,modifiedTime,size,parents,owners(emailAddress,displayName),sharingUser(emailAddress,displayName))&pageSize=200&orderBy=folder,name" + (pt ? "&pageToken=" + pt : "") + "&supportsAllDrives=true&includeItemsFromAllDrives=true" + (extra || ""));
+          out = out.concat(j.files || []); pt = j.nextPageToken || "";
+        }while(pt && out.length < 2000);
+        return out; };
+      let out = await run("");
+      /* inside a company (shared) drive the default search can come back empty — ask across all drives once */
+      if(!out.length && parentId && parentId !== "root" && parentId !== "shared"){ try{ out = await run("&corpora=allDrives"); }catch(_){} }
       return out;
     },
     async meta(id){

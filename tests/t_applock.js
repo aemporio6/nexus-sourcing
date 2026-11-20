@@ -12,11 +12,16 @@ const{chromium}=require("playwright");
  ok(await p.evaluate(()=>getComputedStyle(document.querySelector("#view")).visibility==="hidden"),"data hidden behind the lock");
  await p.fill("#al_pw","wrong");await p.press("#al_pw","Enter");await p.waitForTimeout(500);ok(/Wrong password/.test(await p.textContent("#al_msg")),"wrong password refused");
  await p.fill("#al_pw","secret123");await p.press("#al_pw","Enter");await p.waitForTimeout(600);ok(await p.evaluate(()=>document.getElementById("alov").hidden),"right password unlocks");
- /* 20 Nov 2026: reload in the same tab within 10 min of use → not asked; a fresh tab → asked */
+ /* v2: not asked while at work — reload, other tab and back, a new tab soon after; asked after being away longer than 30 min */
+ ok(await p.evaluate(()=>{const c=JSON.parse(localStorage.getItem("mt_lock"));return c.v===2&&c.bgMin===30&&c.idleMin===60}),"default: away 30 min · untouched 1 hour");
  await p.mouse.click(5,5);await p.reload();await p.waitForFunction(()=>{try{return S.ready}catch(e){return false}});await p.waitForTimeout(800);ok(await p.evaluate(()=>!document.getElementById("alov")||document.getElementById("alov").hidden),"reload while working: not asked again");
- {const p2=await ctx.newPage();await p2.route(/fonts\.(googleapis|gstatic)/,r=>r.abort());await p2.goto("http://localhost:8093/index.html?demo");await p2.waitForTimeout(1500);ok(await p2.evaluate(()=>!!document.getElementById("alov")&&!document.getElementById("alov").hidden),"opening the app fresh (new tab) starts locked");await p2.close()}
- await p.addInitScript(()=>{try{if(sessionStorage.getItem("t_old")){sessionStorage.removeItem("t_old");sessionStorage.setItem("mt_lock_hidden",String(Date.now()-6*60000))}}catch(_){}});await p.evaluate(()=>sessionStorage.setItem("t_old","1"));await p.reload();await p.waitForTimeout(1500);ok(await p.evaluate(()=>!document.getElementById("alov").hidden),"reload after 6 min in the background: asked");
+ {const p2=await ctx.newPage();await p2.route(/fonts\.(googleapis|gstatic)/,r=>r.abort());await p2.goto("http://localhost:8093/index.html?demo");await p2.waitForTimeout(1500);ok(await p2.evaluate(()=>!document.getElementById("alov")||document.getElementById("alov").hidden),"a new tab a moment later: not asked again");await p2.close()}
+ await p.evaluate(()=>{localStorage.setItem("mt_lock_seen",String(Date.now()-10*60000));document.dispatchEvent(new Event("visibilitychange"))});await p.waitForTimeout(300);ok(await p.evaluate(()=>!document.getElementById("alov")||document.getElementById("alov").hidden),"back after 10 minutes in another tab / app: not asked");
+ await p.evaluate(()=>{localStorage.setItem("mt_lock_seen",String(Date.now()-31*60000));document.dispatchEvent(new Event("visibilitychange"))});await p.waitForTimeout(300);ok(await p.evaluate(()=>!document.getElementById("alov").hidden),"back after 31 minutes away: asked");
  await p.fill("#al_pw","secret123");await p.press("#al_pw","Enter");await p.waitForTimeout(600);
+ await p.addInitScript(()=>{try{if(sessionStorage.getItem("t_old")){sessionStorage.removeItem("t_old");localStorage.setItem("mt_lock_seen",String(Date.now()-31*60000))}}catch(_){}});await p.evaluate(()=>sessionStorage.setItem("t_old","1"));await p.reload();await p.waitForTimeout(1500);ok(await p.evaluate(()=>!document.getElementById("alov").hidden),"opening MY TOOL after 31 minutes away: asked");
+ await p.fill("#al_pw","secret123");await p.press("#al_pw","Enter");await p.waitForTimeout(600);
+ await p.evaluate(()=>{const c=JSON.parse(localStorage.getItem("mt_lock"));c.v=1;c.idleMin=5;c.bgMin=5;localStorage.setItem("mt_lock",JSON.stringify(c));return alCfg()});ok(await p.evaluate(()=>{const c=alCfg();return c.v===2&&c.bgMin===30&&c.idleMin===60}),"an older lock setting (5 min) is moved to the new timing by itself");
  /* PIN */
  await p.click("#alb");await p.click('[data-al="setup"]');await p.waitForTimeout(300);await p.fill("#als_pin","123456");await p.fill("#als_pin2","123456");await p.click('[data-als="save"]');ok(/harder to guess/.test(await p.textContent("#als_msg")),"easy PIN refused");
  await p.fill("#als_pin","482915");await p.fill("#als_pin2","482915");await p.click('[data-als="save"]');await p.waitForTimeout(1500);ok(await p.evaluate(()=>{const c=JSON.parse(localStorage.getItem("mt_lock"));return!!c.pin?.hash&&!JSON.stringify(c).includes("482915")}),"PIN set, stored only as a hash");
@@ -31,7 +36,7 @@ const{chromium}=require("playwright");
  await p.click("#alb");await p.click('[data-al="lock"]');await p.waitForTimeout(300);for(let i=0;i<5;i++){if(await p.$("#al_pin")){await p.fill("#al_pin","000000");await p.waitForTimeout(1100)}}
  ok(await p.evaluate(()=>!document.getElementById("al_pin")&&/PIN is off/.test(document.getElementById("alov").innerText)),"5 wrong PINs → PIN is off");await p.fill("#al_pw","secret123");await p.press("#al_pw","Enter");await p.waitForTimeout(800);ok(await p.evaluate(()=>document.getElementById("alov").hidden&&JSON.parse(localStorage.getItem("mt_lock")).pinFails===0),"password still unlocks and the PIN works again");
  /* background / idle */
- await p.evaluate(()=>{alLast=Date.now()-16*60000});await p.waitForTimeout(16000);ok(await p.evaluate(()=>!document.getElementById("alov").hidden),"locks itself after 15 min untouched");
+ await p.evaluate(()=>{alLast=Date.now()-61*60000});await p.waitForTimeout(16000);ok(await p.evaluate(()=>!document.getElementById("alov").hidden),"locks itself after 1 hour open but untouched");
  /* forgot → lock removed, signed out (demo: reload) */
  await p.click('[data-al="forgot"]');await p.waitForTimeout(2000);ok(await p.evaluate(()=>!localStorage.getItem("mt_lock")),"Forgot removes the lock (sign in with Google again)");
  /* fingerprint / face with a virtual authenticator */
@@ -46,5 +51,5 @@ const{chromium}=require("playwright");
   ok(await q.evaluate(()=>!!document.querySelector("#alov #alset")&&/Protect MY TOOL/.test(document.body.innerText)&&!document.querySelector('[data-als="close"]')),"real app: device-lock setup comes first and cannot be closed");
   await q.fill("#als_pw","secret123");await q.fill("#als_pw2","secret123");await q.click('[data-als="save"]');await q.waitForTimeout(800);
   ok(await q.evaluate(()=>!!document.getElementById("mt_signin")&&!!document.getElementById("mt_signin_own")),"then it asks which data: company or own Drive");
-  const q2=await c3.newPage();await q2.goto("http://localhost:8098/index.html");await q2.waitForTimeout(1500);ok(await q2.evaluate(()=>!document.getElementById("alov").hidden&&/locked/.test(document.body.innerText)),"next open: locked until the device lock / PIN / password");await c3.close()}
+  await q.evaluate(()=>localStorage.setItem("mt_lock_seen",String(Date.now()-31*60000)));const q2=await c3.newPage();await q2.goto("http://localhost:8098/index.html");await q2.waitForTimeout(1500);ok(await q2.evaluate(()=>!document.getElementById("alov").hidden&&/locked/.test(document.body.innerText)),"next open: locked until the device lock / PIN / password");await c3.close()}
  ok(!errs.length,"no page errors "+errs.join(" | "));await b.close();process.exit(fails?1:0)})();
