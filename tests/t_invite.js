@@ -1,0 +1,23 @@
+/* Invite a person: who → what → send (21 Nov 2026). Demo :8093 */
+const{chromium}=require("playwright");
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:950}});const errs=[];p.on("pageerror",e=>errs.push(e.message));p.on("dialog",d=>d.accept());let fails=0;const ok=(c,m)=>{console.log((c?"PASS ":"FAIL ")+m);if(!c)fails++};
+ await p.addInitScript(()=>{window.__mails=[];window.__DEMO_GW=async(op,x)=>{if(op==="mailOut"){window.__mails.push(x);return{ok:true}}if(op==="inboxList"||op==="accessList")return{ok:true,list:[]};return{ok:true}}});
+ await p.route(/fonts\.(googleapis|gstatic)/,r=>r.abort());await p.goto("http://localhost:"+(process.env.PORT||8093)+"/index.html?demo");await p.waitForFunction(()=>{try{return S.ready}catch(e){return false}});await p.waitForTimeout(4500);
+ await p.evaluate(()=>{go("home");render()});await p.waitForTimeout(600);ok(await p.evaluate(()=>!!document.querySelector("#view [data-ivopen]")),"Home (Owner): “Invite a person” button");
+ await p.click("#view [data-ivopen]");await p.waitForSelector("#ivwin");
+ await p.click('#ivwin [data-iv="next1"]');await p.waitForTimeout(300);ok(await p.evaluate(()=>S.iv.step===1),"a name and a Google email are needed first");
+ await p.fill("#iv_name","Ali VA");await p.fill("#iv_email","Ali.New@Gmail.com");await p.fill("#iv_phone","+92 300 1234567");await p.click('#ivwin [data-iv="next1"]');await p.waitForTimeout(400);
+ ok(await p.evaluate(()=>S.iv.step===2&&document.querySelectorAll("#ivwin .ivcard").length>=5),"step 2: pick what they will do — templates as cards (or roles myself)");
+ await p.click('#ivwin [data-ivtpl="tpl_va_orders"]');await p.waitForTimeout(300);
+ const cid=await p.evaluate(()=>(SET().companies||[])[0].id);await p.click("#ivwin .pkm [data-pkm-open]");await p.click("#ivwin [data-pkm-all]");await p.click(`#ivwin [data-pkm-v="${cid}"]`);await p.click("#ivwin [data-pkm-ok]");await p.waitForTimeout(400);
+ ok(await p.evaluate(c=>JSON.stringify(S.iv.companies)===JSON.stringify([c]),cid),"companies chosen in the same window");
+ await p.click('#ivwin [data-iv="save"]');await p.waitForTimeout(1800);
+ const u=await p.evaluate(()=>SET().users.find(x=>x.uid==="ali.new@gmail.com"));
+ ok(!!u&&u.name==="Ali VA"&&u.phone==="+92 300 1234567"&&u.roles.includes("va")&&u.areas?.payments==="hide"&&JSON.stringify(u.companies)===JSON.stringify([cid]),"saved: the person is in People & Access with the template, the company and their number");
+ ok(await p.evaluate(()=>S.iv.step===3&&/Sign in with Google/.test(document.querySelector("#ivwin .ulmsg").textContent)&&/ali\.new@gmail\.com/.test(document.querySelector("#ivwin .ulmsg").textContent)),"step 3: the message with the link and the steps");
+ ok(await p.evaluate(()=>/wa\.me\/923001234567\?text=/.test(document.querySelector('#ivwin [data-iv="sentwa"]').href)),"WhatsApp goes straight to their number with the message");
+ await p.click('#ivwin [data-iv="mail"]');await p.waitForTimeout(1500);ok(await p.evaluate(()=>window.__mails.length===1&&window.__mails[0].to==="ali.new@gmail.com"&&!!SET().users.find(x=>x.uid==="ali.new@gmail.com").invitedAt),"Email it: sent by MY TOOL, invited date kept");
+ await p.click('#ivwin [data-iv="open"]');await p.waitForTimeout(800);ok(await p.evaluate(()=>!!document.getElementById("ppwin")&&/Ali VA/.test(document.querySelector("#ppwin h2").innerText)),"Open their window to fine-tune");
+ await p.evaluate(()=>ppClose());await p.evaluate(()=>{go("setup");S.setupTab="users";render()});await p.waitForTimeout(600);ok(await p.evaluate(()=>!!document.querySelector(".card [data-ivopen]")),"People & Access: “＋ Invite a person”");
+ await p.keyboard.press("n");await p.waitForTimeout(500);await p.fill("#ch_q","invite");await p.waitForTimeout(200);ok(await p.evaluate(()=>/Invite a person/.test([...document.querySelectorAll("#chub .ch-item b")][0]?.innerText||"")),"Create: “Invite a person” first when typing invite");
+ ok(!errs.length,"no page errors "+errs.join(" | "));await b.close();console.log(fails?`\n${fails} FAILED`:"\nALL PASS");process.exit(fails?1:0)})();
