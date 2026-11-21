@@ -10,7 +10,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Arial,"PingFang SC","Microso
 main{max-width:520px;margin:0 auto;padding:22px 16px 40px}h1{font-size:20px;margin:0 0 4px}p{line-height:1.5;margin:6px 0}
 .card{background:#fff;border:1px solid #d9e2ec;border-radius:14px;padding:16px;margin-top:14px}
 label{display:block;font-weight:600;font-size:14px;margin:12px 0 4px}
-select,textarea,input[type=file]{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #c5d0db;border-radius:10px;background:#fff}
+select,textarea,details{margin-top:12px}summary{cursor:pointer;color:#2f5f8f;font-weight:600}input[type=url],input[type=text]{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #c5d0db;border-radius:10px;background:#fff}input[type=file]{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #c5d0db;border-radius:10px;background:#fff}
 button{width:100%;margin-top:16px;padding:14px;font:inherit;font-weight:700;color:#fff;background:#2f5f8f;border:0;border-radius:12px;cursor:pointer}button[disabled]{opacity:.5;cursor:default}
 .s{font-size:13px;color:#5b6b7b}.ok{color:#1b7a3d}.bad{color:#b3261e}ul{padding-left:18px}li{margin:4px 0;word-break:break-word}[hidden]{display:none}
 </style></head><body><main>
@@ -24,6 +24,10 @@ button{width:100%;margin-top:16px;padding:14px;font:inherit;font-weight:700;colo
   <div id="pow" hidden><label for="po">Which order? · 哪个订单</label><select id="po"><option value="">Not sure / several · 不确定</option></select></div>
   <label for="k">What is it? · 类型</label><select id="k"><option>Invoice (PI / CI)</option><option>Packing list</option><option>Product information</option><option>Freight / shipping</option><option>Inspection / photos</option><option>Other</option></select>
   <label for="n">Note (optional) · 备注</label><textarea id="n" rows="2" maxlength="300"></textarea>
+  <details id="bigd"><summary>File bigger than 20 MB? Send a download link · 文件超过 20 MB？请发送下载链接</summary>
+   <label for="lk">Download link (WeTransfer, Google Drive, Baidu, Dropbox …) · 下载链接</label><input id="lk" type="url" placeholder="https://…" autocomplete="off">
+   <label for="ln">File name (optional) · 文件名</label><input id="ln" type="text" maxlength="100" placeholder="e.g. Inspection report VAL-104">
+  </details>
   <button id="b" type="button">Send · 发送</button>
   <ul id="o" class="s" aria-live="polite"></ul>
  </div>
@@ -41,8 +45,10 @@ button{width:100%;margin-top:16px;padding:14px;font:inherit;font-weight:700;colo
  function call(body){return fetch(GW,{method:"POST",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body)}).then(function(r){return r.json()})}
  call({op:"supplierInfo",tok:tok}).then(function(j){if(j&&j.ok){$("who").textContent=j.name||"";if(j.orders&&j.orders.length){var sel=$("po");j.orders.forEach(function(o){var op=document.createElement("option");op.value=o.k;op.textContent=o.ref;sel.appendChild(op)});$("pow").hidden=false}$("wait").hidden=true;$("form").hidden=false}else dead(j&&j.expired?"It has expired.":"It was switched off or replaced.")})
   .catch(function(){dead("The upload service could not be reached from this network (it needs access to Google). Try another network or a VPN, or send the files by email. · 无法连接上传服务（需要访问 Google）。")});
- $("b").onclick=function(){var fs=[].slice.call($("f").files);if(!fs.length){alert("Choose a file first · 请先选择文件");return}var b=$("b");b.disabled=true;var o=$("o");o.textContent="";var i=0;
-  function next(){if(i>=fs.length){b.disabled=false;$("f").value="";return}var f=fs[i++];var li=document.createElement("li");li.textContent=f.name+" …";o.appendChild(li);
+ $("f").onchange=function(){var big=[].slice.call($("f").files).filter(function(f){return f.size>20*1024*1024});if(big.length){$("bigd").open=true;$("ln").value=big[0].name;alert(big[0].name+" is bigger than 20 MB. Please upload it to WeTransfer / Google Drive / Baidu and paste the download link below.\n文件超过 20 MB，请上传到网盘后粘贴下载链接。")}};
+ $("b").onclick=function(){var fs=[].slice.call($("f").files).filter(function(f){return f.size<=20*1024*1024});var lk=($("lk").value||"").trim();if(!fs.length&&!lk){alert("Choose a file or paste a download link · 请选择文件或粘贴下载链接");return}var b=$("b");b.disabled=true;var o=$("o");o.textContent="";var i=0;
+  function sendLink(done){if(!lk){done();return}var li=document.createElement("li");li.textContent="🔗 "+($("ln").value||lk)+" …";o.appendChild(li);call({op:"supplierUpload",tok:tok,link:lk,name:$("ln").value,kind:$("k").value,note:$("n").value,po:$("po").value}).then(function(j){if(j&&j.ok){li.className="ok";li.textContent="✓ 🔗 "+(j.name||lk)+" — received · 已收到";$("lk").value="";$("ln").value=""}else{li.className="bad";li.textContent="✗ "+((j&&j.error)||"not sent")}done()}).catch(function(){li.className="bad";li.textContent="✗ not sent — check the network";done()})}
+  function next(){if(i>=fs.length){sendLink(function(){b.disabled=false;$("f").value=""});return}var f=fs[i++];var li=document.createElement("li");li.textContent=f.name+" …";o.appendChild(li);
    if(f.size>20*1024*1024){li.className="bad";li.textContent="✗ "+f.name+" — bigger than 20 MB";next();return}
    var r=new FileReader();r.onerror=function(){li.className="bad";li.textContent="✗ "+f.name+" — could not be read";next()};
    r.onload=function(){var b64=String(r.result).split(",")[1]||"";call({op:"supplierUpload",tok:tok,name:f.name,mime:f.type,b64:b64,kind:$("k").value,note:$("n").value,po:$("po").value}).then(function(j){if(j&&j.ok){li.className="ok";li.textContent="✓ "+f.name+" — received · 已收到"}else{li.className="bad";li.textContent="✗ "+f.name+" — "+((j&&j.error)||"not sent")}next()}).catch(function(){li.className="bad";li.textContent="✗ "+f.name+" — not sent (network)";next()})};

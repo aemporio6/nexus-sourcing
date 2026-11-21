@@ -43,9 +43,12 @@ NEW.drive.n=100;NEW.ctx.DriveApp.createFolder("MY TOOL – FILES");[a1,a2].forEa
   ok(NEW.call({op:"supplierInfo",tok}).ok===true,"the gateway recognises the link made in the app (same hash)");
   NEW.call({op:"supplierUpload",tok,name:"WAP-CI-247.pdf",mime:"application/pdf",b64:Buffer.from("%PDF demo").toString("base64"),kind:"Invoice (PI / CI)",note:"247 ctn"})}
  await p.evaluate(()=>{S.drawer=null;go("home")});await p.evaluate(()=>slLoad(true));await p.waitForTimeout(800);await p.evaluate(()=>render());await p.waitForTimeout(400);
- ok(await p.evaluate(()=>/From suppliers \(1\)/.test($("#slin")?.innerText||"")&&/WAP-CI-247\.pdf/.test($("#slin").innerText)&&/247 ctn/.test($("#slin").innerText)),"Home shows “From suppliers (1)” with file, kind and note");
- await p.click('#slin [data-slin="attach"]');await p.waitForTimeout(1200);
- ok(await p.evaluate(s=>(docOf("parties",s.id).links||[]).some(l=>/WAP-CI-247\.pdf/.test(l.label)&&/drive\.google\.com/.test(l.url))&&!document.querySelector("#slin"),sup),"Attach: the file is linked on the supplier’s record and leaves the list");
+ ok(await p.evaluate(()=>/From suppliers — to check \(1\)/.test($("#sbcard")?.innerText||"")),"Home shows “From suppliers — to check (1)” (nothing enters MY TOOL by itself)");
+ await p.click('#sbcard [data-sbopen=""]');await p.waitForSelector("#sbwin");await p.waitForTimeout(400);
+ ok(await p.evaluate(()=>/WAP-CI-247\.pdf/.test($("#sbwin").innerText)&&/247 ctn/.test($("#sbwin").innerText)),"the Supplier inbox shows the file, its kind and note");
+ await p.click('#sbwin [data-sb="check"]');await p.waitForTimeout(300);await p.selectOption('#sbwin [data-sbd="col"]',"parties");await p.waitForTimeout(300);await p.click('#sbwin [data-sb="approve"]');await p.waitForTimeout(1500);
+ ok(await p.evaluate(s=>(docOf("parties",s.id).links||[]).some(l=>/WAP-CI-247\.pdf/.test(l.label)&&/drive\.google\.com/.test(l.url))&&!document.querySelector("#sbwin .sbitem"),sup),"Approve onto the supplier's record: the file is linked there and leaves the inbox");
+ await p.evaluate(()=>sbClose());
  ok(NEW.call({op:"inboxList",token:"T"}).list.length===0,"the inbox on the server is empty again");
  await p.evaluate(s=>openDoc("parties",s.id),sup);await p.waitForTimeout(600);await p.click('.drawer [data-ulopen]');await p.waitForSelector("#ulwin");await p.waitForTimeout(400);await p.click('#ulwin [data-sl="off"]');await p.waitForTimeout(800);ok(await p.evaluate(s=>docOf("parties",s.id).upload.on===false,sup),"Switch off works");
  /* after a move: a file attached THROUGH MY TOOL in the old account is fetched by the Owner's device and stored in the new one */

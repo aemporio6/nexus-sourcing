@@ -9,7 +9,7 @@ const CO_KEY={"x:invite":"People & access","x:people":"People & access","x:addpe
  "v:tools":"Home & planning","v:planner":"Home & planning","v:calendar":"Home & planning","v:task":"Home & planning",
  "x:history":"Reports","v:views":"Reports","x:bin":"Settings","x:lock":"Settings","x:locknow":"Settings","x:movedata":"Settings","x:centre":"Settings","x:listadd":"Settings"};
 const CO_FIRST={"x:invite":0,"x:addperson":1,"x:people":2,"x:accessreq":3,"v:import":1,"x:impmany":2,"v:pis":3,"v:task":1};
-const CO_GONE=new Set(["x:user","x:access","x:fineaccess"]);   /* replaced by "People & access" */
+const CO_GONE=new Set(["x:user","x:access","x:fineaccess","x:supfiles"]);   /* replaced by "People & access" */
 const CO_NAME={Shipping:"Shipments",Partners:"Suppliers",Data:"Import & files",Planning:"Home & planning",Home:"Other"};
 function coSection(it){if(CO_KEY[it.key])return CO_KEY[it.key];if(it.page==="import")return"Import & files";if(["home","attention","tasks","calendar","planner","tools"].includes(it.page))return"Home & planning";const d=CO_NAME[it.dept]||it.dept;return CO_ORDER.includes(d)?d:"Other"}
 const coItems0=chItems;

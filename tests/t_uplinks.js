@@ -9,7 +9,7 @@ const{chromium}=require("playwright");
  await p.click("[data-ulopenall]");await p.waitForSelector("#ulwin");await p.waitForTimeout(800);
  ok(await p.evaluate(c=>document.querySelectorAll("#ulwin .ulrow").length>=5&&!!document.querySelector(`#ulwin [data-ulp="${c}"]`)&&/1 new file/.test(document.querySelector(`#ulwin [data-ulp="${c}"]`).innerText),sup),"one window lists every supplier / forwarder with the state of their link and new files");
  await p.click(`#ulwin [data-ulp="${sup}"]`);await p.waitForTimeout(500);
- ok(await p.evaluate(()=>/No link/.test(document.querySelector("#ulwin").innerText)&&!!document.querySelector('#ulwin [data-sl="make"]')&&/PI-123\.pdf[\s\S]*for PO-26-0065/.test(document.querySelector("#ulwin").innerText)),"the supplier's own window: no link yet, Make, and the file received (with its order)");
+ ok(await p.evaluate(()=>/No link/.test(document.querySelector("#ulwin").innerText)&&!!document.querySelector('#ulwin [data-sl="make"]')&&/1 file from [\s\S]* wait to be checked/.test(document.querySelector("#ulwin").innerText)&&!!document.querySelector("#ulwin [data-sbopen]")),"the supplier's own window: no link yet, Make, and “1 file waits to be checked” → Supplier inbox");
  await p.click('#ulwin [data-sl="make"]');await p.waitForTimeout(1800);
  const u=await p.evaluate(c=>live(D.parties).find(x=>x.code===c).upload,sup);
  ok(u&&u.on&&u.t&&u.h&&u.exp&&u.orders===true,"Make: the link is saved (with its secret for the Owners), on, with an end date and the order list on");

@@ -91,8 +91,12 @@ function handle(req){
     case "inboxList": if(!(who.admin || who.perms.create || who.perms.edit)) fail(403, "your role cannot see the supplier inbox"); return { ok: true, list: inboxList(), email: email };
     case "inboxFile": { if(!(who.admin || who.perms.create || who.perms.edit)) fail(403, "your role cannot open the supplier inbox"); var xf = inboxGet(req.id); var xb = xf.getBlob(); if(xb.getBytes().length > MAX_UPLOAD) fail(413, "file too big");
       return { ok: true, name: xf.getName(), mime: xb.getContentType(), b64: Utilities.base64Encode(xb.getBytes()), email: email }; }
-    case "inboxDone": { if(!(who.admin || who.perms.create || who.perms.edit)) fail(403, "your role cannot change the supplier inbox"); var df = inboxGet(req.id);
-      if(req.attach){ df.moveTo(filesFolder()); return { ok: true, id: df.getId(), url: df.getUrl(), email: email }; }
+    case "inboxDone": { if(!(who.admin || who.perms.approve)) fail(403, "only the Owner or a person allowed to approve can approve or reject supplier files"); var df = inboxGet(req.id);
+      var dd = {}; try{ dd = JSON.parse(df.getDescription() || "{}"); }catch(_){}
+      dd.decidedBy = email; dd.decidedAt = new Date().toISOString();
+      if(req.reject){ dd.rejected = String(req.reject).replace(/[\u0000-\u001f<>]/g, " ").slice(0, 200); df.setDescription(JSON.stringify(dd)); var rp = df.getParents().next(), rn = rp.getFoldersByName("rejected"); df.moveTo(rn.hasNext() ? rn.next() : rp.createFolder("rejected")); return { ok: true, rejected: true, email: email }; }
+      if(req.attach && dd.link){ dd.approved = String(req.to || "").slice(0, 80); df.setDescription(JSON.stringify(dd)); var lp = df.getParents().next(), ln = lp.getFoldersByName("done"); df.moveTo(ln.hasNext() ? ln.next() : lp.createFolder("done")); return { ok: true, url: dd.link, link: true, email: email }; }
+      if(req.attach){ dd.approved = String(req.to || "").slice(0, 80); df.setDescription(JSON.stringify(dd)); df.moveTo(filesFolder()); return { ok: true, id: df.getId(), url: df.getUrl(), email: email }; }
       var pf = df.getParents().next(), dn = pf.getFoldersByName("done"); df.moveTo(dn.hasNext() ? dn.next() : pf.createFolder("done")); return { ok: true, email: email }; }
     case "upload":  if(!(who.admin || who.perms.create || who.perms.edit)) fail(403, "your role cannot add files"); return upload(req, email);
     default: fail(400, "unknown op " + req.op);
@@ -487,6 +491,7 @@ function inboxRoot(){ var it = DriveApp.getFoldersByName(INBOX_FOLDER), me = sel
 function upSafe(s, n){ return String(s || "").replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/^\.+/, "").slice(0, n || 120); }
 /* called by upload.html through doPost — the only thing an upload link can do */
 function supplierUpload(p){ p = p || {}; var who = upFind(p.tok); if(!who || who.expired) throw new Error("This upload link is not active. Please ask for a new one.");
+  if(p.link) return supplierLink(p, who);
   var name = upSafe(String(p.name || "").split(/[\\/]/).pop(), 120); if(!UP_TYPES.test(name)) throw new Error("This type of file cannot be sent here (PDF, Excel, CSV, Word, pictures only).");
   var bytes = Utilities.base64Decode(String(p.b64 || "")); if(!bytes.length) throw new Error("The file is empty."); if(bytes.length > MAX_UPLOAD) throw new Error("The file is bigger than 20 MB.");
   var cache = CacheService.getScriptCache(), day = Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd"), k1 = "up:" + day + ":" + who.code, k2 = "up:" + day + ":all", n1 = +(cache.get(k1) || 0), n2 = +(cache.get(k2) || 0);
@@ -499,8 +504,18 @@ function supplierUpload(p){ p = p || {}; var who = upFind(p.tok); if(!who || who
   try{ logLine("ok supplierUpload " + who.code + " " + name + " " + bytes.length + "b"); }catch(_){}
   notifyOwner("file:" + who.code, 60, "MY TOOL · " + who.name + " sent a file", who.name + " (" + who.code + ") sent “" + name + "”" + (p.kind ? " — " + String(p.kind).slice(0, 30) : "") + (po ? " for order " + po : "") + (p.note ? "\nNote: " + String(p.note).slice(0, 300) : "") + "\n\nOpen MY TOOL › Home › From suppliers: " + APP_URL + "\n(At most one email an hour per supplier.)");
   return { ok: true, name: name, left: who.max - n1 - 1 }; }
+/* a file too big to send (e.g. a 400 MB inspection report): the supplier gives a download link instead (21 Nov 2026) */
+function supplierLink(p, who){ var url = String(p.link || "").trim(); if(!/^https?:\/\/[^\s<>"]{4,900}$/i.test(url)) throw new Error("Please paste a full download link (starting with https://).");
+  var cache = CacheService.getScriptCache(), day = Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd"), k1 = "up:" + day + ":" + who.code, n1 = +(cache.get(k1) || 0); if(n1 >= who.max) throw new Error("Today's limit for this link is reached. Please try again tomorrow.");
+  var nm = upSafe(String(p.name || "").trim() || url.replace(/^https?:\/\//, "").split(/[/?#]/)[0], 100), po = String(p.po || ""); if(!(who.orders || []).some(function(o){ return o.k === po; })) po = "";
+  var root = inboxRoot(), fn = upSafe(who.code + " " + who.name, 80), it = root.getFoldersByName(fn), fo = it.hasNext() ? it.next() : root.createFolder(fn);
+  var f = fo.createFile(upSafe("LINK " + nm, 110) + ".txt", url + "\n", "text/plain");
+  f.setDescription(JSON.stringify({ via: "upload link", party: who.code, po: po, link: url, kind: String(p.kind || "").replace(/[\u0000-\u001f<>]/g, " ").slice(0, 30), note: String(p.note || "").replace(/[\u0000-\u001f<>]/g, " ").slice(0, 300), at: new Date().toISOString() }));
+  cache.put(k1, String(n1 + 1), 21600);
+  notifyOwner("file:" + who.code, 60, "MY TOOL · " + who.name + " sent a download link", who.name + " (" + who.code + ") sent a link for a big file: " + nm + (po ? " (order " + po + ")" : "") + "\n" + url + "\n\nCheck and approve it: " + APP_URL);
+  return { ok: true, name: nm, link: true }; }
 function inboxList(){ var out = [], it = DriveApp.getFoldersByName(INBOX_FOLDER), me = selfEmail(), root = null; while(it.hasNext()){ var r = it.next(); try{ if(r.getOwner().getEmail().toLowerCase() !== me) continue; }catch(_){} root = r; break; } if(!root) return out;
-  var subs = root.getFolders(); while(subs.hasNext()){ var fo = subs.next(), nm = fo.getName(); if(nm === "done") continue; var fs = fo.getFiles(); while(fs.hasNext() && out.length < 200){ var f = fs.next(), d = {}; try{ d = JSON.parse(f.getDescription() || "{}"); }catch(_){}
-      out.push({ id: f.getId(), name: f.getName(), size: f.getSize(), at: d.at || f.getDateCreated().toISOString(), party: d.party || nm.split(" ")[0], kind: d.kind || "", note: d.note || "", po: d.po || "", folder: nm }); } }
+  var subs = root.getFolders(); while(subs.hasNext()){ var fo = subs.next(), nm = fo.getName(); if(nm === "done" || nm === "rejected") continue; var fs = fo.getFiles(); while(fs.hasNext() && out.length < 200){ var f = fs.next(), d = {}; try{ d = JSON.parse(f.getDescription() || "{}"); }catch(_){}
+      out.push({ id: f.getId(), name: f.getName(), size: f.getSize(), at: d.at || f.getDateCreated().toISOString(), party: d.party || nm.split(" ")[0], kind: d.kind || "", note: d.note || "", po: d.po || "", folder: nm, link: d.link || "", mime: f.getMimeType() }); } }
   out.sort(function(a, b){ return a.at < b.at ? 1 : -1; }); return out; }
 function inboxGet(id){ var f; try{ f = DriveApp.getFileById(String(id || "")); }catch(e){ fail(404, "file not found"); } var ok = false, p = f.getParents(); while(p.hasNext()){ var fo = p.next(), g = fo.getParents(); while(g.hasNext()){ if(g.next().getName() === INBOX_FOLDER) ok = true; } } if(!ok) fail(403, "not a supplier upload"); return f; }
