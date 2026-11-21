@@ -36,6 +36,15 @@ const{chromium}=require("playwright");
  console.log("   dropdowns seen:",walk.n,JSON.stringify(walk.kinds),"with ＋ Add from the centre:",walk.addable);
  ok(walk.n>40&&!walk.unknown.length,"every dropdown on every page and every Settings tab is known to the centre ("+walk.n+")"+(walk.unknown.length?" — unknown on: "+[...new Set(walk.unknown)].join(", "):""));
  ok(!walk.noadd.length,"every dropdown of an addable kind has ＋ Add"+(walk.noadd.length?" — missing: "+walk.noadd.slice(0,6).join(", "):""));
+ /* a new user starts filled in */
+ await openUsers();const nU=await p.evaluate(()=>SET().users.length);await p.click('[data-sadd="user"]');await p.waitForFunction(n=>SET().users.length===n+1&&SET().users[n].role==="viewer",nU,{timeout:8000}).catch(()=>{});
+ ok(await p.evaluate(n=>{const u=SET().users[n];return!!u&&u.role==="viewer"&&u.defaults?.company===DEF().company},nU),"a new user row starts as View only with the default company filled in");
+ /* every list filter can take several */
+ await p.evaluate(()=>{document.activeElement&&document.activeElement.blur&&document.activeElement.blur()});await p.waitForTimeout(300);
+ const fl=await p.evaluate(async()=>{const out={miss:[],n:0};for(const pg of ["purchases","shipments","payments","stock","products","parties","reports","log"]){go(pg);await new Promise(r=>setTimeout(r,350));document.querySelectorAll("select[data-f]").forEach(s=>{const k=s.dataset.f;if(["date","year","isnew","sort"].includes(k)||s.disabled)return;const real=[...s.options].filter(o=>o.value&&!o.value.startsWith("__")&&!o.value.includes("|")).length;if(real<=2)return;out.n++;if(!s.querySelector('option[value="__multi"]'))out.miss.push(pg+"/"+k)})}return out});
+ ok(fl.n>20&&!fl.miss.length,`every list filter has “all” and “＋ Choose several…” (${fl.n} filters)`+(fl.miss.length?" — missing: "+fl.miss.join(", "):""));
+ const un=await p.evaluate(()=>{const cs=[...new Set(live(D.purchases).map(x=>x.cur).filter(Boolean))].slice(0,2);if(cs.length<2)return null;const cnt=v=>{S.f.purchases={cur:v};return LIST.purchases.rows().length};const a=cnt(cs[0]),b=cnt(cs[1]),ab=cnt(cs.join("|"));S.f.purchases={};const sk=[...new Set(live(D.purchases).flatMap(x=>(x.lines||[]).map(l=>l.sku)).filter(Boolean))].slice(0,2);const c2=v=>{S.f.purchases={sku:v};return LIST.purchases.rows().length};const s1=c2(sk[0]),s12=c2(sk.join("|"));S.f.purchases={};return{a,b,ab,s1,s12}});
+ ok(!un||(un.ab===un.a+un.b&&un.s12>=un.s1),"two currencies chosen together = both lists added up; two products chosen together works too "+JSON.stringify(un));
  /* fixed kinds never get Add; forms are not doubled */
  ok(await p.evaluate(()=>{const d=pickDef("list:poStatus");return!d||d.fixed}),"status lists are fixed (chosen, never added to from a dropdown)");
  await p.evaluate(()=>openForm("purchase",{force:true}));await p.waitForTimeout(900);
