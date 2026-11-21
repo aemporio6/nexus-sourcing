@@ -2,7 +2,8 @@
 const{chromium}=require("playwright");
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on("pageerror",e=>errs.push(e.message));p.on("dialog",d=>d.accept());let fails=0;const ok=(c,m)=>{console.log((c?"PASS ":"FAIL ")+m);if(!c)fails++};
  await p.route(/fonts\.(googleapis|gstatic)/,r=>r.abort());await p.goto("http://localhost:8093/index.html?demo");await p.waitForFunction(()=>{try{return S.ready}catch(e){return false}});await p.waitForTimeout(5500);
- ok(await p.evaluate(()=>!!SET().roles2&&!!SET().roles.partner&&!!SET().roles.viewer&&items("role").some(r=>r.id==="partner")&&DEF().trashDays>=90),"Partner and View-only roles exist; Recycle Bin keeps 90 days");
+ await p.waitForFunction(()=>!!SET().roles2,null,{timeout:15000}).catch(()=>{});
+ ok(await p.evaluate(()=>!!SET().roles2&&!!SET().roles.partner&&!!SET().roles.viewer&&items("role").some(r=>r.id==="partner")&&DEF().trashDays>=90),"Partner and View-only roles exist; Recycle Bin keeps 90 days "+JSON.stringify(await p.evaluate(()=>[SET().roles2,!!SET().roles.partner,!!SET().roles.viewer,DEF().trashDays])));
  ok(await p.evaluate(()=>{const r=SET().roles.partner;return r.bank&&r.edit&&r.create&&r.deleteAny&&r.restore&&r.approve&&r.export&&!r.setup}),"Partner: everything ticked except Settings / Users");
  /* a partner user */
  await p.evaluate(async()=>{const us=JSON.parse(JSON.stringify(SET().users||[]));us.push({name:"Omer Khan",uid:"omer@example.com",role:"partner",active:true});await setupPatch(["users"],us,"t")});

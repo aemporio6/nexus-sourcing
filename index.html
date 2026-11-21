@@ -8321,7 +8321,8 @@ function ppCoTxt(u){return Array.isArray(u.companies)?(u.companies.map(c=>(SET()
 function ppM(u){const m={};A3_AREAS.forEach(([c])=>{const ar=a3Area(c,u);const see=ar!=="hide";const a=u.acts&&u.acts[c]||{};m[c]={see};PP_ACTS.forEach(([k,,g])=>{m[c][k]=see&&ar!=="view"&&a[k]!==false&&userPerm(u,g)})});return m}
 function ppApply(u,m){u.perms={...(u.perms||{})};u.areas={...(u.areas||{})};const acts={};
  PP_ACTS.forEach(([k,,g])=>{const any=A3_AREAS.some(([c])=>m[c].see&&m[c][k]);if(any!==userRoles(u).some(r=>rolePerm(r,g)))u.perms[g]=any;else delete u.perms[g];A3_AREAS.forEach(([c])=>{if(any&&m[c].see&&!m[c][k]){(acts[c]=acts[c]||{})[k]=false}})});
- A3_AREAS.forEach(([c])=>{if(!m[c].see)u.areas[c]="hide";else delete u.areas[c]});
+ const anyAct=PP_ACTS.some(([,,g])=>userRoles(u).some(r=>rolePerm(r,g))||(u.perms||{})[g]);
+ A3_AREAS.forEach(([c])=>{if(!m[c].see)u.areas[c]="hide";else if(anyAct&&!PP_ACTS.some(([k])=>m[c][k])){u.areas[c]="view";if(acts[c])delete acts[c]}else delete u.areas[c]});
  if(Object.keys(acts).length)u.acts=acts;else delete u.acts;if(!Object.keys(u.areas).length)delete u.areas;if(!Object.keys(u.perms).length)delete u.perms}
 async function ppSave(i,fn,label){const us=JSON.parse(JSON.stringify(SET().users||[]));const u=us[i];if(!u)return false;fn(u,us);if(Array.isArray(u.roles)&&u.roles.length)u.role=u.roles[0];const lab=label||`Access of ${u.name||u.uid} changed`;const ok=await setupPatch(["users"],us,lab);if(ok!==false){try{logEv("access","setup",String(u.uid||u.name||""),lab)}catch(_){}}ppDraw();return ok!==false}
 /* ----- the list ----- */
@@ -8331,10 +8332,10 @@ function ppListHtml(){const us=SET().users||[];const q=norm(S.ppQ||"");const row
   <div class="pplist">${rows.map(line).join("")||'<div class="status" style="padding:12px 14px">Nobody found.</div>'}</div>
   <p class="note" style="padding:8px 14px">Tap a person to open their own window: roles, companies, departments, dates, what they can do in each module, and their history. People sign in with their own Google account; the Drive is never shared with them.</p></div>`}
 const ppUsers0=sUsers;
-sUsers=function(){let old="";try{old=ppUsers0.apply(this,arguments)}catch(e){console.warn(e)}let rest="";
- try{const d=document.createElement("div");d.innerHTML=old;d.querySelector("#arcard")?.remove();d.querySelectorAll(".r2wrap").forEach(x=>x.remove());const t=d.querySelector("table");if(t){const w=t.closest(".tablewrap,.tw")||t;w.remove()}d.querySelectorAll('[data-sadd="user"]').forEach(x=>x.remove());rest=d.innerHTML}catch(e){rest=""}
+sUsers=function(){let old="",mvHtml="";try{old=ppUsers0.apply(this,arguments)}catch(e){console.warn(e)}let rest="";
+ try{const d=document.createElement("div");d.innerHTML=old;d.querySelector("#arcard")?.remove();d.querySelectorAll(".r2wrap").forEach(x=>x.remove());const t=d.querySelector("table");if(t){const w=t.closest(".tablewrap,.tw")||t;w.remove()}d.querySelectorAll('[data-sadd="user"]').forEach(x=>x.remove());const mv=d.querySelector("[data-mv]")?.closest(".card");if(mv){mvHtml=mv.outerHTML;mv.remove()}rest=d.innerHTML}catch(e){rest=""}
  let req="";try{if(typeof arHtml==="function"&&typeof arCan==="function"&&arCan()){arLoad();const x=arHtml();if(x)req=`<div class="card" id="arcard" style="margin-bottom:12px">${x}</div>`}}catch(_){}
- return req+ppListHtml()+`<details class="card" style="margin-top:12px;padding:6px 12px" ${S.ppRolesOpen?"open":""} data-pproles><summary><b>Roles — what each role allows</b> <span class="status">· and moving the data</span></summary>${rest}</details>`};
+ return req+ppListHtml()+`<details class="card" style="margin-top:12px;padding:6px 12px" ${S.ppRolesOpen?"open":""} data-pproles><summary><b>Roles — what each role allows</b></summary>${rest}</details>${mvHtml?`<div style="margin-top:12px">${mvHtml}</div>`:""}`};
 /* ----- one person's window ----- */
 function ppOpen(i){S.pp={i};ppDraw()}
 function ppClose(){S.pp=null;document.getElementById("ppwin")?.remove();render()}
@@ -8718,5 +8719,5 @@ async function ensureSetup(){try{if(!D.setup||!can("setup"))return;const ps=list
 boot();
 
 </script>
-<script>window.MYTOOL_VERSION='8e7e92e452';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
+<script>window.MYTOOL_VERSION='8085f54782';if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(r=>{r.addEventListener('updatefound',()=>{const w=r.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller){const d=document.createElement('div');d.id='mt_upd';d.innerHTML='<b>New version of MY TOOL is ready</b> <button type="button">Reload</button>';d.querySelector('button').onclick=()=>location.reload();document.body.appendChild(d)}})});setInterval(()=>r.update().catch(()=>{}),30*60*1000)}).catch(()=>{})}</script>
 </body></html>
