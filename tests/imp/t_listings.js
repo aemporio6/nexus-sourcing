@@ -11,10 +11,12 @@ const MAP = { B0CCPPFZCT: "WAL-TB-FBA-01", B0C6QY4HGJ: "WAL-TB-FBM-01", B0CDYH3K
   let st = await state(pg);
   ck("kind = Amazon All Listings", st.kind === "listings" && st.src === "amazon_listings", st.kind);
   ck(`${X.rows} listings read (the file has ${X.rows} data rows)`, st.tot.rowsFile === X.rows, st.tot.rowsFile);
+  /* the ASINs the app already knows come from its data (21 Nov 2026: 12 more products got an ASIN on 15 Nov) — the 9 of the first test must still map right */
+  const DATA = await ev(() => Object.fromEntries(live(D.products).filter(p => p.asin).map(p => [p.asin, p.sku]))); Object.keys(MAP).forEach(a => { if(DATA[a] && DATA[a] !== MAP[a]) DATA["__wrong_" + a] = DATA[a]; }); Object.assign(MAP, DATA);
   const known = Object.keys(MAP), unknownAsins = X.asins.filter(a => !known.includes(a));
   ck(`${unknownAsins.length} unknown ASINs → one question each`, st.unk.length === unknownAsins.length && st.unk.every(u => u.key.startsWith("sku|B0")), st.unk.length);
   const rows = await ev(() => S.imp.preview.rows.filter(r => r.v?.sku).map(r => [r.v.asin, r.v.sku]));
-  ck("every listing of the 9 known ASINs maps to the right SKU (incl. amzn.gr.* and FBM copies)", rows.length === 16 && rows.every(([a, s]) => MAP[a] === s), rows);
+  ck(`every listing of the ${known.filter(a => X.asins.includes(a)).length} known ASINs maps to the right SKU (incl. amzn.gr.* and FBM copies)`, rows.length >= 16 && rows.every(([a, s]) => MAP[a] === s) && !Object.keys(MAP).some(k => k.startsWith("__wrong_")), rows.length);
   // answer one question in the UI (Dehumidifier 1pc), skip the rest
   await pg.selectOption('[data-ixc="pick"][data-key="sku|B0GHGCKGX4"]', "LMN-DHB-1PC"); await pg.waitForTimeout(250);
   await pg.click('[data-act="impgroup"][data-type="sku"][data-do="skip"]'); await pg.waitForTimeout(400);

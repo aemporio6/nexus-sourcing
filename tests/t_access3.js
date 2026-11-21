@@ -3,7 +3,7 @@ const{chromium}=require("playwright");
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on("pageerror",e=>errs.push(e.message));p.on("dialog",d=>d.accept());let fails=0;const ok=(c,m)=>{console.log((c?"PASS ":"FAIL ")+m);if(!c)fails++};
  await p.route(/fonts\.(googleapis|gstatic)/,r=>r.abort());await p.goto("http://localhost:8093/index.html?demo");await p.waitForFunction(()=>{try{return S.ready}catch(e){return false}});await p.waitForTimeout(5500);
  await p.evaluate(async()=>{const us=JSON.parse(JSON.stringify(SET().users||[]));us.push({name:"Omer Khan",uid:"omer@example.com",role:"partner",active:true});await setupPatch(["users"],us,"t");go("setup")});await p.waitForTimeout(500);await p.evaluate(()=>document.querySelector('[data-setup="users"]')?.click());await p.waitForTimeout(700);
- const i=await p.evaluate(()=>SET().users.findIndex(u=>u.uid==="omer@example.com"));
+ const i=await p.evaluate(()=>SET().users.findIndex(u=>u.uid==="omer@example.com"));await p.evaluate(i=>ppOpen(i),i);await p.waitForTimeout(500);
  ok(await p.evaluate(i=>!!document.querySelector(`[data-a3="${i}|areas|payments"]`)&&document.querySelectorAll(`[data-a3^="${i}|areas|"]`).length>=9,i),"each person has every area with Edit / View only / Hidden");
  await p.evaluate(i=>{document.querySelector(`[data-a3det="${i}"]`).open=true},i);await p.selectOption(`[data-a3="${i}|areas|shipments"]`,"view");await p.waitForTimeout(900);await p.selectOption(`[data-a3="${i}|areas|payments"]`,"hide");await p.waitForTimeout(900);
  await p.selectOption(`[data-a3form="${i}"]`,"purchases");await p.waitForTimeout(600);
@@ -11,7 +11,8 @@ const{chromium}=require("playwright");
  ok(await p.evaluate(i=>!!document.querySelector(`[data-a3="${i}|fields|purchases.lines.u"]`),i),"a column inside the lines (unit price) can be limited too");
  await p.selectOption(`[data-a3="${i}|fields|purchases.lines.u"]`,"hide");await p.waitForTimeout(900);await p.selectOption(`[data-a3="${i}|fields|purchases.notes"]`,"view");await p.waitForTimeout(900);
  ok(await p.evaluate(i=>{const u=SET().users[i];return u.areas.payments==="hide"&&u.areas.shipments==="view"&&u.fields["purchases.lines.u"]==="hide"&&u.fields["purchases.notes"]==="view"},i),"saved on the person");
- ok(await p.evaluate(()=>/Does not see: Money.*View only: Shipments.*1 field hidden, 1 view-only/.test([...document.querySelectorAll(".r2say")].pop().innerText)),"the plain-words line says it");
+ ok(await p.evaluate(()=>/Does not see: Money.*View only: Shipments.*1 field hidden, 1 view-only/.test(document.querySelector("#ppwin .ppsays").innerText)),"the plain-words line says it");
+ await p.evaluate(()=>ppClose());
  /* as that person */
  await p.evaluate(()=>{window.__o={o:S.isOwner,u:uid,r:S.role,rr:S.realRole};S.isOwner=false;uid="omer@example.com";S.role=S.realRole="partner"});
  const po=await p.evaluate(()=>{const x=live(D.purchases).find(p=>(p.lines||[]).length&&p.status!=="closed");return{no:x.no,u:x.lines[0].u,notes:x.notes||""}});

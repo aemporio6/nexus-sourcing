@@ -1,31 +1,29 @@
 /* The centre of every dropdown (21 Nov 2026): ＋ Add on Setup / Users dropdowns, several-at-once with All, every dropdown on
    every page is known to the centre, forms are not doubled. Demo :8093 */
 const{chromium}=require("playwright");
-(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on("pageerror",e=>errs.push(e.message));p.on("dialog",d=>d.accept("Dialog Co"));let fails=0;const ok=(c,m)=>{console.log((c?"PASS ":"FAIL ")+m);if(!c)fails++};
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:900}});const errs=[];p.on("pageerror",e=>errs.push(e.message));p.on("dialog",d=>d.accept(globalThis.__ans||"Dialog Co"));let fails=0;const ok=(c,m)=>{console.log((c?"PASS ":"FAIL ")+m);if(!c)fails++};
  await p.route(/fonts\.(googleapis|gstatic)/,r=>r.abort());await p.goto("http://localhost:"+(process.env.PORT||8093)+"/index.html?demo");await p.waitForFunction(()=>{try{return S.ready}catch(e){return false}});await p.waitForTimeout(5500);
  await p.evaluate(async()=>{const us=JSON.parse(JSON.stringify(SET().users||[]));us.push({name:"Pick Tester",uid:"pick@example.com",role:"viewer",active:true});await setupPatch(["users"],us,"t")});
  const openUsers=async()=>{await p.evaluate(()=>{go("setup");S.setupTab="users";render()});await p.waitForTimeout(500);await p.evaluate(()=>{const t=document.querySelector('[data-setup="users"]');t&&t.click()});await p.waitForTimeout(700)};
  await openUsers();const i=await p.evaluate(()=>SET().users.findIndex(u=>u.uid==="pick@example.com"));
- ok(await p.evaluate(i=>{const s=document.querySelector(`[data-sp="users.${i}.role"]`);return!!s&&s.dataset.pk==="list:role"&&!!s.querySelector('option[value="__pickadd"]')},i),"Users: the Role dropdown knows it chooses a role and ends with ＋ Add");
- /* add a role from the dropdown */
- await p.selectOption(`[data-sp="users.${i}.role"]`,"__pickadd");await p.waitForTimeout(300);
- ok(await p.evaluate(i=>!!document.querySelector(".pkadd-in")&&document.querySelector(`[data-sp="users.${i}.role"]`).value==="viewer"&&SET().users[i].role==="viewer",i),"choosing ＋ Add opens a small box; nothing is saved yet and the old choice stays");
- await p.fill(".pkadd-in","Auditor");await p.click("[data-pkok]");await p.waitForTimeout(2500);
- ok(await p.evaluate(i=>items("role").some(r=>r.label==="Auditor")&&SET().users[i].role===items("role").find(r=>r.label==="Auditor").id,i),"the new role is saved in the centre (Setup list) and chosen for this person");
- ok(await p.evaluate(()=>[...document.querySelectorAll("[data-r2role]")].every(s=>[...s.options].some(o=>o.textContent==="Auditor"))),"…and is at once in every other role dropdown");
+ const openP=async()=>{await openUsers();await p.evaluate(i=>ppOpen(i),i);await p.waitForTimeout(500)};await openP();
+ ok(await p.evaluate(()=>{const s=document.querySelector('#ppwin select[data-sp$=".defaults.company"]');return!!s&&s.dataset.pk==="company"&&!!s.querySelector('option[value="__pickadd"]')}),"the person's window: the company dropdown knows it chooses a company and ends with ＋ Add");
+ globalThis.__ans="Auditor";await p.click("#ppwin [data-pprolenew]");await p.waitForTimeout(2500);globalThis.__ans=null;
+ ok(await p.evaluate(i=>{const a=items("role").find(r=>r.label==="Auditor");return!!a&&userRoles(SET().users[i]).includes(a.id)&&userRoles(SET().users[i]).length===2},i),"＋ New role: saved in the centre (Setup list) and given to this person next to the role they had");
+ ok(await p.evaluate(()=>[...document.querySelectorAll("#ppwin [data-pprole]")].some(b=>/Auditor/.test(b.innerText)&&b.classList.contains("on"))&&pickDef("list:role").opts().some(o=>o[1]==="Auditor")),"…and is at once a role everywhere (chips, every role dropdown)");
  /* add a company from the default-company dropdown */
- await openUsers();await p.selectOption(`[data-sp="users.${i}.defaults.company"]`,"__pickadd");await p.waitForTimeout(300);await p.fill(".pkadd-in","Pick Trading Ltd");await p.keyboard.press("Enter");await p.waitForTimeout(2500);
+ await openP();await p.selectOption(`#ppwin [data-sp="users.${i}.defaults.company"]`,"__pickadd");await p.waitForTimeout(300);await p.fill(".pkadd-in","Pick Trading Ltd");await p.keyboard.press("Enter");await p.waitForTimeout(2500);
  const cid=await p.evaluate(()=>(SET().companies||[]).find(c=>c.name==="Pick Trading Ltd")?.id);
  ok(!!cid&&await p.evaluate(([i,cid])=>SET().users[i].defaults?.company===cid,[i,cid]),"a new company from a dropdown: saved in Setup › companies and chosen");
  /* cancel */
- await openUsers();await p.selectOption(`[data-sp="users.${i}.defaults.bank"]`,"__pickadd");await p.waitForTimeout(300);const nb=await p.evaluate(()=>(SET().banks||[]).length);await p.click("[data-pkx]");await p.waitForTimeout(300);
+ await openP();await p.selectOption(`#ppwin [data-sp="users.${i}.defaults.bank"]`,"__pickadd");await p.waitForTimeout(300);const nb=await p.evaluate(()=>(SET().banks||[]).length);await p.click("[data-pkx]");await p.waitForTimeout(300);
  ok(await p.evaluate(nb=>!document.querySelector(".pkadd")&&(SET().banks||[]).length===nb,nb),"✕ cancels: nothing added");
  /* several at once + All */
- ok(await p.evaluate(i=>{const w=document.querySelector(`.pkm[data-pkm="users.${i}.companies"]`);return!!w&&/All companies/.test(w.innerText)},i),"Access card: “Companies this person sees” — default All");
+ ok(await p.evaluate(i=>{const w=document.querySelector(`.pkm[data-pkm="users.${i}.companies"]`);return!!w&&/All companies/.test(w.innerText)},i),"the person's window: Companies — default All");
  await p.click(`.pkm[data-pkm="users.${i}.companies"] [data-pkm-open]`);await p.waitForTimeout(200);await p.click(`.pkm[data-pkm="users.${i}.companies"] [data-pkm-all]`);await p.waitForTimeout(100);
  await p.click(`.pkm[data-pkm="users.${i}.companies"] [data-pkm-v="${cid}"]`);await p.click(`.pkm[data-pkm="users.${i}.companies"] [data-pkm-ok]`);await p.waitForTimeout(2500);
  ok(await p.evaluate(([i,cid])=>JSON.stringify(SET().users[i].companies)===JSON.stringify([cid]),[i,cid]),"untick All, tick one company, Done → saved for that person only");
- ok(await p.evaluate(()=>/Pick can see only Pick Trading Ltd/.test(document.querySelector(".r2wrap").innerText)),"plain-words line says which companies");
+ ok(await p.evaluate(()=>/Pick can see only Pick Trading Ltd/.test(document.querySelector("#ppwin .ppsays").innerText)),"plain-words line says which companies");
  await p.click(`.pkm[data-pkm="users.${i}.companies"] [data-pkm-open]`);await p.waitForTimeout(200);await p.click(`.pkm[data-pkm="users.${i}.companies"] [data-pkm-all]`);await p.click(`.pkm[data-pkm="users.${i}.companies"] [data-pkm-ok]`);await p.waitForTimeout(2500);
  ok(await p.evaluate(i=>SET().users[i].companies==null,i),"tick All again → back to everything (also companies added later)");
  /* every dropdown on every page is known to the centre */
@@ -37,8 +35,9 @@ const{chromium}=require("playwright");
  ok(walk.n>40&&!walk.unknown.length,"every dropdown on every page and every Settings tab is known to the centre ("+walk.n+")"+(walk.unknown.length?" — unknown on: "+[...new Set(walk.unknown)].join(", "):""));
  ok(!walk.noadd.length,"every dropdown of an addable kind has ＋ Add"+(walk.noadd.length?" — missing: "+walk.noadd.slice(0,6).join(", "):""));
  /* a new user starts filled in */
- await openUsers();const nU=await p.evaluate(()=>SET().users.length);await p.click('[data-sadd="user"]');await p.waitForFunction(n=>SET().users.length===n+1&&SET().users[n].role==="viewer",nU,{timeout:8000}).catch(()=>{});
- ok(await p.evaluate(n=>{const u=SET().users[n];return!!u&&u.role==="viewer"&&u.defaults?.company===DEF().company},nU),"a new user row starts as View only with the default company filled in");
+ await p.evaluate(()=>ppClose());await openUsers();const nU=await p.evaluate(()=>SET().users.length);await p.click('[data-ppadd]');await p.waitForSelector("#ppwin",{timeout:8000});await p.waitForTimeout(800);
+ ok(await p.evaluate(n=>{const u=SET().users[n];return!!u&&u.role==="viewer"&&u.defaults?.company===DEF().company&&S.pp?.i===n&&document.querySelector('#ppwin [data-pprole="viewer"]').classList.contains("on")},nU),"＋ Add person opens their own window: View only, default company filled in");
+ await p.evaluate(()=>ppClose());
  /* every list filter can take several */
  await p.evaluate(()=>{document.activeElement&&document.activeElement.blur&&document.activeElement.blur()});await p.waitForTimeout(300);
  const fl=await p.evaluate(async()=>{const out={miss:[],n:0};for(const pg of ["purchases","shipments","payments","stock","products","parties","reports","log"]){go(pg);await new Promise(r=>setTimeout(r,350));document.querySelectorAll("select[data-f]").forEach(s=>{const k=s.dataset.f;if(["date","year","isnew","sort"].includes(k)||s.disabled)return;const real=[...s.options].filter(o=>o.value&&!o.value.startsWith("__")&&!o.value.includes("|")).length;if(real<=2)return;out.n++;if(!s.querySelector('option[value="__multi"]'))out.miss.push(pg+"/"+k)})}return out});

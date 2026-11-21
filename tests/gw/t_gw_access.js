@@ -4,10 +4,19 @@ const seedFile = JSON.parse(fs.readFileSync(process.env.SEED_FILE, "utf8")); con
 const main = seedData.setup.main || seedData.setup; const cos = (main.companies || []).map(c => c.id);
 const byCo = {}; Object.values(seedData.purchases).forEach(p => { if(p.account) byCo[p.account] = (byCo[p.account] || 0) + 1; });
 const coA = Object.keys(byCo).sort((a, b) => byCo[b] - byCo[a])[0], coB = Object.keys(byCo).filter(c => c !== coA)[0] || cos.filter(c => c !== coA)[0];
-main.users = (main.users || []).concat([{ name: "Fin", uid: "finance@x.com", role: "finance", active: true }, { name: "OneCo", uid: "oneco@x.com", role: "partner", active: true, companies: [coA] }, { name: "NoCo", uid: "noco@x.com", role: "partner", active: true, companies: [] }]);
+main.lists.partyType = main.lists.partyType || { items: [] };
+const pays = Object.values(seedData.payments); const dOf = r => { const pa = Object.values(seedData.parties).find(x => x.code === r.party || x.id === r.party); if(pa){ const t = (main.lists.partyType.items || []).find(i => i.id === pa.type); return (t && t.dept) || "other"; } return r.dept || "other"; };
+const depCount = {}; pays.forEach(r => { const d = dOf(r); depCount[d] = (depCount[d] || 0) + 1; }); const depA = Object.keys(depCount).sort((a, b) => depCount[b] - depCount[a])[0];
+main.roles.va = main.roles.va || { create: true, edit: true }; main.roles.finance = main.roles.finance || { bank: true, approve: true, create: true, edit: true };
+main.users = (main.users || []).concat([{ name: "Fin", uid: "finance@x.com", role: "finance", active: true }, { name: "OneCo", uid: "oneco@x.com", role: "partner", active: true, companies: [coA] }, { name: "NoCo", uid: "noco@x.com", role: "partner", active: true, companies: [] },
+  { name: "Multi", uid: "multi@x.com", role: "viewer", roles: ["viewer", "finance"], active: true },
+  { name: "Later", uid: "later@x.com", role: "partner", active: true, from: "2099-01-01" },
+  { name: "Dept", uid: "dept@x.com", role: "partner", active: true, departments: [depA] },
+  { name: "NoNewPay", uid: "nonew@x.com", role: "partner", active: true, acts: { payments: { create: false, del: false } } }]);
+main.roles.viewer = main.roles.viewer || {};
 main.roles = main.roles || {}; main.roles.partner = { bank: true, create: true, edit: true, deleteAny: true, restore: true, approve: true, export: true, setup: false };
 const seed = { format: "mytool-1", schema: 1, savedBy: "aemporio6@gmail.com", data: seedData, tomb: {}, revs: {} };
-const tokens = { T_A: { email: "aemporio6@gmail.com" }, T_FIN: { email: "finance@x.com" }, T_ONE: { email: "oneco@x.com" }, T_NO: { email: "noco@x.com" }, T_X: { email: "stranger@x.com" }, T_Y: { email: "other@x.com" } };
+const tokens = { T_MULTI: { email: "multi@x.com" }, T_LATER: { email: "later@x.com" }, T_DEPT: { email: "dept@x.com" }, T_NN: { email: "nonew@x.com" }, T_A: { email: "aemporio6@gmail.com" }, T_FIN: { email: "finance@x.com" }, T_ONE: { email: "oneco@x.com" }, T_NO: { email: "noco@x.com" }, T_X: { email: "stranger@x.com" }, T_Y: { email: "other@x.com" } };
 for(let i = 0; i < 25; i++) tokens["T_S" + i] = { email: "s" + i + "@x.com" };
 let fails = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if(!c) fails++; }; const clone = o => JSON.parse(JSON.stringify(o));
 const G = makeGateway(seed, tokens);
@@ -53,4 +62,15 @@ ok(Object.keys(after.payments).length === Object.keys(all.payments).length && Ob
 if(coB){ r = put("T_ONE", d => { d.purchases[anyVisible].account = coB; }); ok(r.status === 403, "they cannot move an order into a company they do not work for");
   r = put("T_ONE", d => { d.purchases["PO-TEST-X"] = { id: "PO-TEST-X", no: "PO-TEST-X", account: coB, lines: [] }; }); ok(r.status === 403, "…nor create one there"); }
 r = put("T_ONE", d => { d.purchases["PO-TEST-Y"] = { id: "PO-TEST-Y", no: "PO-TEST-Y", account: coA, lines: [], status: "draft" }; }); ok(r.ok, "they can create an order in their own company");
+/* ---- several roles, start date, departments, per-module switches (21 Nov 2026) ---- */
+{ const put2 = (tok, fn) => { const c = G.call({ op: "read", token: tok }); if(!c.file) return c; const nb = clone(c.file); fn(nb.data); return G.call({ op: "write", token: tok, base: c.version, body: nb }); };
+  const firstPay = Object.keys(G.call({ op: "read", token: "T_A" }).file.data.payments)[0];
+  r = put2("T_MULTI", d => { d.payments[firstPay].notes = "multi"; }); ok(r.ok, "View only + Finance: the Finance ticks count (a payment can be changed)");
+  r = G.call({ op: "read", token: "T_LATER" }); const r2 = put2("T_LATER", d => { const k = Object.keys(d.purchases)[0]; d.purchases[k].notes = "later"; }); ok(r2.status === 403, "a start date in the future: no saving before it");
+  const dv = G.call({ op: "read", token: "T_DEPT" }).file.data.payments; ok(Object.keys(dv).length === depCount[depA] && Object.keys(dv).length < pays.length, `departments: only that department's payments are sent (${Object.keys(dv).length} of ${pays.length}, "${depA}")`);
+  r = put2("T_DEPT", d => { const k = Object.keys(d.payments)[0]; d.payments[k].notes = "dept"; }); const all2 = G.call({ op: "read", token: "T_A" }).file.data.payments; ok(r.ok && Object.keys(all2).length === pays.length, "…their save keeps every other department's payment");
+  r = put2("T_NN", d => { d.payments["PAY-NEW-X"] = { id: "PAY-NEW-X", no: "PAY-NEW-X", amount: 1 }; }); ok(r.status === 403, "Money › Create switched off: a new payment is refused at the gateway");
+  r = put2("T_NN", d => { const k = Object.keys(d.payments)[0]; d.payments[k].deletedAt = new Date().toISOString(); }); ok(r.status === 403, "Money › Delete switched off: deleting is refused");
+  r = put2("T_NN", d => { const k = Object.keys(d.payments)[1]; d.payments[k].notes = "allowed"; }); ok(r.ok, "Money › Change still on: changing works");
+  r = put2("T_NN", d => { d.purchases["PO-NN-1"] = { id: "PO-NN-1", no: "PO-NN-1", account: coA, lines: [] }; }); ok(r.ok, "…and other modules are not affected (a new order is fine)"); }
 console.log(fails ? `\n${fails} FAILED` : "\nALL PASS"); process.exit(fails ? 1 : 0);

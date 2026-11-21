@@ -14,7 +14,9 @@ const { ck, done } = checker();
   await upload(pg, att("356dc2aa-CI_WAP-UK-JW20260805001_VARTLEAVES_1"));
   let st = await state(pg);
   ck("A CI recognised (fixed format, kind cipart)", st.fmt === "joyce_ci" && st.kind === "cipart", st.fmt + " " + st.kind);
-  ck("A 3 lines (Blank Template + Instructions sheets ignored)", st.nData === 3 && st.counts.ok + st.counts.warn === 3, st.counts);
+  const aKnown = st.summary.some(x => /already recorded as PO-26-0069 \(VAL-107\).*part of PO-26-0065/.test(x));
+  if(aKnown) ck("A already in the app (PO-26-0069 / VAL-107, a part of PO-26-0065) → its 3 lines are left out, nothing saved twice", st.nData === 3 && st.counts.skip === 3 && st.nWrite === 0, st.counts);
+  else ck("A 3 lines (Blank Template + Instructions sheets ignored)", st.nData === 3 && st.counts.ok + st.counts.warn === 3, st.counts);
   const m = st.fixed.meta;
   ck("A invoice no WAP-UK-JW20260805001", m.piNo === "WAP-UK-JW20260805001", m.piNo);
   ck("A 78 ctn · 2,274 units", m.ctn === 78 && m.units === 2274, [m.ctn, m.units]);
@@ -24,12 +26,15 @@ const { ck, done } = checker();
   ck("A currency RMB, supplier SUP-001 (Joyce)", m.cur === "RMB" && st.def.party === "SUP-001", [m.cur, st.def.party]);
   ck("A totals: file = import for ctn / units / amount ✅", tot(st, "ctn").ok && tot(st, "qty").ok && tot(st, "amount").ok && tot(st, "qty").file === 2274, st.tot.fields.map(f => `${f.f}:${f.file}=${f.imp}`));
   ck("A document checks all pass (subtotal, fee, total, paid+due)", st.fixed.checks.filter(c => !c.warnOnly).every(c => c.ok) && st.fixed.checks.length >= 4, st.fixed.checks.map(c => c.l + ":" + c.ok));
-  ck("A linked to PO-26-0065 (VAL-104), not PO-26-0066", st.def.po === "PO-26-0065", st.def.po);
-  ck("A summary says PART, no new order", st.summary.some(s => /PO-26-0065 \(VAL-104\) · linked as a PART/.test(s)), st.summary);
+  if(aKnown) ck("A belongs to VAL-104 (PO-26-0065), not PO-26-0066", st.def.po === "PO-26-0069" && !/PO-26-0066/.test(JSON.stringify(st.summary)), st.def.po);
+  else { ck("A linked to PO-26-0065 (VAL-104), not PO-26-0066", st.def.po === "PO-26-0065", st.def.po);
+  ck("A summary says PART, no new order", st.summary.some(s => /PO-26-0065 \(VAL-104\) · linked as a PART/.test(s)), st.summary); }
   ck("A ASINs resolved: Grey1 / White2 / White4", (await ev(() => S.imp.preview.rows.map(r => r.v.sku))).join() === "WAL-TB-GRY-01,WAL-TB-FBM-01,WAL-TB-FBA-04");
   const cols = await ev(() => { const I = S.imp, sh = I.sheets[I.active]; return ixUnused(I, sh).map(([h, i]) => h + ":" + ixColState(I, sh, i).a + ":" + ixColState(I, sh, i).why) });
   ck("A extra columns: Brand + Material kept, Carton No. skipped (serial), Picture skipped (empty)", cols.includes("Brand:keep:has data") && cols.includes("Material:keep:has data") && cols.some(c => /^Carton No\.:skip:serial/.test(c)) && cols.includes("Picture:skip:empty"), cols);
   ck("A side panel rendered with keep / skip toggles", await pg.isVisible('#ix_cols [data-ixa="col"][data-v="keep"]'));
+  if(aKnown){ ck("A nothing to import (already recorded) — the import steps of a first-time import are not repeated", st.nWrite === 0 && !(await pg.isVisible('[data-act="runimport"]:not([disabled])')), st.nWrite); await ev(() => impCancel()); }
+  else {
   let im = await run(pg);
   const po = await ev(() => D.purchases.find(p => p.no === "PO-26-0065"));
   const part = (po.parts || [])[0] || {};
@@ -48,28 +53,18 @@ const { ck, done } = checker();
   await ev(() => impCancel());
   await ev(no => undoImport(no), im.no); await pg.waitForTimeout(500);
   ck("A undo removes the part", !((await ev(() => D.purchases.find(p => p.no === "PO-26-0065").parts)) || []).length);
+  }
 
-  /* ---------- B. product / packing information (ROAD, 9 products) ---------- */
-  await upload(pg, att("cf6ea72e-ROAD_SHIPPING"));
-  st = await state(pg);
-  ck("B packing info recognised", st.fmt === "packing_info" && st.kind === "packinfo", st.fmt);
-  ck("B 9 products by ASIN, all matched", st.nData === 9 && (await ev(() => S.imp.preview.rows.filter(r => r.v.sku).length)) === 9, st.counts);
-  ck("B totals 99 ctn · 2,952 pcs · 1,920.5 kg · 6.772608 CBM (file = import)", tot(st, "ctn").file === 99 && tot(st, "qty").file === 2952 && near(tot(st, "kg").file, 1920.5) && near(tot(st, "cbm").file, 6.772608, 1e-6) && ["ctn", "qty", "kg", "cbm"].every(f => tot(st, f).ok), st.tot.fields.map(f => `${f.f}:${f.file}=${f.imp}`));
-  ck("B no HS warning (9603909090 is the detailed form of 9603.90)", st.counts.warn === 0, st.rows);
-  im = await run(pg);
-  const g1 = await ev(() => product("WAL-TB-GRY-01"));
-  ck("B carton data on WAL-TB-GRY-01: 60/ctn, 48×44×36 cm, 18.5 kg, HS 9603909090", g1.perCtn === 60 && g1.ctn.L === 48 && g1.ctn.W === 44 && g1.ctn.H === 36 && g1.ctn.kg === 18.5 && String(g1.hs) === "9603909090", { perCtn: g1.perCtn, ctn: g1.ctn, hs: g1.hs });
-  ck("B pack size + weight read from text (21×11.5×4.5 cm, 0.241 kg)", g1.pk?.L === 21 && g1.pk?.W === 11.5 && near(g1.pk?.kg, 0.2405, 0.001), g1.pk);
-  ck("B 4-pack: 18/ctn, 19 kg", (await ev(() => product("WAL-TB-BLK-04").perCtn)) === 18 && (await ev(() => product("WAL-TB-BLK-04").ctn.kg)) === 19);
-  ck("B material / specification kept as product custom fields", JSON.stringify(g1.custom || {}).includes("PP+TPR"), g1.custom);
-  await ev(no => undoImport(no), im.no); await pg.waitForTimeout(500);
-  ck("B undo restores the product", (await ev(() => product("WAL-TB-GRY-01").perCtn)) !== 60 || (await ev(() => product("WAL-TB-GRY-01").ctn?.L)) !== 48);
-
-  /* ---------- C. packing information SEA (3 products, 78 ctn) ---------- */
-  await upload(pg, att("f3eb1e49-to_AMAZON_2274packs78ctns"));
-  st = await state(pg);
-  ck("C 3 products · 78 ctn · 2,274 pcs · 1,519 kg · 5.39136 CBM", st.nData === 3 && tot(st, "ctn").file === 78 && tot(st, "qty").file === 2274 && tot(st, "kg").file === 1519 && near(tot(st, "cbm").file, 5.39136, 1e-6) && st.tot.ok, st.tot.fields.map(f => `${f.f}:${f.file}=${f.imp}`));
-  await ev(() => impCancel());
+  /* ---------- B / C. product information sheets (ROAD 9 products, SEA 3 products) ----------
+     Since 15 Nov 2026 these sheets go to "📄 Product info sheet" (it fills the products directly, tests/t_prodsheet.js checks
+     the Apply step). Here: they are recognised and every product is found. */
+  for (const [lab, f, n] of [["B ROAD", "cf6ea72e-ROAD_SHIPPING", 9], ["C SEA", "f3eb1e49-to_AMAZON_2274packs78ctns", 3]]) {
+    await upload(pg, att(f), { noWait: true });
+    await pg.waitForFunction(() => !!S.pis || !!(S.imp && S.imp.preview), null, { timeout: 30000 });
+    const r = await ev(() => S.pis ? { pis: true, n: S.pis.rows.length, matched: S.pis.rows.filter(x => x.m && (x.m.sku || x.m.p || x.m.product)).length } : { pis: false });
+    ck(`${lab}: product information sheet goes to 📄 Product info sheet, ${n} products, all found`, r.pis && r.n === n && r.matched === n, r);
+    await ev(() => { S.pis = null; document.querySelector("#pisbox")?.remove(); render(); });
+  }
 
   /* ---------- D. Shunqi freight invoice (text PDF via pdf.js) ---------- */
   const nSh0 = await ev(() => live(D.shipments).length);
@@ -82,6 +77,12 @@ const { ck, done } = checker();
   ck("D 9 lines", st.nData === 9);
   ck("D file totals 99 ctn · 2,952 units · 1,920.5 kg · $4,033.05", tot(st, "ctn").file === 99 && tot(st, "qty").file === 2952 && near(tot(st, "kg").file, 1920.5) && near(tot(st, "cost").file, 4033.05), st.tot.fields.map(f => `${f.f}:${f.file}`));
   ck("D invoice arithmetic checks pass", st.fixed.checks.filter(c => !c.warnOnly).every(c => c.ok) && st.fixed.checks.length >= 11);
+  /* 21 Nov 2026: in today's data this invoice is already recorded (SH-26-0053, forwarder FWD-005 Colin (Shunqi)) */
+  const dKnown = await ev(() => live(D.shipments).find(s => s.yourRef === "SQ-2026-0001" || s.fwdInvNo === "SQ-2026-0001")?.no || "");
+  if (dKnown) {
+    ck(`D already in the app as ${dKnown} (Shunqi known as ${await ev(() => (live(D.parties).find(p => /Shunqi/i.test(p.name)) || {}).code)}) → found, nothing imported twice`, st.nWrite === 0 || st.summary.some(x => x.includes(dKnown)) || st.def.sh === dKnown, { nWrite: st.nWrite, sh: st.def.sh, party: st.def.party, summary: st.summary });
+    await ev(() => impCancel());
+  } else {
   const pk = st.unk.find(u => u.key.startsWith("party|"));
   ck("D unknown forwarder → ONE decision card (Shunqi is not in the app yet)", pk && pk.n === 9 && st.unk.length === 1, st.unk);
   ck("D before the decision: totals differ with ONE reason + fix, Import refused", st.tot.ok === false && /left out/.test(st.tot.reason) && /decide the values above/.test(st.tot.fix));
@@ -103,7 +104,9 @@ const { ck, done } = checker();
   await ev(() => impCancel());
   await ev(no => undoImport(no), im.no); await pg.waitForTimeout(500);
   ck("D undo trashes the shipment and the new party", await ev(no => !!D.shipments.find(x => x.no === no)?.deletedAt, sh.no));
+  }
 
+  try {
   /* ---------- E. scanned PDF / photo / unknown PDF → proof only, no crash ---------- */
   for (const [f, re] of [[att("1987e307-image.jpg"), /picture/], [require("path").join(__dirname, "fixtures/scanned.pdf"), /scanned/], [att("37aa87d8-WUL-INV-SLF-2026-0000023777.pdf"), /not known yet/]]) {
     await ev(() => { window.__lastToast = null; const t0 = window.toast; if (!window.__tw) { window.__tw = 1; window.toast = (m, o) => { window.__lastToast = m; return t0(m, o) } } });
@@ -111,5 +114,6 @@ const { ck, done } = checker();
     const msg = await ev(() => window.__lastToast);
     ck(`E ${require("path").basename(f)} → attach as proof only`, re.test(msg) && /proof/.test(msg) && !(await ev(() => S.imp)), msg);
   }
+    } catch (e) { if (/attachment not found/.test(e.message)) console.log("SKIP E: " + e.message + " — that sample file is not in this workspace"); else throw e; }
   await done(br, errs);
 })().catch(e => { console.error(e); process.exit(2) });

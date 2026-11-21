@@ -121,11 +121,15 @@ function whoIs(email, json){
 }
 /* a person's permissions (20 Nov 2026): the role's ticks, then their own ticks from Setup › Users › Access; nothing after the end date */
 function userPerms(u, roles){
-  var base = roles[u.role] || (u.role === "owner" ? { setup: true, approve: true, bank: true, deleteAny: true, edit: true, create: true, export: true, restore: true } : {});
-  var p = {}, k; for(k in base) p[k] = !!base[k];
+  /* several roles (21 Nov 2026): the ticks of all of them add up */
+  var rs = (u.roles && u.roles.length) ? u.roles : [u.role], p = {}, k;
+  rs.forEach(function(role){ var base = roles[role] || (role === "owner" ? { setup: true, approve: true, bank: true, deleteAny: true, edit: true, create: true, export: true, restore: true } : {});
+    for(k in base) p[k] = p[k] || !!base[k]; if(base.restore === undefined && (base.deleteAny || base.edit)) p.restore = true; });
   if(p.restore === undefined) p.restore = !!(p.deleteAny || p.edit);
   if(u.perms) for(k in u.perms) if(u.perms[k] !== undefined && u.perms[k] !== null) p[k] = !!u.perms[k];
-  if(u.until && String(u.until) < Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd")) return {};
+  var td = Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd");
+  if(u.until && String(u.until) < td) return {};
+  if(u.from && String(u.from) > td) return {};
   return p;
 }
 function needAdmin(who){ if(!who || !who.admin) fail(403, "only an admin can do this"); }
@@ -181,6 +185,7 @@ function enforce(curJ, next, who){
   var curMain = (cd.setup && (cd.setup.main || cd.setup)) || {}, nextMain = (nd.setup && (nd.setup.main || nd.setup)) || {};
   if(!who.perms.bank) reattach(cd, nd);
   var co = coOf(who); if(co) coReattach(cd, nd, co);
+  actsCheck(cd, nd, who);
   var fine = fineOf(who); if(fine) fineReattach(cd, nd, fine);                                           // hidden bank details come back untouched, before anything is compared
   if(canon(curMain.users || []) !== canon(nextMain.users || []) || canon(curMain.roles || {}) !== canon(nextMain.roles || {})) fail(403, "only an admin can change users or roles");
   if(!who.perms.setup && canon(cd.setup || {}) !== canon(nd.setup || {})) fail(403, "your role cannot change Setup");
@@ -291,14 +296,20 @@ function redact(json, who){
 /* companies (21 Nov 2026): Setup › Users › "Companies this person sees". A list = only those companies' orders, shipments and
    payments (and what hangs on them: inspections, receipts, credits) are ever sent to that person. Whatever they save, the
    records of the other companies stay exactly as they are, and they cannot make or move a record into another company. */
-function coOf(who){ var u = who && who.user; if(!u || who.admin || !Array.isArray(u.companies)) return null; var m = {}; u.companies.forEach(function(c){ m[String(c)] = true; }); return m; }
+function coOf(who){ var u = who && who.user; if(!u || who.admin || (!Array.isArray(u.companies) && !Array.isArray(u.departments))) return null;
+  var mk = function(a){ if(!Array.isArray(a)) return null; var m = {}; a.forEach(function(c){ m[String(c)] = true; }); return m; }; var sc = mk(u.companies) || {}; sc.__co = Array.isArray(u.companies); sc.__dept = mk(u.departments); return sc; }
+/* the department of a payment, as the app works it out: the party's type decides, else the payment's own department */
+function payDeptOf(d, r){ var main = d.setup && (d.setup.main || d.setup) || {}, pa = null, ps = d.parties || {}, k; if(r.party){ pa = ps[r.party]; if(!pa) for(k in ps) if(ps[k] && ps[k].code === r.party){ pa = ps[k]; break; } }
+  if(pa){ var its = main.lists && main.lists.partyType && main.lists.partyType.items || [], t = null, i; for(i = 0; i < its.length; i++) if(its[i].id === pa.type){ t = its[i]; break; } return (t && t.dept) || "other"; } return r.dept || "other"; }
 function coHidden(d, co){
   var out = { purchases: {}, shipments: {}, payments: {}, inspections: {}, receipts: {}, credits: {} }, nos = {};
   var main = d.setup && (d.setup.main || d.setup) || {}, bankCo = {}; (main.banks || []).forEach(function(b){ if(b && b.id) bankCo[b.id] = b.company || ""; });
   var each = function(c, fn){ var col = d[c] || {}; Object.keys(col).forEach(function(id){ var r = col[id]; if(r && fn(r)){ out[c][id] = true; nos[String(r.no || id)] = true; } }); };
-  each("purchases", function(r){ return r.account && !co[r.account]; });
-  each("shipments", function(r){ return r.company && !co[r.company]; });
-  each("payments", function(r){ var c = r.company || bankCo[r.bank] || ""; return c && !co[c]; });
+  if(co.__co !== false){ each("purchases", function(r){ return r.account && !co[r.account]; });
+    each("shipments", function(r){ return r.company && !co[r.company]; });
+    each("payments", function(r){ var c = r.company || bankCo[r.bank] || ""; return c && !co[c]; }); }
+  /* departments (21 Nov 2026): a person limited to some departments gets only those departments' payments */
+  if(co.__dept){ var pc = d.payments || {}; Object.keys(pc).forEach(function(id){ var r = pc[id]; if(r && !out.payments[id] && !co.__dept[payDeptOf(d, r)]) out.payments[id] = true; }); }
   each("inspections", function(r){ return r.po && nos[String(r.po)]; });
   each("receipts", function(r){ return (r.src && nos[String(r.src)]) || (r.po && nos[String(r.po)]); });
   each("credits", function(r){ return (r.po && nos[String(r.po)]) || (r.receipt && nos[String(r.receipt)]); });
@@ -309,7 +320,20 @@ function coReattach(cd, nd, co){
   for(c in hid){ nd[c] = nd[c] || {}; Object.keys(hid[c]).forEach(function(id){ nd[c][id] = cd[c][id]; }); }
   var main = nd.setup && (nd.setup.main || nd.setup) || {}, bankCo = {}; (main.banks || []).forEach(function(b){ if(b && b.id) bankCo[b.id] = b.company || ""; });
   var chk = function(col, coOfRec){ var n = nd[col] || {}, o = cd[col] || {}; Object.keys(n).forEach(function(id){ if(hid[col][id]) return; var r = n[id]; if(!r || canon(r) === canon(o[id])) return; var x = coOfRec(r); if(x && !co[x]) fail(403, "this record belongs to a company you do not work for — not saved"); }); };
-  chk("purchases", function(r){ return r.account; }); chk("shipments", function(r){ return r.company; }); chk("payments", function(r){ return r.company || bankCo[r.bank] || ""; });
+  if(co.__co !== false){ chk("purchases", function(r){ return r.account; }); chk("shipments", function(r){ return r.company; }); chk("payments", function(r){ return r.company || bankCo[r.bank] || ""; }); }
+  if(co.__dept){ var np = nd.payments || {}, op = cd.payments || {}; Object.keys(np).forEach(function(id){ if(hid.payments[id]) return; var r = np[id]; if(!r || canon(r) === canon(op[id])) return; if(!co.__dept[payDeptOf(nd, r)]) fail(403, "this payment belongs to a department you do not work for — not saved"); }); }
+}
+/* what a person may do in each module (21 Nov 2026): Setup › People › "What they can do". The ticks of the role say what is
+   possible at all; here single modules are switched off: making new records, changing them, deleting them. */
+var ACT_COLS = ["purchases", "shipments", "payments", "receipts", "moves", "products", "parties", "inspections", "credits"];
+function actsCheck(cd, nd, who){
+  var u = who && who.user, acts = u && u.acts; if(!acts || who.admin) return;
+  ACT_COLS.forEach(function(col){ var a = acts[col]; if(!a) return; var n = nd[col] || {}, o = cd[col] || {};
+    Object.keys(n).forEach(function(id){ var r = n[id], w = o[id]; if(!w){ if(a.create === false) fail(403, "making new records here is switched off for you (" + col + ")"); return; }
+      if(canon(r) === canon(w)) return;
+      if(r && r.deletedAt && !w.deletedAt){ if(a.del === false) fail(403, "deleting here is switched off for you (" + col + ")"); return; }
+      if(a.edit === false) fail(403, "changing records here is switched off for you (" + col + ")"); });
+    Object.keys(o).forEach(function(id){ if(!n[id] && a.del === false) fail(403, "deleting here is switched off for you (" + col + ")"); }); });
 }
 /* fine access (20 Nov 2026): areas and single fields the Owner set to Hidden / View only for one person.
    Hidden: never sent to their device. Hidden or view-only: whatever they save, the stored value stays. */

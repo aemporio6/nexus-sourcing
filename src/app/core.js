@@ -55,7 +55,8 @@ const product=s=>D.products.find(p=>p.sku===s);
    Owners (always-admin accounts) are never limited. "restore" (bring back deleted / old versions) follows delete / edit unless set. */
 const curUser=()=>{try{const lc=x=>String(x||"").trim().toLowerCase();return(SET().users||[]).find(u=>u.uid&&lc(u.uid)===lc(uid)&&u.active!==false)||null}catch(_){return null}};
 const rolePerm=(role,perm)=>{const r=SET().roles?.[role];if(!r)return role==="owner";if(perm==="restore"&&r.restore===undefined)return!!(r.deleteAny||r.edit);return!!r[perm]};
-const userPerm=(u,perm)=>{if(!u)return false;if(u.until&&u.until<today())return false;if(u.perms&&u.perms[perm]!==undefined)return!!u.perms[perm];return rolePerm(u.role,perm)};
+/* 21 Nov 2026: a person can hold several roles (their ticks add up) and access can start on a date */const userRoles=u=>Array.isArray(u?.roles)&&u.roles.length?u.roles:[u?.role].filter(Boolean);
+const userPerm=(u,perm)=>{if(!u)return false;if(u.until&&u.until<today())return false;if(u.from&&u.from>today())return false;if(u.perms&&u.perms[perm]!==undefined)return!!u.perms[perm];return userRoles(u).some(r=>rolePerm(r,perm))};
 const can=perm=>{if(S.isOwner||S.role!==S.realRole)return rolePerm(S.role,perm);const su=curUser();return su?userPerm(su,perm):rolePerm(S.role,perm)};
 const partyTypeDef=t=>item("partyType",t)||{prefix:"SUP",dept:"supplier",defaultCur:"RMB"};
 
