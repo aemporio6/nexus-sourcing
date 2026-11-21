@@ -27,7 +27,7 @@ function doPost(e){
   try{
     req = JSON.parse((e && e.postData && e.postData.contents) || "{}");
     /* the supplier upload page (upload.html) has no Google sign-in: these two calls are opened by the link's secret only */
-    if(req.op === "supplierInfo"){ var sw = upFind(req.tok); out = sw && !sw.expired ? { ok: true, name: sw.name } : { ok: false, expired: !!(sw && sw.expired) }; }
+    if(req.op === "supplierInfo"){ var sw = upFind(req.tok); out = sw && !sw.expired ? { ok: true, name: sw.name, orders: sw.orders || [] } : { ok: false, expired: !!(sw && sw.expired) }; }
     else if(req.op === "supplierUpload"){ try{ out = supplierUpload(req); }catch(ue){ out = { ok: false, error: String(ue && ue.message || ue), status: 400 }; } }
     else out = handle(req);
   }catch(err){
@@ -83,6 +83,8 @@ function handle(req){
       return { ok: true, map: map, missing: miss, email: email }; }
     /* ---- access requests: only an Owner sees and decides them ---- */
     case "accessList": needAdmin(who); return { ok: true, list: accessList(), email: email };
+    /* the Owner sends an email from MY TOOL (an upload link to a supplier, an invitation to a new person) — 21 Nov 2026 */
+    case "mailOut": needAdmin(who); return mailOut(req, email);
     case "accessDecide": needAdmin(who); return { ok: true, list: accessDecide(req, email), email: email };
     case "whoami": return { ok: true, account: selfEmail(), exists: !!cur, admin: !!who.admin, you: email, email: email };
     /* ---- files suppliers sent through their upload link ---- */
@@ -186,6 +188,7 @@ function enforce(curJ, next, who){
   if(!who.perms.bank) reattach(cd, nd);
   var co = coOf(who); if(co) coReattach(cd, nd, co);
   actsCheck(cd, nd, who);
+  if(!who.admin) upReattach(cd, nd);
   var fine = fineOf(who); if(fine) fineReattach(cd, nd, fine);                                           // hidden bank details come back untouched, before anything is compared
   if(canon(curMain.users || []) !== canon(nextMain.users || []) || canon(curMain.roles || {}) !== canon(nextMain.roles || {})) fail(403, "only an admin can change users or roles");
   if(!who.perms.setup && canon(cd.setup || {}) !== canon(nd.setup || {})) fail(403, "your role cannot change Setup");
@@ -282,9 +285,11 @@ function ownTaskStep(c, before, after, who){
 /* roles without "bank" never receive bank details; on their saves the current values are put back */
 function redact(json, who){
   var fine = fineOf(who), co = coOf(who);
-  if(who.admin || (who.perms.bank && !fine && !co)) return json;
+  if(who.admin) return json;
+  if(who.perms.bank && !fine && !co){ var jb = JSON.parse(JSON.stringify(json)); upStrip(jb.data || {}); return jb; }
   var j = JSON.parse(JSON.stringify(json)), d = j.data || {};
   if(co){ var hid = coHidden(d, co), hc; for(hc in hid) Object.keys(hid[hc]).forEach(function(id){ delete d[hc][id]; }); }
+  upStrip(d);
   if(fine) fineRedact(d, fine);
   if(who.perms.bank){ j.redacted = true; return j; }
   var main = d.setup && (d.setup.main || d.setup);
@@ -358,6 +363,20 @@ function reattach(cd, nd){
   ["payments", "parties"].forEach(function(c){ if(!cd[c] || !nd[c]) return; Object.keys(nd[c]).forEach(function(id){ var o = cd[c][id], n = nd[c][id]; if(o && n) ["bank", "beneficiary", "iban", "swift", "account", "sortCode", "beneficiaryPending"].forEach(function(k){ if(k in o && !(k in n)) n[k] = o[k]; }); }); });
 }
 
+/* ================= emails from MY TOOL (21 Nov 2026) =================
+   notifyOwner: a short email to the Owner when a supplier sends a file or someone asks for access — at most one per key and time.
+   mailOut: the Owner sends an upload link or an invitation from MY TOOL; only to a real address, at most 40 a day. */
+var OWNER_MAIL = "aemporio6@gmail.com", APP_URL = "https://mytool.vartleaves.com/";
+function notifyOwner(key, minutes, subject, body){ try{ var c = CacheService.getScriptCache(), k = "nt:" + String(key).slice(0, 200); if(c.get(k)) return; c.put(k, "1", Math.min(21600, minutes * 60)); MailApp.sendEmail(OWNER_MAIL, subject, body, { name: "MY TOOL" }); }catch(e){ try{ logLine("notify failed " + e); }catch(_){} } }
+function mailOut(req, by){ var to = String(req.to || "").trim().toLowerCase(), subj = String(req.subject || "").replace(/[\r\n]/g, " ").slice(0, 150), body = String(req.body || "").slice(0, 4000);
+  if(!/^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$/.test(to)) fail(400, "not an email address"); if(!subj || !body) fail(400, "subject and text needed");
+  var c = CacheService.getScriptCache(), day = Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd"), k = "mo:" + day, n = +(c.get(k) || 0); if(n >= 40) fail(429, "40 emails a day from MY TOOL — try tomorrow");
+  MailApp.sendEmail(to, subj, body, { name: "MY TOOL — Vartleaves", replyTo: by }); c.put(k, String(n + 1), 21600); try{ logLine("ok mailOut " + to + " by " + by); }catch(_){}
+  return { ok: true, to: to, left: 40 - n - 1 }; }
+/* the secret of an upload link is kept on the supplier only for the Owners (so they can copy it again); nobody else ever gets it or can change a link */
+function upStrip(d){ var ps = d.parties || {}; Object.keys(ps).forEach(function(k){ var u = ps[k] && ps[k].upload; if(u && u.t){ ps[k] = JSON.parse(JSON.stringify(ps[k])); delete ps[k].upload.t; } }); }
+function upReattach(cd, nd){ var o = cd.parties || {}, n = nd.parties || {}; Object.keys(n).forEach(function(k){ if(!n[k]) return; if(o[k] && o[k].upload) n[k].upload = o[k].upload; else delete n[k].upload; }); }
+
 /* ================= access requests (21 Nov 2026) =================
    A Google account that is not in Setup › Users can only ask. The request is kept in its own small file beside the data
    (never inside the data), one per account, at most 20 waiting. Only an Owner sees them, approves (by adding the person in
@@ -377,6 +396,7 @@ function accessAsk(email, req){
     var waiting = Object.keys(st.list).filter(function(k){ return st.list[k].state === "pending"; }).length;
     if(waiting >= REQ_MAX) fail(429, "Too many requests are waiting. Please contact the Owner directly.");
     st.list[email] = { email: email, name: reqClean(req.name, 80), note: reqClean(req.note, 300), at: now, state: "pending" }; reqSave(st);
+    notifyOwner("ask:" + email, 1440, "MY TOOL · " + (reqClean(req.name, 80) || email) + " asks for access", (reqClean(req.name, 80) || "") + " <" + email + "> asks to use MY TOOL." + (req.note ? "\nThey wrote: " + reqClean(req.note, 300) : "") + "\n\nApprove, reject or block: " + APP_URL + " (Home › Access requests)");
     return { ok: true, state: "pending", at: now };
   }finally{ lock.releaseLock(); }
 }
@@ -460,7 +480,8 @@ function upFind(tok){ if(!/^[A-Za-z0-9_-]{24,80}$/.test(String(tok || ""))) retu
   if(hit){ try{ return JSON.parse(hit); }catch(_){} }                        /* 2 minutes: a switched-off link stops within 2 minutes at the latest */
   var r = upLook(h); cache.put(ck, JSON.stringify(r), 120); return r; }
 function upLook(h){ var cur = readCurrent(); if(!cur) return null; var ps = cur.json.data.parties || {}, ids = Object.keys(ps);
-  for(var i = 0; i < ids.length; i++){ var p = ps[ids[i]], u = p && p.upload; if(!p || p.deletedAt || !u || u.on === false || String(u.h || "").replace(/=+$/, "") !== h.replace(/=+$/, "")) continue; if(u.exp && String(u.exp) < Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd")) return { expired: true }; return { code: p.code || ids[i], name: p.name || ids[i], max: +u.max || 30 }; }
+  for(var i = 0; i < ids.length; i++){ var p = ps[ids[i]], u = p && p.upload; if(!p || p.deletedAt || !u || u.on === false || String(u.h || "").replace(/=+$/, "") !== h.replace(/=+$/, "")) continue; if(u.exp && String(u.exp) < Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd")) return { expired: true }; var pos = cur.json.data.purchases || {}, ord = []; if(u.orders !== false) Object.keys(pos).forEach(function(k){ var o = pos[k]; if(o && !o.deletedAt && o.party === (p.code || ids[i]) && ["closed", "cancelled", "draft"].indexOf(o.status) < 0 && ord.length < 40) ord.push({ k: o.no || k, ref: String(o.yourRef || o.no || k).slice(0, 40) }); });
+    return { code: p.code || ids[i], name: p.name || ids[i], max: +u.max || 30, orders: ord }; }
   return null; }
 function inboxRoot(){ var it = DriveApp.getFoldersByName(INBOX_FOLDER), me = selfEmail(); while(it.hasNext()){ var f = it.next(); try{ if(f.getOwner().getEmail().toLowerCase() === me) return f; }catch(_){ return f; } } return DriveApp.createFolder(INBOX_FOLDER); }
 function upSafe(s, n){ return String(s || "").replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/^\.+/, "").slice(0, n || 120); }
@@ -472,12 +493,14 @@ function supplierUpload(p){ p = p || {}; var who = upFind(p.tok); if(!who || who
   if(n1 >= who.max || n2 >= UP_DAY_ALL) throw new Error("Today's limit for this link is reached. Please try again tomorrow.");
   var root = inboxRoot(), fn = upSafe(who.code + " " + who.name, 80), it = root.getFoldersByName(fn), fo = it.hasNext() ? it.next() : root.createFolder(fn);
   var f = fo.createFile(Utilities.newBlob(bytes, String(p.mime || "application/octet-stream"), name));
-  f.setDescription(JSON.stringify({ via: "upload link", party: who.code, kind: String(p.kind || "").replace(/[\u0000-\u001f<>]/g, " ").slice(0, 30), note: String(p.note || "").replace(/[\u0000-\u001f<>]/g, " ").slice(0, 300), at: new Date().toISOString() }));
+  var po = String(p.po || ""), poOk = (who.orders || []).some(function(o){ return o.k === po; }); if(!poOk) po = "";
+  f.setDescription(JSON.stringify({ via: "upload link", party: who.code, po: po, kind: String(p.kind || "").replace(/[\u0000-\u001f<>]/g, " ").slice(0, 30), note: String(p.note || "").replace(/[\u0000-\u001f<>]/g, " ").slice(0, 300), at: new Date().toISOString() }));
   cache.put(k1, String(n1 + 1), 21600); cache.put(k2, String(n2 + 1), 21600);
   try{ logLine("ok supplierUpload " + who.code + " " + name + " " + bytes.length + "b"); }catch(_){}
+  notifyOwner("file:" + who.code, 60, "MY TOOL · " + who.name + " sent a file", who.name + " (" + who.code + ") sent “" + name + "”" + (p.kind ? " — " + String(p.kind).slice(0, 30) : "") + (po ? " for order " + po : "") + (p.note ? "\nNote: " + String(p.note).slice(0, 300) : "") + "\n\nOpen MY TOOL › Home › From suppliers: " + APP_URL + "\n(At most one email an hour per supplier.)");
   return { ok: true, name: name, left: who.max - n1 - 1 }; }
 function inboxList(){ var out = [], it = DriveApp.getFoldersByName(INBOX_FOLDER), me = selfEmail(), root = null; while(it.hasNext()){ var r = it.next(); try{ if(r.getOwner().getEmail().toLowerCase() !== me) continue; }catch(_){} root = r; break; } if(!root) return out;
   var subs = root.getFolders(); while(subs.hasNext()){ var fo = subs.next(), nm = fo.getName(); if(nm === "done") continue; var fs = fo.getFiles(); while(fs.hasNext() && out.length < 200){ var f = fs.next(), d = {}; try{ d = JSON.parse(f.getDescription() || "{}"); }catch(_){}
-      out.push({ id: f.getId(), name: f.getName(), size: f.getSize(), at: d.at || f.getDateCreated().toISOString(), party: d.party || nm.split(" ")[0], kind: d.kind || "", note: d.note || "", folder: nm }); } }
+      out.push({ id: f.getId(), name: f.getName(), size: f.getSize(), at: d.at || f.getDateCreated().toISOString(), party: d.party || nm.split(" ")[0], kind: d.kind || "", note: d.note || "", po: d.po || "", folder: nm }); } }
   out.sort(function(a, b){ return a.at < b.at ? 1 : -1; }); return out; }
 function inboxGet(id){ var f; try{ f = DriveApp.getFileById(String(id || "")); }catch(e){ fail(404, "file not found"); } var ok = false, p = f.getParents(); while(p.hasNext()){ var fo = p.next(), g = fo.getParents(); while(g.hasNext()){ if(g.next().getName() === INBOX_FOLDER) ok = true; } } if(!ok) fail(403, "not a supplier upload"); return f; }

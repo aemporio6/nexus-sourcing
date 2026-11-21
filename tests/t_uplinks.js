@@ -1,0 +1,34 @@
+/* Upload links window + invitation (21 Nov 2026). Demo :8093 with a fake gateway for inbox / email. */
+const{chromium}=require("playwright");
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1300,height:950}});const errs=[];p.on("pageerror",e=>errs.push(e.message));p.on("dialog",d=>d.accept());let fails=0;const ok=(c,m)=>{console.log((c?"PASS ":"FAIL ")+m);if(!c)fails++};
+ await p.addInitScript(()=>{window.__mails=[];window.__DEMO_GW=async(op,x)=>{if(op==="inboxList")return{ok:true,list:window.__inbox||[]};if(op==="mailOut"){window.__mails.push(x);return{ok:true}}if(op==="accessList")return{ok:true,list:[]};return{ok:true}}});
+ await p.route(/fonts\.(googleapis|gstatic)/,r=>r.abort());await p.goto("http://localhost:"+(process.env.PORT||8093)+"/index.html?demo");await p.waitForFunction(()=>{try{return S.ready}catch(e){return false}});await p.waitForTimeout(4500);
+ const sup=await p.evaluate(async()=>{const s=live(D.parties).find(x=>x.type==="supplier");await updateDoc("parties",s.id||s.code,{email:"sales@example.cn"},"t");window.__inbox=[{id:"F1",name:"PI-123.pdf",party:s.code,kind:"Invoice (PI / CI)",po:"PO-26-0065",at:new Date().toISOString(),note:"new PI"}];return s.code});
+ await p.evaluate(()=>go("parties"));await p.waitForTimeout(800);
+ ok(await p.evaluate(()=>!!document.querySelector("[data-ulopenall]")),"Suppliers page: a “📤 Upload links” button");
+ await p.click("[data-ulopenall]");await p.waitForSelector("#ulwin");await p.waitForTimeout(800);
+ ok(await p.evaluate(c=>document.querySelectorAll("#ulwin .ulrow").length>=5&&!!document.querySelector(`#ulwin [data-ulp="${c}"]`)&&/1 new file/.test(document.querySelector(`#ulwin [data-ulp="${c}"]`).innerText),sup),"one window lists every supplier / forwarder with the state of their link and new files");
+ await p.click(`#ulwin [data-ulp="${sup}"]`);await p.waitForTimeout(500);
+ ok(await p.evaluate(()=>/No link/.test(document.querySelector("#ulwin").innerText)&&!!document.querySelector('#ulwin [data-sl="make"]')&&/PI-123\.pdf[\s\S]*for PO-26-0065/.test(document.querySelector("#ulwin").innerText)),"the supplier's own window: no link yet, Make, and the file received (with its order)");
+ await p.click('#ulwin [data-sl="make"]');await p.waitForTimeout(1800);
+ const u=await p.evaluate(c=>live(D.parties).find(x=>x.code===c).upload,sup);
+ ok(u&&u.on&&u.t&&u.h&&u.exp&&u.orders===true,"Make: the link is saved (with its secret for the Owners), on, with an end date and the order list on");
+ ok(await p.evaluate(()=>{const w=document.querySelector("#ulwin");return/upload\.html#u=/.test(w.querySelector(".slink")?.innerText||"")&&!!w.querySelector('a[href^="https://wa.me/"]')&&/上传/.test(w.textContent)}),"Send: the link, Copy, a message in English + 中文, WhatsApp");
+ await p.evaluate(()=>ulClose());await p.evaluate(c=>ulOpen(c),sup);await p.waitForTimeout(600);
+ ok(await p.evaluate(()=>/upload\.html#u=/.test(document.querySelector("#ulwin .slink")?.innerText||"")),"closed and opened again: the link can still be copied");
+ await p.click('#ulwin [data-ul="mail"]');await p.waitForTimeout(800);
+ ok(await p.evaluate(()=>window.__mails.length===1&&window.__mails[0].to==="sales@example.cn"&&/upload\.html#u=/.test(window.__mails[0].body)),"Email it: MY TOOL sends the link to the supplier's email");
+ await p.selectOption('#ulwin [data-ulset="days"]',"365");await p.waitForTimeout(1200);
+ ok(await p.evaluate(c=>{const u=live(D.parties).find(x=>x.code===c).upload;return u.days===365&&u.exp===addDays(String(u.made).slice(0,10),365)},sup),"Valid for 1 year → the end date moves");
+ await p.click('#ulwin [data-ulset="orders"]');await p.waitForTimeout(1200);ok(await p.evaluate(c=>live(D.parties).find(x=>x.code===c).upload.orders===false,sup),"switch off “let them pick the order”");
+ await p.click('#ulwin [data-sl="off"]');await p.waitForTimeout(1200);ok(await p.evaluate(c=>live(D.parties).find(x=>x.code===c).upload.on===false,sup),"Switch the link off");
+ await p.evaluate(()=>ulClose());await p.evaluate(c=>openDoc("parties",live(D.parties).find(x=>x.code===c).id||c),sup);await p.waitForTimeout(700);
+ ok(await p.evaluate(()=>!!document.querySelector(".drawer .ulline [data-ulopen]")&&!document.querySelector(".drawer details.slbox")),"the supplier's record: one short line that opens the window (no long box)");
+ /* invitation */
+ await p.evaluate(async()=>{const us=JSON.parse(JSON.stringify(SET().users||[]));us.push({name:"Ali",uid:"ali@example.com",role:"va",active:true});await setupPatch(["users"],us,"t");S.drawer=null;go("setup");S.setupTab="users";render()});await p.waitForTimeout(700);
+ const i=await p.evaluate(()=>SET().users.findIndex(u=>u.uid==="ali@example.com"));await p.evaluate(i=>ppOpen(i),i);await p.waitForTimeout(500);
+ ok(await p.evaluate(()=>!!document.querySelector("#ppwin .ppinv [data-ppinvite]")&&!!document.querySelector('#ppwin .ppinv a[href^="https://wa.me/"]')),"a person's window: Invite — copy, WhatsApp, email");
+ await p.click("#ppwin [data-ppinvite]");await p.waitForTimeout(1500);
+ ok(await p.evaluate(i=>{const m=window.__mails[1];return!!m&&m.to==="ali@example.com"&&/Sign in with Google/.test(m.body)&&/VA/.test(m.body)&&!!SET().users[i].invitedAt},i),"Email it: the invitation with the link and the steps; “invited” date kept");
+ await p.keyboard.press("n");await p.waitForTimeout(600);await p.fill("#ch_q","upload link");await p.waitForTimeout(200);ok(await p.evaluate(()=>/Upload links/.test(document.querySelector("#chub").innerText)),"Create: “Upload links”");
+ ok(!errs.length,"no page errors "+errs.join(" | "));await b.close();console.log(fails?`\n${fails} FAILED`:"\nALL PASS");process.exit(fails?1:0)})();

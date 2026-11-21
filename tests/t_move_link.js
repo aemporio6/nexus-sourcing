@@ -33,9 +33,10 @@ NEW.drive.n=100;NEW.ctx.DriveApp.createFolder("MY TOOL – FILES");[a1,a2].forEa
  moved=true;await p.waitForTimeout(3500);await p.waitForFunction(()=>{try{return S.ready}catch(e){return false}},null,{timeout:30000});ok(await p.evaluate(()=>localStorage.getItem("mt_gw")),"this device now uses the new gateway (and reloaded)");
  /* ---- supplier upload link ---- */
  await p.waitForFunction(()=>!!SET().roles2,null,{timeout:30000});const sup=await p.evaluate(()=>{const x=live(D.parties).find(q=>q.type==="supplier");return{code:x.code,id:x.id||x.code,name:x.name}});
- await p.evaluate(s=>openDoc("parties",s.id),sup);await p.waitForTimeout(700);ok(await p.evaluate(()=>!!document.querySelector('.drawer [data-sl="make"]')),"supplier record has 📤 Upload link");
- await p.evaluate(()=>{document.querySelector(".drawer .slbox").open=true});await p.click('.drawer [data-sl="make"]');await p.waitForTimeout(900);
- const link=await p.evaluate(()=>S.slNew?.link||"");ok(/upload\.html#u=[A-Za-z0-9_-]{30,}&g=[A-Za-z0-9_-]+$/.test(link)&&await p.evaluate(()=>/copy it now/.test(document.querySelector(".drawer .slbox").innerText)&&!JSON.stringify(D.parties).includes(S.slNew.link.split("#u=")[1].split("&")[0])),"a link is made, shown once; only its hash is stored");
+ await p.evaluate(s=>openDoc("parties",s.id),sup);await p.waitForTimeout(700);ok(await p.evaluate(()=>!!document.querySelector('.drawer [data-ulopen]')),"supplier record has 📤 Upload link (opens the Upload links window)");
+ await p.click('.drawer [data-ulopen]');await p.waitForSelector("#ulwin");await p.waitForTimeout(500);await p.click('#ulwin [data-sl="make"]');await p.waitForTimeout(1200);
+ const link=await p.evaluate(()=>S.slNew?.link||"");ok(/upload\.html#u=[A-Za-z0-9_-]{30,}&g=[A-Za-z0-9_-]+$/.test(link)&&await p.evaluate(()=>/upload\.html#u=/.test(document.querySelector("#ulwin .slink")?.innerText||"")),"a link is made and shown in the window (Owners can copy it again; the gateway gives its secret to Owners only)");
+ await p.evaluate(()=>ulClose());
  const tok=link.split("#u=")[1].split("&")[0];const up=await p.evaluate(s=>docOf("parties",s.id).upload,sup);
  /* the gateway (same data) accepts the supplier's file with that secret */
  {const c=NEW.call({op:"read",token:"T"});const bb=JSON.parse(JSON.stringify(c.file));const pk=Object.keys(bb.data.parties).find(x=>(bb.data.parties[x].code||x)===sup.code)||Object.keys(bb.data.parties)[0];bb.data.parties[pk].upload=up;bb.data.parties[pk].code=bb.data.parties[pk].code||sup.code;NEW.call({op:"write",token:"T",base:c.version,body:bb});

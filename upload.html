@@ -21,6 +21,7 @@ button{width:100%;margin-top:16px;padding:14px;font:inherit;font-weight:700;colo
  <p class="s">PDF, Excel, CSV, Word, pictures · max 20 MB each · 每个文件最大 20 MB</p>
  <div class="card">
   <label for="f">Files · 文件</label><input id="f" type="file" multiple accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic,.txt">
+  <div id="pow" hidden><label for="po">Which order? · 哪个订单</label><select id="po"><option value="">Not sure / several · 不确定</option></select></div>
   <label for="k">What is it? · 类型</label><select id="k"><option>Invoice (PI / CI)</option><option>Packing list</option><option>Product information</option><option>Freight / shipping</option><option>Inspection / photos</option><option>Other</option></select>
   <label for="n">Note (optional) · 备注</label><textarea id="n" rows="2" maxlength="300"></textarea>
   <button id="b" type="button">Send · 发送</button>
@@ -38,13 +39,13 @@ button{width:100%;margin-top:16px;padding:14px;font:inherit;font-weight:700;colo
  if(!/^[A-Za-z0-9_-]{24,80}$/.test(tok)||!/^[A-Za-z0-9_-]{20,120}$/.test(gid)){dead("The link is not complete — copy the whole link again.");return}
  var GW="https://script.google.com/macros/s/"+gid+"/exec";
  function call(body){return fetch(GW,{method:"POST",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body)}).then(function(r){return r.json()})}
- call({op:"supplierInfo",tok:tok}).then(function(j){if(j&&j.ok){$("who").textContent=j.name||"";$("wait").hidden=true;$("form").hidden=false}else dead(j&&j.expired?"It has expired.":"It was switched off or replaced.")})
+ call({op:"supplierInfo",tok:tok}).then(function(j){if(j&&j.ok){$("who").textContent=j.name||"";if(j.orders&&j.orders.length){var sel=$("po");j.orders.forEach(function(o){var op=document.createElement("option");op.value=o.k;op.textContent=o.ref;sel.appendChild(op)});$("pow").hidden=false}$("wait").hidden=true;$("form").hidden=false}else dead(j&&j.expired?"It has expired.":"It was switched off or replaced.")})
   .catch(function(){dead("The upload service could not be reached from this network (it needs access to Google). Try another network or a VPN, or send the files by email. · 无法连接上传服务（需要访问 Google）。")});
  $("b").onclick=function(){var fs=[].slice.call($("f").files);if(!fs.length){alert("Choose a file first · 请先选择文件");return}var b=$("b");b.disabled=true;var o=$("o");o.textContent="";var i=0;
   function next(){if(i>=fs.length){b.disabled=false;$("f").value="";return}var f=fs[i++];var li=document.createElement("li");li.textContent=f.name+" …";o.appendChild(li);
    if(f.size>20*1024*1024){li.className="bad";li.textContent="✗ "+f.name+" — bigger than 20 MB";next();return}
    var r=new FileReader();r.onerror=function(){li.className="bad";li.textContent="✗ "+f.name+" — could not be read";next()};
-   r.onload=function(){var b64=String(r.result).split(",")[1]||"";call({op:"supplierUpload",tok:tok,name:f.name,mime:f.type,b64:b64,kind:$("k").value,note:$("n").value}).then(function(j){if(j&&j.ok){li.className="ok";li.textContent="✓ "+f.name+" — received · 已收到"}else{li.className="bad";li.textContent="✗ "+f.name+" — "+((j&&j.error)||"not sent")}next()}).catch(function(){li.className="bad";li.textContent="✗ "+f.name+" — not sent (network)";next()})};
+   r.onload=function(){var b64=String(r.result).split(",")[1]||"";call({op:"supplierUpload",tok:tok,name:f.name,mime:f.type,b64:b64,kind:$("k").value,note:$("n").value,po:$("po").value}).then(function(j){if(j&&j.ok){li.className="ok";li.textContent="✓ "+f.name+" — received · 已收到"}else{li.className="bad";li.textContent="✗ "+f.name+" — "+((j&&j.error)||"not sent")}next()}).catch(function(){li.className="bad";li.textContent="✗ "+f.name+" — not sent (network)";next()})};
    r.readAsDataURL(f)}
   next()};
 })();

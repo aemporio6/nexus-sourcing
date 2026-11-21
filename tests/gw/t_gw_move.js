@@ -28,7 +28,7 @@ put(NEW, "T_A", d => { d.parties[sup].upload = { h, on: true, exp: "2099-01-01",
 const info = t => { Object.keys(NEW.drive.cache).forEach(k => { if(k.startsWith("upf:")) delete NEW.drive.cache[k]; }); return NEW.call({ op: "supplierInfo", tok: t }); }, send = o => NEW.call({ op: "supplierUpload", ...o });
 let pg = info(tok); ok(pg.ok === true && pg.name === nf.file.data.parties[sup].name, "the link is recognised and names that supplier");
 ok(info("wrongwrongwrongwrongwrongwrong").ok === false && info("../etc").ok === false, "a wrong link gets 'not active' — nothing else");
-ok(JSON.stringify(Object.keys(pg).sort()) === '["name","ok"]', "the page is given nothing but the supplier's name");
+ok(JSON.stringify(Object.keys(pg).sort()) === '["name","ok","orders"]' && (pg.orders || []).every(o => JSON.stringify(Object.keys(o).sort()) === '["k","ref"]'), "the page is given only the supplier's name and their own open orders' references (21 Nov 2026)");
 ok(NEW.call({ op: "read", tok }).status === 401 && NEW.call({ op: "inboxList", tok }).status === 401 && NEW.call({ op: "file", tok, id: "x" }).status === 401, "the link's secret opens no other call (read, inbox, files all refuse)");
 const b64 = Buffer.from("%PDF-1.4 test").toString("base64");
 r = send({ tok, name: "CI WAP-1.pdf", mime: "application/pdf", b64, kind: "Invoice (PI / CI)", note: "hello" }); ok(r.ok && r.left === 1, "a file is received");
