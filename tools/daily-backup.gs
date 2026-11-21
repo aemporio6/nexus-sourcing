@@ -103,6 +103,13 @@ function morningDigest(j, day, dry){
       if(bank.length) sec.push(["New supplier bank details waiting for approval", bank.map(function(x){ return (x.name || x.code) + " — call the supplier before approving\n  " + link("parties", x.code); })]);
     }
     if(p.admin){ /* people who signed in and pressed "Send request" (21 Nov 2026) — kept by the gateway beside the data */
+      /* Mondays: who has access to what (21 Nov 2026) — and whose access ends within 14 days */
+      if(new Date(day + "T12:00:00Z").getUTCDay() === 1){ var rl = function(id){ var it = (main.lists && main.lists.role && main.lists.role.items || []).filter(function(x){ return x.id === id; })[0]; return it ? it.label : id; };
+        var cn = function(id){ var c = (main.companies || []).filter(function(x){ return x.id === id; })[0]; return c ? c.name : id; }, ends = addD(14);
+        var acc = (main.users || []).filter(function(u){ return u && u.active !== false && ADMINS.indexOf(lc(u.uid)) < 0; }).map(function(u){ var rs = (u.roles && u.roles.length) ? u.roles : [u.role];
+          var lim = []; Object.keys(u.areas || {}).forEach(function(a){ lim.push(a + ": " + (u.areas[a] === "hide" ? "hidden" : "view only")); }); var nf = Object.keys(u.fields || {}).length; if(nf) lim.push(nf + " field" + (nf === 1 ? "" : "s") + " limited");
+          return (u.until && u.until <= ends ? "⏰ ENDS " + u.until + " — " : "") + (u.name || u.uid) + " <" + (u.uid || "") + "> · " + rs.map(rl).join(" + ") + " · " + (Array.isArray(u.companies) ? u.companies.map(cn).join(", ") || "no company" : "all companies") + (Array.isArray(u.departments) ? " · payments of " + (u.departments.join(", ") || "no department") : "") + (lim.length ? " · " + lim.join(", ") : "") + (u.from && u.from > day ? " · starts " + u.from : "") + (u.until ? " · until " + u.until : ""); });
+        if(acc.length) sec.push(["Who has access to MY TOOL (every Monday)", acc.concat(["Change it: " + APP + "#/setup"])]); }
       var rq = accessWaiting(); if(rq.length) sec.push(["People asking for access to MY TOOL — approve, reject or block on Home", rq.map(function(x){ return (x.name || x.email) + " <" + x.email + ">" + (x.note ? " — “" + x.note + "”" : "") + "\n  " + APP; })]);
     }
     if(money){

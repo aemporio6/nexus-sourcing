@@ -27,6 +27,9 @@ pickReg("person",{label:"People",word:"person",ids:()=>(SET().people||[]).map(c=
  add:async name=>{const people=(SET().people||[]).slice();const ex=people.find(p=>norm(p.name)===norm(name));if(ex)return ex.id;const id=slugId(name,people);people.push({id,name,role:""});const ok=await setupPatch("people",people,`${name} added`);return ok===false?null:id}});
 pickReg("party",{label:"Suppliers, forwarders, clients",word:"supplier / party",ids:()=>(D.parties||[]).map(p=>p.code),opts:()=>live(D.parties||[]).filter(p=>p.status!=="archived").map(p=>[p.code,plabel(p.code)]),open:()=>openForm("party",{force:true})});
 pickReg("sku",{label:"Products",word:"product",ids:()=>(D.products||[]).map(p=>p.sku),opts:()=>live(D.products||[]).filter(p=>p.status!=="archived"&&!p.mergedInto).map(p=>[p.sku,`${p.name} · ${p.sku}`]),open:()=>openForm("product",{force:true})});
+/* the departments a payment belongs to (they come from the party types: supplier, freight, inspection …) */
+pickReg("paydept",{label:"Departments",word:"department",fixed:true,ids:()=>pdOpts().map(x=>x[0]),opts:()=>pdOpts()});
+function pdOpts(){const s=new Set([...items("partyType",{all:true}).map(i=>i.dept).filter(Boolean),"other"]);return[...s].map(d=>[d,typeof deptLabel==="function"?deptLabel(d):d])}
 /* every kind there is right now (the Setup lists are found by themselves — a new list is a new kind without any code) */
 function pickAll(){const out=Object.keys(PICK);try{Object.keys(SET().lists||{}).forEach(k=>out.push("list:"+k))}catch(_){}return out}
 function pickCanAdd(def){return!!def&&!def.fixed&&(def.add||def.open)&&(typeof can!=="function"||can("setup")||!!def.open)}

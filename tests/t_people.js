@@ -39,6 +39,23 @@ const{chromium}=require("playwright");
   Object.assign(S,{isOwner:o.o,role:o.r,realRole:o.rr});uid=o.u;return{noPay,po,hidU}},i);
  ok(as.noPay&&as.po,"as that person: a new payment does not open (Create off in Money), a new order does");
  ok(as.hidU,"…and in the order the unit price shows as ••• (hidden)");
+ /* templates, copy from another person, save as template */
+ await p.evaluate(async()=>{const us=JSON.parse(JSON.stringify(SET().users));us.push({name:"Bilal",uid:"bilal@example.com",role:"va",active:true});await setupPatch(["users"],us,"t")});const k=await p.evaluate(()=>SET().users.findIndex(u=>u.uid==="bilal@example.com"));
+ await p.evaluate(k=>ppOpen(k),k);await p.waitForTimeout(500);
+ ok(await p.evaluate(()=>[...document.querySelectorAll("#ppwin [data-pptpl] option")].length>=5&&!!document.querySelector("#ppwin [data-ppcopy]")),"Quick start: ready-made templates and “Copy access from” another person");
+ await p.selectOption("#ppwin [data-pptpl]","tpl_viewer");await p.waitForTimeout(1500);
+ ok(await p.evaluate(k=>{const u=SET().users[k];return JSON.stringify(u.roles)==='["viewer"]'&&u.fields["purchases.lines.u"]==="hide"&&u.fields["payments.amount"]==="hide"&&!userPerm(u,"edit")},k),"template “Look only — no prices anywhere”: View only, every price field hidden");
+ await p.selectOption("#ppwin [data-ppcopy]",String(i));await p.waitForTimeout(1500);
+ ok(await p.evaluate(([k,i])=>{const a=SET().users[k],b=SET().users[i];return JSON.stringify(a.roles)===JSON.stringify(b.roles)&&JSON.stringify(a.acts||{})===JSON.stringify(b.acts||{})&&JSON.stringify(a.fields||{})===JSON.stringify(b.fields||{})&&a.uid==="bilal@example.com"&&a.name==="Bilal"},[k,i]),"Copy access from Ali: roles, switches and fields copied — name and email stay");
+ await p.evaluate(()=>{window.prompt=()=>"Ali-like VA"});await p.click("#ppwin [data-ppsavetpl]");await p.waitForTimeout(1500);
+ ok(await p.evaluate(()=>(SET().accessTemplates||[]).some(t=>t.name==="Ali-like VA")&&[...document.querySelectorAll("#ppwin [data-pptpl] option")].some(o=>/Ali-like VA/.test(o.textContent))),"Save this person's access as a template → offered in the list");
+ ok(await p.evaluate(()=>{const d=pickDef("paydept");return!!d&&d.ids().includes("freight")&&d.ids().includes("supplier")}),"Departments are the payment departments (supplier, freight …)");
+ await p.evaluate(()=>ppClose());
+ /* Create: clear sections */
+ await p.keyboard.press("n");await p.waitForTimeout(700);const secs=await p.evaluate(()=>[...document.querySelectorAll(".ch-dept h4")].map(h=>h.childNodes[0].textContent.trim()));
+ ok(JSON.stringify(secs.filter(x=>["Buying","Shipments","Money","Stock","Products","Suppliers","Import & files","People & access","Home & planning","Reports","Settings"].includes(x)))===JSON.stringify(secs)&&secs.indexOf("Buying")===0&&secs.indexOf("Settings")===secs.length-1&&secs.includes("People & access")&&secs.includes("Import & files"),"Create: fixed sections in order, Buying first, Settings last "+JSON.stringify(secs));
+ ok(await p.evaluate(()=>!/New user \(give someone access\)|Access — who can do what|Hide or lock an area/.test(document.body.innerText)),"Create: the three old access entries are gone (People & access replaces them)");
+ await p.keyboard.press("Escape");await p.waitForTimeout(300);
  /* history */
  await p.evaluate(i=>ppOpen(i),i);await p.waitForTimeout(500);
  ok(await p.evaluate(()=>/Changes to their access[\s\S]*Ali VA/.test(document.querySelector("#ppwin").innerText)),"History in the window lists what was changed about their access");

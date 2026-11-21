@@ -16,4 +16,9 @@ ok(/SH-1/.test(by("fin@x.com").body)&&/RC-1/.test(by("fin@x.com").body)&&/50% ov
 ok(by("aemporio6@gmail.com")&&/PAY-1/.test(by("aemporio6@gmail.com").body)&&/Joyce — call/.test(by("aemporio6@gmail.com").body),"Owner: everything waiting");
 ok(!by("quiet@x.com"),"nothing waiting → no email");ok(!by("maashiq@gmail.com")&&!by("maashiq123@gmail.com"),"owner gets ONE email (not one per admin account)");ok(!by("off@x.com"),"morning email off → none");
 ok(/#\/doc\/payments\/PAY-2/.test(by("fin@x.com").body),"each line links to the record");
+/* Mondays: who has access (21 Nov 2026) */
+{const J=JSON.parse(JSON.stringify(j));const U=J.data.setup.main.users;U[0].until="2026-11-30";U[1].roles=["va","finance"];U[1].companies=["c1"];J.data.setup.main.companies=[{id:"c1",name:"Vartleaves Limited"}];J.data.setup.main.lists={role:{items:[{id:"va",label:"VA"},{id:"finance",label:"Finance"}]}};
+ const mon=ctx.morningDigest(J,"2026-11-23",true).find(x=>x.to===ctx.OWNER_MAIL||/aemporio6/.test(x.to));const tue=ctx.morningDigest(J,"2026-11-24",true).find(x=>/aemporio6/.test(x.to));
+ ok(mon&&/Who has access to MY TOOL/.test(mon.body)&&/VA \+ Finance · Vartleaves Limited/.test(mon.body)&&/⏰ ENDS 2026-11-30 — Fin/.test(mon.body),"Monday: the Owner's email lists who has access (several roles, companies) and whose access ends soon");
+ ok(!tue||!/Who has access to MY TOOL/.test(tue.body),"…only on Mondays")}
 console.log(by("fin@x.com").subject);process.exit(fails?1:0);
