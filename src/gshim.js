@@ -534,6 +534,7 @@ async function poll(){
   polling = true;
   try{
     const m = await metaVersion();
+    lastOkAt = Date.now();   /* the check itself succeeded: this device is in step with the company data (or is about to merge what changed) */
     if(String(m.version) !== String(remote.version) && !pushing){
       const rj = await readRemote(); mergeRemote(rj); remote.version = m.version; await saveCache(); notifyAll();
       if(!allowedUser()){ status("Your access was removed", "bad"); setTimeout(() => location.reload(), 1500); return; }
