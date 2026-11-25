@@ -8,7 +8,7 @@ process.env.MT_URL=process.env.MT_URL||"http://localhost:8096/index.html?demo";c
  await pg.evaluate(()=>{S.isOwner=true;go("setup",{tab:"backup"},{force:true})});await pg.waitForTimeout(400);
  let st=await pg.evaluate(()=>({card:sBackup().includes("Where the data lives"),btn:/Open another data place on THIS device/.test(sBackup()),tbl:/Who opened MY TOOL/.test(sBackup()),menu:alWsHtml()}));
  t("Owner: Settings shows 'Where the data lives' with the switch for THIS device and who-opened table",st.card&&st.btn&&st.tbl,st);
- t("🔒 menu no longer offers another data place",st.menu==="",st);
+ t("🔒 menu no longer offers another data place",!/My own Drive|data-al="ws"/.test(st.menu),st);
  // not an Owner
  await pg.evaluate(()=>{window.__DP_TEST=true;S.isOwner=false;const u=(SET().users||[]).find(u=>u.role!=="admin"&&u.active!==false)||{uid:"va@test",role:"va",name:"VA"};window.__u=u.uid;S.realRole=S.role=u.role||"va";uid=u.uid});
  st=await pg.evaluate(()=>({card:dpCard(),allowed:dpDriveAllowed()}));t("team member: no card at all, Drive from MY TOOL is off",st.card===""&&st.allowed===false,st);
