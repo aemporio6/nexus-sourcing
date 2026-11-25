@@ -21,6 +21,8 @@ process.env.MT_URL=process.env.MT_URL||"http://localhost:8096/index.html?demo";c
  t("the bill named in the receipt (plunger) is in the split",r.rows.some(x=>x.ref==="PO-26-0072"),r);
  await pg.evaluate(()=>{S.rs.rows.forEach(x=>{x.on=x.ref==="PO-26-0072";if(!x.on)x.a=""});const i=S.rs.rows.findIndex(x=>x.on);S.rs.rows[i].a=rsBills()[i].owed;S.rs.url="https://drive.google.com/file/d/RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR/view";rsDraw()});
  txt=await pg.textContent("#rswin .rssum");t("left over is said in plain words (1,157.17 has no bill → credit)",/1,157\.17 of the receipt has no bill yet/.test(txt)&&/credit/.test(txt),txt);
+ r=await pg.evaluate(()=>{const keep=S.rs;rsOpen({party:"SUP-001",amount:18317.17,cur:"RMB",name:"41 earwax receipt",date:"2026-11-10"});const o={rows:S.rs.rows.filter(x=>x.on).map(x=>[x.ref,x.a]),how:S.rs.how,left:r2(S.rs.amount-rsSum())};S.rs=keep;rsDraw();return o});
+ t("'41 earwax receipt' ¥18,317.17 → the earwax bill ¥17,160 only; the ¥1,157.17 left over is NOT guessed onto old bills",r.rows.length===1&&r.rows[0][0]==="PO-26-0073"&&r.rows[0][1]===17160&&r.left===1157.17&&/left over/.test(r.how),r);
  // over-allocation blocks
  await pg.evaluate(()=>{const i=S.rs.rows.findIndex(x=>x.on);S.rs.keep=S.rs.rows[i].a;S.rs.rows[i].a=+S.rs.amount+500;rsDraw()});
  t("more than the receipt → button off, said clearly",await pg.evaluate(()=>document.querySelector('#rswin [data-rs="go"]').disabled&&/more than the receipt/.test(document.querySelector("#rswin .rssum").textContent)));
