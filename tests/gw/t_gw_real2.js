@@ -58,7 +58,7 @@ const calls = [];
   const tok = "s".repeat(10) + "T0kenT0kenT0kenT0ken12"; { const c = NEW.call({ op: "read", token: "tok-aemporio6@gmail.com" }); const bb = JSON.parse(JSON.stringify(c.file)); const k = Object.keys(bb.data.parties)[0]; bb.data.parties[k].upload = { h: NEW.run("upHash", tok), on: true, exp: "2099-01-01", max: 5 }; NEW.call({ op: "write", token: "tok-aemporio6@gmail.com", base: c.version, body: bb }); }
   ok(NEW.call({ op: "supplierUpload", tok, name: "CI-1.pdf", mime: "application/pdf", b64: Buffer.from("%PDF x").toString("base64"), kind: "Invoice (PI / CI)", note: "n1" }).ok, "(a supplier sends a file)");
   await A.p.evaluate(() => { go("home"); return slLoad(true); }); await A.p.waitForTimeout(800); await A.p.evaluate(() => render()); await A.p.waitForTimeout(500);
-  ok(await A.p.evaluate(() => /From suppliers \(1\)/.test(document.querySelector("#slin")?.innerText || "") && /CI-1\.pdf/.test(document.querySelector("#slin").innerText)), "the Partner sees it on Home (real app, through the gateway)");
+  ok(await A.p.evaluate(() => /From suppliers — to check \(1\)/.test(document.querySelector("#sbcard")?.innerText || "") && S.slIn.list.some(f => f.name === "CI-1.pdf")), "the Partner sees it on Home (real app, through the gateway)");
   /* 6. (21 Nov 2026) a member is never offered "My own Drive": one button, company data */
   let M = await open("partner@x.com", NEWID); await M.p.waitForSelector("#mt_signin"); const noOwn = await M.p.evaluate(() => !document.getElementById("mt_signin_own")); await M.p.click("#mt_signin"); await ready(M.p);
   ok(noOwn && await M.p.evaluate(() => MYTOOL.workspace === "" && live(D.purchases).length > 10), "a member is not offered “My own Drive” and gets the company data (no separate empty copy)");
