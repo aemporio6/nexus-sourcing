@@ -8,8 +8,57 @@
   "background_color": "#ffffff",
   "theme_color": "#2f5f8f",
   "icons": [
-    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
-  ]
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "share_target": {
+    "action": "./share-in",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "files",
+          "accept": [
+            "image/*",
+            "application/pdf",
+            "text/csv",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".xlsx",
+            ".xls",
+            ".csv",
+            ".pdf",
+            ".doc",
+            ".docx",
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp"
+          ]
+        }
+      ]
+    }
+  }
 }
