@@ -49,7 +49,8 @@ let calls = [];
   await V.p.evaluate(() => { S.role = "owner"; return updateDoc("purchases", D.purchases[0].no, { note: "va-hack" }, "t"); });   /* pretend the UI check was bypassed */
   await V.p.waitForTimeout(6000);
   ok(!JSON.stringify(dataFile()).includes("va-hack"), "VA edit of an existing order refused by the gateway (file unchanged)");
-  const st = await V.p.evaluate(() => MYTOOL.st.t); ok(/Not allowed: your role cannot change/.test(st), "VA sees 'Not allowed' status: " + st);
+  let st = ""; for(let i = 0; i < 20; i++){ st = await V.p.evaluate(() => MYTOOL.st.t); if(/Not allowed/.test(st)) break; await V.p.waitForTimeout(500); }   /* the app retries, so the line alternates with "Syncing…" */
+  ok(/Not allowed: your role cannot change/.test(st), "VA sees 'Not allowed' status: " + st);
 
   const dropped = await V.p.evaluate(() => MYTOOL.discardLocal()); ok(dropped > 0 && await V.p.evaluate(() => MYTOOL.pending()) === 0 && /Synced/.test(await V.p.evaluate(() => MYTOOL.st.t)), "refused changes can be dropped: " + dropped + " dropped, nothing pending, Synced");
   /* 3. compare-and-swap: admin and finance edit different records at the same time → both land */

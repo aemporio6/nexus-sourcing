@@ -50,6 +50,6 @@ const{chromium}=require("playwright");
   const q=await c3.newPage();await q.goto("http://localhost:8098/index.html");await q.waitForTimeout(1500);
   ok(await q.evaluate(()=>!!document.querySelector("#alov #alset")&&/Protect MY TOOL/.test(document.body.innerText)&&!document.querySelector('[data-als="close"]')),"real app: device-lock setup comes first and cannot be closed");
   await q.fill("#als_pw","secret123");await q.fill("#als_pw2","secret123");await q.click('[data-als="save"]');await q.waitForTimeout(800);
-  ok(await q.evaluate(()=>!!document.getElementById("mt_signin")&&!!document.getElementById("mt_signin_own")),"then (on an Owner device) it asks which data: company or own Drive");
+  ok(await q.evaluate(()=>!!document.getElementById("mt_signin")&&!document.getElementById("mt_signin_own")&&/company data \(Vartleaves\)/.test(document.body.innerText)),"then (on an Owner device) it signs in to the company data — no other data place is offered");
   await q.evaluate(()=>localStorage.setItem("mt_lock_seen",String(Date.now()-31*60000)));const q2=await c3.newPage();await q2.goto("http://localhost:8098/index.html");await q2.waitForTimeout(1500);ok(await q2.evaluate(()=>!document.getElementById("alov").hidden&&/locked/.test(document.body.innerText)),"next open: locked until the device lock / PIN / password");await c3.close()}
  ok(!errs.length,"no page errors "+errs.join(" | "));await b.close();process.exit(fails?1:0)})();

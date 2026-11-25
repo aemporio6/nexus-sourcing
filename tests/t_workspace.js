@@ -10,7 +10,7 @@ const{chromium}=require("playwright");const fs=require("fs");const{drive,mkRoute
  /* an Owner device can still use its own Drive */
  const ctx=await b.newContext({viewport:{width:1200,height:860}});await ctx.addInitScript(()=>{window.__who="vartleaves.data@gmail.com";try{localStorage.setItem("mt_owner","1");localStorage.setItem("mt_gw","off")}catch(_){}});
  await ctx.route(/fonts\.(googleapis|gstatic)/,r=>r.abort());await ctx.route(/accounts\.google\.com|googleapis\.com/,mkRoute(ctx));
- const p=await ctx.newPage();p.on("pageerror",e=>errs.push(e.message));p.on("dialog",d=>d.accept());await p.goto("http://localhost:8098/index.html");await p.waitForSelector("#mt_signin_own");ok(true,"an Owner device is offered: company data or my own Drive");await p.click("#mt_signin_own");
+ const p=await ctx.newPage();p.on("pageerror",e=>errs.push(e.message));p.on("dialog",d=>d.accept());await p.goto("http://localhost:8098/index.html");await p.waitForSelector("#mt_signin");ok(await p.$("#mt_signin_own")===null,"an Owner device opens the company data — no other choice on the sign-in screen (25 Nov 2026)");await p.evaluate(()=>localStorage.setItem("mt_ws","own"));await p.reload();await p.waitForSelector("#mt_signin_own");ok(await p.evaluate(()=>/ANOTHER data place/.test(document.body.innerText)),"after the Owner switched THIS device in Settings: a warning screen with both ways");await p.click("#mt_signin_own");
  await p.waitForSelector("#mt_empty",{timeout:20000});ok(/your own Drive/.test(await p.textContent("body")),"first run in own Drive");await p.click("#mt_empty");
  await p.waitForFunction(()=>{try{return S.ready}catch(e){return false}},null,{timeout:30000});await p.waitForTimeout(1500);
  /* 20 Nov 2026: a reload in the same tab does not ask again; a fresh tab does */
@@ -20,6 +20,6 @@ const{chromium}=require("playwright");const fs=require("fs");const{drive,mkRoute
  const own=Object.values(drive.files).filter(f=>f.name==="MYTOOL-DATA.json"&&f.owner==="vartleaves.data@gmail.com");ok(own.length===1,"own data file made in their Drive");
  ok(await p.evaluate(()=>live(D.purchases).length===0),"their data is empty (no company data)");
  ok(drive.files[coId].content===co0,"company file untouched");
- await p.click("#alb");ok(/My own Drive/.test(await p.textContent("#almenu")),"🔒 menu shows which data this device opens");
- await p.evaluate(()=>MYTOOL.setWorkspace(""));await p.waitForSelector("#mt_signin",{timeout:20000});ok(await p.$("#mt_signin_own")!==null,"every open asks: company data or own Drive");
+ ok(await p.evaluate(()=>/not the company data/i.test(document.getElementById("dpbar")?.textContent||"")&&/Not the company data/.test(document.getElementById("dpline")?.textContent||"")),"on another data place: a red bar and the data line say so on every page");await p.click("#alb");ok(/Back to the company data/.test(await p.textContent("#almenu")),"🔒 menu offers the way back to the company data");
+ await p.evaluate(()=>MYTOOL.setWorkspace(""));await p.waitForSelector("#mt_signin",{timeout:20000});ok(await p.$("#mt_signin_own")===null,"back on the company data: the other place is not offered any more");
  ok(!errs.length,"no page errors "+errs.join(" | "));await b.close();process.exit(fails?1:0)})();

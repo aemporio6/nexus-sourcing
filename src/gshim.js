@@ -107,10 +107,11 @@ function gate(html){
 function ungate(){ const g = document.getElementById("mt_gate"); if(g) g.hidden = true; }
 let lastSt = { t: "", k: "ok" };
 /* one place for the sync state the person sees: Synced · Syncing… · Saved on this device (waiting) · Conflict · Failed */
+let lastOkAt = 0;
 function status(t, kind){
   let open = 0; try{ open = conflicts.filter(x => !x.done).length; }catch(_){}
   if(open && kind !== "bad") t += " · " + open + " conflict" + (open > 1 ? "s" : "") + " to check";
-  lastSt = { t, k: open && kind === "ok" ? "warn" : (kind || "ok") };
+  lastSt = { t, k: open && kind === "ok" ? "warn" : (kind || "ok") }; if((kind || "ok") === "ok" && /^Synced/.test(String(t))) lastOkAt = Date.now();
   const f = document.getElementById("mt_sync"); if(!f) return;
   f.textContent = t; f.dataset.kind = lastSt.k; f.title = t;
 }
@@ -179,14 +180,19 @@ async function signIn(){
             g1.querySelector("#mt_signin_full").onclick = async () => { try{ await requestToken("select_account", true); try{ sessionStorage.setItem("mt_sess", JSON.stringify({ at: Date.now(), ws: "" })); }catch(_){} res(); }catch(e2){ g1.querySelector("#mt_err").textContent = e2.message; } }; } } };
       return;
     }
+    /* owner, 25 Nov 2026: MY TOOL always opens the COMPANY data (Vartleaves). Another data place is not offered here any more — an
+       Owner switches it on for ONE device in Settings › Where the data lives; only such a device sees the second button, with a warning. */
     const own = WS === "own"; wantFull = true;
-    const g = gate('<p><b>Which data do you want to open?</b></p>' +
-      '<button type="button" class="mt_btn' + (own ? ' ghost' : '') + '" id="mt_signin">🏢 Company data — Vartleaves</button><p class="mt_small">The business data of the company (roles and approvals apply).</p>' +
-      '<button type="button" class="mt_btn' + (own ? '' : ' ghost') + '" id="mt_signin_own">📁 My own Drive (my own data)</button><p class="mt_small">Your own MY TOOL in your own Google Drive — nothing of the company data.</p>' +
-      '<p class="mt_small">Google then asks which account to use.</p><p class="mt_small" id="mt_err"></p>');
+    const g = gate(own
+      ? '<p><b>⚠ This device is set to ANOTHER data place</b></p><p class="mt_small">Not the company data. What you enter there is NOT seen by the team and is not in the company backups.</p>' +
+        '<button type="button" class="mt_btn" id="mt_signin">🏢 Back to the company data — Vartleaves</button>' +
+        '<button type="button" class="mt_btn ghost" id="mt_signin_own">📁 Open the other data place (my own Drive)</button>' +
+        '<p class="mt_small">Google then asks which account to use.</p><p class="mt_small" id="mt_err"></p>'
+      : '<p><b>MY TOOL — Vartleaves</b></p><button type="button" class="mt_btn" id="mt_signin">🏢 Sign in — company data (Vartleaves)</button>' +
+        '<p class="mt_small">Always the company data. Google asks which account to use.</p><p class="mt_small" id="mt_err"></p>');
     const go = async (ws) => { try{ pickWorkspace(ws); await requestToken("select_account", true); try{ sessionStorage.setItem("mt_sess", JSON.stringify({ at: Date.now(), ws: WS })); }catch(_){} res(); }catch(e){ g.querySelector("#mt_err").textContent = e.message; } };
     g.querySelector("#mt_signin").onclick = () => go("");
-    g.querySelector("#mt_signin_own").onclick = () => go("own");
+    { const o = g.querySelector("#mt_signin_own"); if(o) o.onclick = () => go("own"); }
   });
   const u = await gjson("https://www.googleapis.com/oauth2/v3/userinfo");
   me = { email: lc(u.email), name: u.name || u.email, picture: u.picture || "" };
@@ -811,7 +817,7 @@ const userApi = {
   async isOwner(){ await ready; return DEMO || !!(me && CFG.admins.includes(me.email)); }
 };
 window.MYTOOL = {
-  get workspace(){ return WS; },
+  get workspace(){ return WS; }, get lastSyncAt(){ return lastOkAt; }, get ownerDevice(){ return ownerDevice(); },
   get driveOk(){ return DEMO || scopeFull; },   /* false = this person signed in with name + email only; Drive is asked for when they use a Drive feature */
   setWorkspace(ws){ try{ if(ws === "own") localStorage.setItem("mt_ws", "own"); else localStorage.removeItem("mt_ws"); sessionStorage.removeItem("mt_sess"); sessionStorage.removeItem("mt_tok"); }catch(_){} location.reload(); },
   get me(){ return me; }, get st(){ return lastSt; },
