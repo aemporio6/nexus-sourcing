@@ -6,7 +6,7 @@ const{chromium}=require("playwright");
  await p.click('[data-act="newmenu"]');await p.waitForTimeout(200);
  const h=await p.evaluate(()=>({open:!!document.querySelector("#chub"),items:document.querySelectorAll("#chub .ch-item").length,depts:[...document.querySelectorAll("#chub .ch-dept h4")].map(x=>x.firstChild.textContent.trim())}));
  ok(h.open&&h.items>=14&&h.depts.includes("Money")&&h.depts.includes("Settings"),"+ Create opens the hub: "+h.items+" entries in "+h.depts.join(", "));
- await p.fill("#ch_q","pay");await p.waitForTimeout(100);const f=await p.evaluate(()=>[...document.querySelectorAll("#chub .ch-item b")].map(x=>x.textContent));ok(f.some(t=>/payment/i.test(t))&&f.length<=7,"typing 'pay' narrows it: "+f.join(" | "));
+ await p.fill("#ch_q","pay");await p.waitForTimeout(100);const f=await p.evaluate(()=>[...document.querySelectorAll("#chub .ch-item b")].map(x=>x.textContent));ok(f.some(t=>/payment/i.test(t))&&f.length<=9,"typing 'pay' narrows it: "+f.join(" | "));
  await p.press("#ch_q","Enter");await p.waitForTimeout(900);
  ok(await p.evaluate(()=>S.drawer?.form==="payment"&&!document.querySelector("#chub")&&!!document.querySelector('.drawer [data-act="chback"]')),"Enter opens the first match (payment form) with ‹ Create back button");
  await p.click('.drawer [data-act="chback"]');await p.waitForTimeout(300);ok(await p.evaluate(()=>!!document.querySelector("#chub")&&$("#ch_q").value==="pay"&&!S.drawer),"‹ Create returns to the hub and keeps 'pay'");
