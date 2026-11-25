@@ -12,6 +12,8 @@
   --ok:#1d7a3f;--ok-bg:#ddf3e4;--warn:#8f5600;--warn-bg:#fcefd2;--bad:#b3261e;--bad-bg:#fbe1de;--info:#245c9e;--info-bg:#e0ebf8;
   --f-ui:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--f-data:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--r:10px;
 }
+/* names some windows use for the same colours — defined once here so they follow light / dark (25 Nov 2026: white cards with light text on a dark phone) */
+:root{--card:var(--panel);--okbg:var(--ok-bg);--hover:var(--soft);--acc:var(--accent)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1418;--panel:#161d23;--fg:#e6edf2;--muted:#98a6b1;--line:#27323b;--soft:#1b242c;--accent:#7fa8d1;--accent-fg:#0f1a26;--accent-soft:#1c2c3d;--accent-strong:#a3c2e0;--ok:#6bd398;--ok-bg:#16301f;--warn:#f0b45a;--warn-bg:#33270f;--bad:#ff8a80;--bad-bg:#3a1916;--info:#8fb8ef;--info-bg:#172537;color-scheme:dark}}
 :root[data-theme="dark"]{--bg:#0f1418;--panel:#161d23;--fg:#e6edf2;--muted:#98a6b1;--line:#27323b;--soft:#1b242c;--accent:#7fa8d1;--accent-fg:#0f1a26;--accent-soft:#1c2c3d;--accent-strong:#a3c2e0;--ok:#6bd398;--ok-bg:#16301f;--warn:#f0b45a;--warn-bg:#33270f;--bad:#ff8a80;--bad-bg:#3a1916;--info:#8fb8ef;--info-bg:#172537;color-scheme:dark}
 [hidden]{display:none!important}

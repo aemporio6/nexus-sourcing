@@ -2,7 +2,7 @@
 """Build MY TOOL: index.html (app) + manifest + service worker. Run: python3 build.py [--demo-seed DIR --out FILE]"""
 import json, os, re, sys, glob, subprocess, hashlib
 R = os.path.dirname(os.path.abspath(__file__))
-MODS = ["icons", "starter_data", "applock", "core", "forms", "forms2", "views", "drawers", "setup", "importer", "readers", "icc", "extra", "export_ps", "help_view", "health", "rates_auto", "nav2", "home_flow", "datafix", "alloc_multi", "packing", "landing", "prodsheet", "connect", "helpmode", "brand", "guard_links", "sync_ui", "calc_trace", "daily", "imp_report", "archive_ui", "scan", "ebay", "drive_link", "form_nav", "create_hub", "tasks_links", "mo_link", "product_add", "guards", "approvals", "landed_final", "bank_safe", "qc", "samples", "ideas", "menu9", "listcols", "reports9", "ui_polish", "ship_status", "add_more", "view_as", "starter", "importer_auto", "roles2", "history2", "access3", "drive_people", "move_data", "supplier_link", "uplinks", "sbox", "pick", "access_req", "stock_why", "people", "invite", "create_more", "filetype", "docbrain", "documents", "rsplit", "share_in", "fixit", "dataplace", "sync_plain", "create_order", "events"]
+MODS = ["icons", "starter_data", "applock", "core", "forms", "forms2", "views", "drawers", "setup", "importer", "readers", "icc", "extra", "export_ps", "help_view", "health", "rates_auto", "nav2", "home_flow", "datafix", "alloc_multi", "packing", "landing", "prodsheet", "connect", "helpmode", "brand", "guard_links", "sync_ui", "calc_trace", "daily", "imp_report", "archive_ui", "scan", "ebay", "drive_link", "form_nav", "create_hub", "tasks_links", "mo_link", "product_add", "guards", "approvals", "landed_final", "bank_safe", "qc", "samples", "ideas", "menu9", "listcols", "reports9", "ui_polish", "ship_status", "add_more", "view_as", "starter", "importer_auto", "roles2", "history2", "access3", "drive_people", "move_data", "supplier_link", "uplinks", "sbox", "pick", "access_req", "stock_why", "people", "invite", "create_more", "filetype", "docbrain", "documents", "rsplit", "share_in", "fixit", "dataplace", "sync_plain", "folder_scan", "companies2", "ui_clean", "create_order", "events"]
 
 def read(p): return open(os.path.join(R, p), encoding="utf-8").read()
 
@@ -11,6 +11,13 @@ def build(seed_dir=None, out="index.html"):
     # The owner's rule: everything new must be reachable from Create. A module passes when it has a form / CREATE_REG entry,
     # a chRegister(...) call, or a written reason "/* create: ... */". Modules from before the rule (20 Nov 2026) are listed once.
     CREATE_BASELINE = {"icons", "applock", "core", "forms", "forms2", "views", "drawers", "setup", "importer", "readers", "icc", "extra", "export_ps", "help_view", "health", "rates_auto", "nav2", "home_flow", "datafix", "alloc_multi", "packing", "landing", "prodsheet", "connect", "helpmode", "brand", "guard_links", "sync_ui", "calc_trace", "daily", "imp_report", "archive_ui", "scan", "ebay", "drive_link", "form_nav", "create_hub", "tasks_links", "mo_link", "product_add", "guards", "approvals", "landed_final", "bank_safe", "qc", "samples", "ideas", "menu9", "listcols", "reports9", "ui_polish", "events"}
+    # every var(--name) used anywhere must be defined (head.html or a module): an undefined one silently falls back to a fixed
+    # colour and breaks dark mode (white cards with light text, 25 Nov 2026)
+    import re as _re
+    _all = read("src/app/head.html") + "".join(read(f"src/app/{m}.js") for m in MODS if os.path.exists(os.path.join(R, f"src/app/{m}.js"))) + read("src/gshim.js")
+    _undef = sorted(set(_re.findall(r"var\((--[a-z0-9-]+)", _all)) - set(_re.findall(r"(--[a-z0-9-]+)\s*:", _all)))
+    if _undef:
+        sys.exit("BUILD STOPPED - colour names used but never defined (add them in src/app/head.html): " + ", ".join(_undef))
     missing = [m for m in MODS if m not in CREATE_BASELINE and os.path.exists(os.path.join(R, f"src/app/{m}.js")) and not any(t in read(f"src/app/{m}.js") for t in ("chRegister(", "CREATE_REG.push", "/* create:"))]
     if missing:
         sys.exit("BUILD STOPPED - these modules are not in Create yet (add chRegister(...) or a /* create: reason */): " + ", ".join(missing))
