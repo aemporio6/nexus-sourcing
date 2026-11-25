@@ -1,0 +1,33 @@
+// Reading a receipt screenshot on the device (English + Chinese): amount, currency, date; fills the split window; used for the match.
+// Run: NODE_PATH=/opt/npm-tools/node_modules node tests/t_ocr.js   (live-data copy on :8096, with vendor/ocr beside it)
+process.env.MT_URL=process.env.MT_URL||"http://localhost:8096/index.html?demo";const h=require("./imp/h.js");const { chromium } = require("playwright");
+const shot=async(html,w)=>{const br=await chromium.launch();const pg=await br.newPage({viewport:{width:w||540,height:900},deviceScaleFactor:2});await pg.setContent(`<body style="margin:0;background:#fff;font-family:Arial,'Noto Sans CJK SC',sans-serif;color:#111">${html}</body>`);const b=await pg.screenshot({fullPage:true,type:"png"});await br.close();return b.toString("base64")};
+(async()=>{let ok=0,bad=0;const t=(n,c,x)=>{c?ok++:bad++;console.log((c?"PASS ":"FAIL ")+n+(c?"":" → "+String(JSON.stringify(x)).slice(0,700)))};
+ const en=await shot(`<div style="padding:28px"><h2 style="margin:0 0 6px">WorldFirst</h2><div style="color:#1a7f37;font-size:22px;margin:10px 0">Payment successful</div><div style="font-size:15px;color:#555">Amount</div><div style="font-size:40px;font-weight:700">¥ 18,317.17</div><table style="font-size:17px;line-height:2;margin-top:14px"><tr><td style="color:#555;padding-right:30px">Beneficiary</td><td>WINAPPROACH INTERNATIONAL HONGKONG LIMITED</td></tr><tr><td style="color:#555">Date</td><td>2026-11-10 14:32:08</td></tr><tr><td style="color:#555">Fee</td><td>¥ 12.00</td></tr><tr><td style="color:#555">Reference</td><td>WAP-UK-JW20261113001 earwax</td></tr><tr><td style="color:#555">Transaction no.</td><td>20261110883300127745</td></tr></table></div>`);
+ const zh=await shot(`<div style="padding:28px"><div style="font-size:22px;color:#1677ff">转账成功</div><div style="font-size:15px;color:#555;margin-top:12px">付款金额</div><div style="font-size:40px;font-weight:700">￥27,381.12</div><table style="font-size:18px;line-height:2;margin-top:14px"><tr><td style="color:#555;padding-right:30px">收款方</td><td>WINAPPROACH INTERNATIONAL HONGKONG LIMITED</td></tr><tr><td style="color:#555">付款时间</td><td>2026年11月25日 09:15</td></tr><tr><td style="color:#555">手续费</td><td>￥0.00</td></tr><tr><td style="color:#555">备注</td><td>window handles 30%</td></tr></table></div>`);
+ const {br,pg,errs}=await h.open({timeout:120000});
+ const facts=await pg.evaluate(()=>({a:ocrFacts("Payment successful Amount ¥ 18,317.17 Beneficiary X Date 2026-11-10 14:32 Fee ¥ 12.00 Reference WAP-UK-JW20261113001 Transaction no. 20261110883300127745"),b:ocrFacts("转账成功 付款金额 ￥27,381.12 付款时间 2026年11月25日 手续费 ￥0.00"),c:ocrFacts("Total paid 1.234,50 EUR on 24 Nov 2026"),d:ocrFacts("hello world 2026")}));
+ t("facts: the amount beside 'Amount' wins over the fee and over long reference numbers; date and invoice no. read",facts.a.amount===18317.17&&facts.a.cur==="RMB"&&facts.a.date==="2026-11-10"&&facts.a.refs[0]==="WAP-UK-JW20261113001",facts.a);
+ t("facts: Chinese receipt words (付款金额, 年月日) and a European number (1.234,50)",facts.b.amount===27381.12&&facts.b.cur==="RMB"&&facts.b.date==="2026-11-25"&&facts.c.amount===1234.5&&facts.c.cur==="EUR"&&facts.c.date==="2026-11-24",[facts.b,facts.c]);
+ t("facts: a picture without money → no amount invented",facts.d.amount===null,facts.d);
+ // the real reader on a real picture
+ const read=b64=>pg.evaluate(async b64=>{const bin=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));const f=new File([bin],"IMG-20261110-WA0003.png",{type:"image/png"});const t0=Date.now();const r=await ocrRead(f);return{ms:Date.now()-t0,conf:r.conf,facts:r.facts,text:r.text.slice(0,300)}},b64);
+ let r=await read(en);t(`the reader reads an English receipt screenshot: ¥18,317.17 · 10 Nov 2026 · invoice no. (${r.ms} ms, confidence ${r.conf}%)`,r.facts.amount===18317.17&&r.facts.date==="2026-11-10"&&r.facts.refs.includes("WAP-UK-JW20261113001"),r);
+ r=await read(zh);t(`… and a Chinese one: ￥27,381.12 · 25 Nov 2026 (${r.ms} ms, confidence ${r.conf}%)`,r.facts.amount===27381.12&&r.facts.date==="2026-11-25",r);
+ // into the split window
+ await pg.evaluate(()=>rsOpen({}));await pg.waitForSelector('#rswin [data-ocr="rspick"]');
+ await pg.setInputFiles("#rs_photo",{name:"IMG-20261110-WA0003.png",mimeType:"image/png",buffer:Buffer.from(en,"base64")});
+ await pg.waitForFunction(()=>S.rs&&S.rs.ocr&&!S.rs.ocrBusy,null,{timeout:120000});
+ let st=await pg.evaluate(()=>({party:S.rs.party,amount:S.rs.amount,cur:S.rs.cur,date:S.rs.date,rows:S.rs.rows.filter(x=>x.on).map(x=>[x.ref,x.a]),left:r2(S.rs.amount-rsSum()),said:document.querySelector("#rswin .ocrsaid")?.textContent}));
+ t("One receipt — several bills: the photo alone fills supplier, total, currency and date",st.party==="SUP-001"&&st.amount===18317.17&&st.cur==="RMB"&&st.date==="2026-11-10"&&/Read from the picture: RMB 18,317\.17/.test(st.said||""),st);
+ t("… and the bill named INSIDE the picture (earwax invoice no.) is proposed: ¥17,160, ¥1,157.17 left over",st.rows.length===1&&st.rows[0][0]==="PO-26-0073"&&st.rows[0][1]===17160&&st.left===1157.17,st);
+ await pg.click('#rswin [data-rs="go"]');await pg.waitForTimeout(2500);
+ st=await pg.evaluate(()=>({form:S.drawer&&S.drawer.form,amount:+val("amount"),receipt:val("receipt")}));t("the payment form opens with the amount, and the photo itself is kept and set as the receipt",st.form==="payment"&&st.amount===18317.17&&!!st.receipt,st);
+ await pg.evaluate(()=>{S.drawer=null;render()});
+ // where does this go, for a picture with a useless name
+ await pg.evaluate(b64=>{const bin=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));dbPlaceOpen({name:"IMG-20261125-WA0011.jpg",mime:"image/png",file:new File([bin],"IMG-20261125-WA0011.png",{type:"image/png"}),url:"https://drive.google.com/file/d/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ/view"})},zh);
+ st=await pg.evaluate(()=>({sure:dbSure(S.dbp.rank.list),btn:!!document.querySelector('#dbpwin [data-ocr="place"]')}));t("“Where does this go?”: a picture named IMG-… has no recommendation, and offers 'Read what the picture says'",st.sure===null&&st.btn,st);
+ await pg.click('#dbpwin [data-ocr="place"]');await pg.waitForFunction(()=>S.dbp&&S.dbp.item.ocr,null,{timeout:120000});
+ st=await pg.evaluate(()=>({top:dbSure(S.dbp.rank.list),chips:document.querySelector("#dbpwin .dbchips").textContent}));t("after reading: recommendation = window handles order PO-26-0074 (from 'window handles' written in the picture)",st.top&&st.top.id==="PO-26-0074"&&/27,381\.12/.test(st.chips),st);
+ await pg.evaluate(()=>dbPlaceClose());
+ t("no page errors",!errs.length,errs);console.log(`\n${ok} pass, ${bad} fail`);await br.close();process.exit(bad?1:0)})();
