@@ -20,7 +20,7 @@ process.env.MT_URL=process.env.MT_URL||"http://localhost:8096/index.html?demo";c
  // one file, with company copy
  await pg.click('#fswin [data-fs="put"][data-id="A1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"]');await pg.waitForFunction(()=>S.fs.done["A1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"]);
  st=await pg.evaluate(()=>{const l=(docOf("purchases","PO-26-0072").links||[]).find(x=>x.from==="drive import");return{l,dl:window.__dl,folderNo:docOf("purchases","PO-26-0072").folderNo,done:S.fs.done["A1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"]}});
- t("Put on PO-26-0072: a copy is kept in the company files, the link points to the copy and remembers the original; #110 remembered",st.l&&st.l.orig&&/A1AAAA/.test(st.l.orig)&&!/A1AAAA/.test(st.l.url)&&st.dl.length===1&&st.folderNo==="110"&&/copy kept/.test(st.done),st);
+ t("Put on PO-26-0072: a copy is kept in the company files, the link points to the copy and remembers the original; #110 remembered",st.l&&st.l.orig&&/A1AAAA/.test(st.l.orig)&&!/A1AAAA/.test(st.l.url)&&st.dl.includes("A1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")&&st.folderNo==="110"&&/copy kept/.test(st.done),st);
  st=await pg.evaluate(()=>{const f=S.fs.files.find(x=>x.id.startsWith("A2"));return{top:f.top&&f.top.id,pct:f.top&&f.top.pct,why:f.top&&f.top.why[0]}});
  t("what was just learned is used at once: the 110 receipt is now sure (folder number 110)",st.top==="PO-26-0072"&&st.pct>=60&&/folder number 110/.test(st.why),st);
  // the sure ones together
