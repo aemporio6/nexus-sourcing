@@ -71,7 +71,7 @@ function rdJoyceCI(ctx){for(const sh of ctx.sheets||[]){const g=rdGrid(sh);const
   if(!lines.length)continue;/* blank template: no goods rows */
   const subRow=sub>=0?g[sub]:null;const st=k=>subRow&&C[k]>=0?rdN(subRow[C[k]]):null;
   const piNo=rdT(rdLabel(g,/^invoice no\.?$|^pi no\.?$/i));const date=rdDate(rdLabel(g,/^invoice date$|^date$/i));const cur=ixCurOf(rdLabel(g,/^currency$/i))||rdT(rdLabel(g,/^currency$/i)).toUpperCase()||null;
-  const company=rdT(rdLabel(g,/^company$/i)),contact=rdT(rdLabel(g,/^contact$/i)),buyer=rdT(rdLabel(g,/^company$/i,{nth:1}));
+  const company=rdT(rdLabel(g,/^company$/i)),contact=rdT(rdLabel(g,/^contact$/i)),buyerRow=g.findIndex(row=>(row||[]).some(c=>/^buyer\b|bill to/i.test(rdT(c))));let buyer=buyerRow>=0?rdT(rdLabel(g,/^company$/i,{from:buyerRow})):rdT(rdLabel(g,/^company$/i,{nth:1}));if(buyer&&buyer===company)buyer="";   /* the name under BUYER (Bill To) — never the seller's own name (merged cells made "the second Company" the seller again) */
   const party=findParty(contact)||findParty(company)||ixPartyInText(company+" "+contact)?.code||null;
   const tg=rdLabel(g,/^goods subtotal$/i,{lastNum:true});const feePct=rdLabel(g,/service fee|sourcing.*fee|agent fee/i,{num:true});const fee=rdLabel(g,/service fee|sourcing.*fee|agent fee/i,{lastNum:true});const other=rdLabel(g,/packaging|mould|other charges/i,{lastNum:true});const total=rdLabel(g,/^total invoice value/i,{lastNum:true});
   const paid=rdLabel(g,/^total paid$/i,{num:true}),due=rdLabel(g,/^balance due$/i,{num:true});
